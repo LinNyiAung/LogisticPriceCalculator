@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from typing import List, Optional
 import json
 from datetime import datetime
+import csv
+import os
 
 app = FastAPI()
 
@@ -27,6 +29,61 @@ def get_db_connection():
         'Trusted_Connection=yes;'
     )
     return pyodbc.connect(conn_str)
+
+# CSV Helper Functions
+def read_csv_with_encoding(file_path):
+    """Try multiple encodings to read CSV file"""
+    encodings = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252', 'utf-8-sig']
+    
+    for encoding in encodings:
+        try:
+            with open(file_path, 'r', encoding=encoding) as f:
+                reader = csv.DictReader(f)
+                data = list(reader)
+                return data
+        except (UnicodeDecodeError, Exception):
+            continue
+    
+    raise HTTPException(status_code=500, detail=f"Could not read file {file_path} with any encoding")
+
+def load_gate_data():
+    """Load Gate Data.csv"""
+    file_path = os.path.join(os.path.dirname(__file__), 'Gate Data.csv')
+    return read_csv_with_encoding(file_path)
+
+def load_item_master(file_name):
+    """Load specific Item Master CSV file"""
+    file_path = os.path.join(os.path.dirname(__file__), file_name)
+    return read_csv_with_encoding(file_path)
+
+def determine_calculation_type(item_master_data):
+    """Determine if gate pricing or direct pricing based on Transportation Cost column"""
+    if not item_master_data:
+        return "unknown"
+    
+    has_ton = False
+    has_number = False
+    
+    for row in item_master_data:
+        transport_cost = str(row.get('Transportation Cost', '')).strip()
+        
+        if transport_cost.lower() == 'ton':
+            has_ton = True
+        else:
+            try:
+                float(transport_cost)
+                has_number = True
+            except ValueError:
+                pass
+    
+    # If all are numbers, it's direct pricing
+    if has_number and not has_ton:
+        return "direct_pricing"
+    # If has "Ton" (either all or mixed), it's gate pricing
+    elif has_ton:
+        return "gate_pricing"
+    else:
+        return "unknown"
 
 # Pydantic models
 class Product(BaseModel):
@@ -80,7 +137,229 @@ class CSVProduct(BaseModel):
     uom: str
     item_weight: float
 
-# New endpoints using PG_PickDetail table
+class BranchInfo(BaseModel):
+    branch: str
+    file_name: str
+    price: Optional[float]
+    calculation_type: str
+
+# New CSV-related endpoints
+@app.get("/branches")
+def get_branches():
+    """Get list of branches from Gate Data.csv"""
+    try:
+        gate_data = load_gate_data()
+        branches = []
+        
+        for row in gate_data:
+            branch = row.get('Branch', '').strip()
+            file_name = row.get('File Name', '').strip()
+            price_str = row.get('Price', '').strip()
+            
+            if branch and file_name:
+                # Load item master to determine calculation type
+                try:
+                    item_master = load_item_master(file_name)
+                    calc_type = determine_calculation_type(item_master)
+                except:
+                    calc_type = "unknown"
+                
+                # Parse price
+                price = None
+                if price_str:
+                    try:
+                        price = float(price_str)
+                    except ValueError:
+                        pass
+                
+                branches.append({
+                    "branch": branch,
+                    "file_name": file_name,
+                    "price": price,
+                    "calculation_type": calc_type
+                })
+        
+        return {"branches": branches}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading branches: {str(e)}")
+
+@app.get("/branch-config/{branch}")
+def get_branch_config(branch: str):
+    """Get configuration for a specific branch including calculation type and pricing"""
+    try:
+        gate_data = load_gate_data()
+        
+        # Find the branch in gate data
+        branch_row = None
+        for row in gate_data:
+            if row.get('Branch', '').strip() == branch:
+                branch_row = row
+                break
+        
+        if not branch_row:
+            raise HTTPException(status_code=404, detail=f"Branch {branch} not found")
+        
+        file_name = branch_row.get('File Name', '').strip()
+        price_str = branch_row.get('Price', '').strip()
+        
+        if not file_name:
+            raise HTTPException(status_code=400, detail=f"No file name configured for branch {branch}")
+        
+        # Load item master
+        item_master = load_item_master(file_name)
+        calc_type = determine_calculation_type(item_master)
+        
+        # Parse price
+        gate_price = None
+        if price_str:
+            try:
+                gate_price = float(price_str)
+            except ValueError:
+                pass
+        
+        # Create item code to transport cost mapping
+        item_pricing = {}
+        for row in item_master:
+            item_code = row.get('Item Code', '').strip()
+            transport_cost = row.get('Transportation Cost', '').strip()
+            
+            if item_code:
+                if transport_cost.lower() == 'ton':
+                    item_pricing[item_code] = {'type': 'ton', 'value': None}
+                else:
+                    try:
+                        cost = float(transport_cost)
+                        item_pricing[item_code] = {'type': 'direct', 'value': cost}
+                    except ValueError:
+                        item_pricing[item_code] = {'type': 'unknown', 'value': None}
+        
+        return {
+            "branch": branch,
+            "file_name": file_name,
+            "calculation_type": calc_type,
+            "gate_price": gate_price,
+            "item_pricing": item_pricing
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading branch config: {str(e)}")
+
+@app.post("/calculate-with-branch")
+def calculate_with_branch(pick_id: str, branch: str):
+    """Calculate prices using branch configuration"""
+    try:
+        # Get products from pick ID
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                ItemCode,
+                Dscription,
+                Quantity,
+                UomCode,
+                ItemWeight
+            FROM PG_PickDetail 
+            WHERE ID = ?
+            ORDER BY ItemCode
+        """, (pick_id,))
+        
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        if not rows:
+            raise HTTPException(status_code=404, detail="No products found for this Pick ID")
+        
+        # Get branch configuration
+        branch_config = get_branch_config(branch)
+        calc_type = branch_config['calculation_type']
+        gate_price = branch_config['gate_price']
+        item_pricing = branch_config['item_pricing']
+        
+        calculated_products = []
+        total_price = 0.0
+        
+        if calc_type == "gate_pricing":
+            # Gate pricing: use gate price per kg
+            if gate_price is None:
+                raise HTTPException(status_code=400, detail=f"No gate price configured for branch {branch}")
+            
+            
+            
+            for row in rows:
+                item_code = row[0] if row[0] else ""
+                description = row[1] if row[1] else ""
+                quantity = float(row[2]) if row[2] else 0.0
+                uom = row[3] if row[3] else ""
+                weight = float(row[4]) if row[4] else 0.0
+                
+                # Calculate price based on weight
+                price = weight * gate_price
+                total_price += price
+                
+                calculated_products.append({
+                    "code": item_code,
+                    "name": description,
+                    "quantity": quantity,
+                    "uom": uom,
+                    "weight": weight,
+                    "calculation_type": "weight",
+                    "price": price
+                })
+        
+        elif calc_type == "direct_pricing":
+            # Direct pricing: use transportation cost per item
+            for row in rows:
+                item_code = row[0] if row[0] else ""
+                description = row[1] if row[1] else ""
+                quantity = float(row[2]) if row[2] else 0.0
+                uom = row[3] if row[3] else ""
+                weight = float(row[4]) if row[4] else 0.0
+                
+                # Get pricing for this item
+                pricing_info = item_pricing.get(item_code)
+                
+                if pricing_info and pricing_info['value'] is not None:
+                    price_per_one = pricing_info['value']
+                    price = quantity * price_per_one
+                else:
+                    price_per_one = 0.0
+                    price = 0.0
+                
+                total_price += price
+                
+                calculated_products.append({
+                    "code": item_code,
+                    "name": description,
+                    "quantity": quantity,
+                    "uom": uom,
+                    "weight": weight,
+                    "calculation_type": "direct",
+                    "price_per_one": price_per_one,
+                    "price": price
+                })
+        
+        else:
+            raise HTTPException(status_code=400, detail="Unable to determine calculation type")
+        
+        return {
+            "calculation_type": calc_type,
+            "branch": branch,
+            "gate_price": gate_price,
+            "calculated_products": calculated_products,
+            "total_price": total_price
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")
+
+# Existing endpoints
 @app.get("/pick-ids")
 def get_pick_ids():
     """Get list of unique Pick IDs from PG_PickDetail table"""
@@ -185,7 +464,6 @@ def get_pick_summary():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get counts and date range
         cursor.execute("""
             SELECT 
                 COUNT(DISTINCT ID) as total_picks,
