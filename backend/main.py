@@ -146,17 +146,18 @@ class BranchInfo(BaseModel):
 # New CSV-related endpoints
 @app.get("/branches")
 def get_branches():
-    """Get list of branches from Gate Data.csv"""
+    """Get list of gates from Gate Data.csv"""
     try:
         gate_data = load_gate_data()
-        branches = []
+        gates = []
         
         for row in gate_data:
+            gate_name = row.get('Gate Name', '').strip()
             branch = row.get('Branch', '').strip()
             file_name = row.get('File Name', '').strip()
             price_str = row.get('Price', '').strip()
             
-            if branch and file_name:
+            if gate_name and file_name:
                 # Load item master to determine calculation type
                 try:
                     item_master = load_item_master(file_name)
@@ -172,39 +173,41 @@ def get_branches():
                     except ValueError:
                         pass
                 
-                branches.append({
+                gates.append({
+                    "gate_name": gate_name,
                     "branch": branch,
                     "file_name": file_name,
                     "price": price,
                     "calculation_type": calc_type
                 })
         
-        return {"branches": branches}
+        return {"gates": gates}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading branches: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error loading gates: {str(e)}")
 
-@app.get("/branch-config/{branch}")
-def get_branch_config(branch: str):
-    """Get configuration for a specific branch including calculation type and pricing"""
+@app.get("/gate-config/{gate_name}")
+def get_gate_config(gate_name: str):
+    """Get configuration for a specific gate including calculation type and pricing"""
     try:
         gate_data = load_gate_data()
         
-        # Find the branch in gate data
-        branch_row = None
+        # Find the gate in gate data
+        gate_row = None
         for row in gate_data:
-            if row.get('Branch', '').strip() == branch:
-                branch_row = row
+            if row.get('Gate Name', '').strip() == gate_name:
+                gate_row = row
                 break
         
-        if not branch_row:
-            raise HTTPException(status_code=404, detail=f"Branch {branch} not found")
+        if not gate_row:
+            raise HTTPException(status_code=404, detail=f"Gate {gate_name} not found")
         
-        file_name = branch_row.get('File Name', '').strip()
-        price_str = branch_row.get('Price', '').strip()
+        branch = gate_row.get('Branch', '').strip()
+        file_name = gate_row.get('File Name', '').strip()
+        price_str = gate_row.get('Price', '').strip()
         
         if not file_name:
-            raise HTTPException(status_code=400, detail=f"No file name configured for branch {branch}")
+            raise HTTPException(status_code=400, detail=f"No file name configured for gate {gate_name}")
         
         # Load item master
         item_master = load_item_master(file_name)
@@ -235,6 +238,7 @@ def get_branch_config(branch: str):
                         item_pricing[item_code] = {'type': 'unknown', 'value': None}
         
         return {
+            "gate_name": gate_name,
             "branch": branch,
             "file_name": file_name,
             "calculation_type": calc_type,
@@ -245,11 +249,11 @@ def get_branch_config(branch: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading branch config: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error loading gate config: {str(e)}")
 
-@app.post("/calculate-with-branch")
-def calculate_with_branch(pick_id: str, branch: str):
-    """Calculate prices using branch configuration"""
+@app.post("/calculate-with-gate")
+def calculate_with_gate(pick_id: str, gate_name: str):
+    """Calculate prices using gate configuration"""
     try:
         # Get products from pick ID
         conn = get_db_connection()
@@ -274,11 +278,12 @@ def calculate_with_branch(pick_id: str, branch: str):
         if not rows:
             raise HTTPException(status_code=404, detail="No products found for this Pick ID")
         
-        # Get branch configuration
-        branch_config = get_branch_config(branch)
-        calc_type = branch_config['calculation_type']
-        gate_price = branch_config['gate_price']
-        item_pricing = branch_config['item_pricing']
+        # Get gate configuration
+        gate_config = get_gate_config(gate_name)
+        calc_type = gate_config['calculation_type']
+        gate_price = gate_config['gate_price']
+        item_pricing = gate_config['item_pricing']
+        branch = gate_config['branch']
         
         calculated_products = []
         total_price = 0.0
@@ -286,9 +291,7 @@ def calculate_with_branch(pick_id: str, branch: str):
         if calc_type == "gate_pricing":
             # Gate pricing: use gate price per kg
             if gate_price is None:
-                raise HTTPException(status_code=400, detail=f"No gate price configured for branch {branch}")
-            
-            
+                raise HTTPException(status_code=400, detail=f"No gate price configured for gate {gate_name}")
             
             for row in rows:
                 item_code = row[0] if row[0] else ""
@@ -348,6 +351,7 @@ def calculate_with_branch(pick_id: str, branch: str):
         
         return {
             "calculation_type": calc_type,
+            "gate_name": gate_name,
             "branch": branch,
             "gate_price": gate_price,
             "calculated_products": calculated_products,

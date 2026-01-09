@@ -6,8 +6,8 @@ const API_URL = 'http://localhost:8000';
 const PricingApp = () => {
   const [pickIds, setPickIds] = useState([]);
   const [selectedPickId, setSelectedPickId] = useState('');
-  const [branches, setBranches] = useState([]);
-  const [selectedBranch, setSelectedBranch] = useState('');
+  const [gates, setGates] = useState([]);
+  const [selectedGate, setSelectedGate] = useState('');
   const [products, setProducts] = useState([]);
   const [totalWeight, setTotalWeight] = useState(0);
   const [calculationType, setCalculationType] = useState('');
@@ -35,21 +35,21 @@ const PricingApp = () => {
     }
   };
 
-  const loadBranches = async () => {
+  const loadGates = async () => {
     try {
       const response = await fetch(`${API_URL}/branches`);
       if (response.ok) {
         const data = await response.json();
-        setBranches(data.branches);
+        setGates(data.gates);
       }
     } catch (error) {
-      showNotification(`Error loading branches: ${error.message}`, 'error');
+      showNotification(`Error loading gates: ${error.message}`, 'error');
     }
   };
 
   const handlePickIdChange = async (pickId) => {
     setSelectedPickId(pickId);
-    setSelectedBranch('');
+    setSelectedGate('');
     setCalculationType('');
     setCalculatedProducts([]);
     setCalculatedTotalPrice(null);
@@ -81,27 +81,27 @@ const PricingApp = () => {
     }
   };
 
-  const handleBranchChange = (branch) => {
-    setSelectedBranch(branch);
+  const handleGateChange = (gateName) => {
+    setSelectedGate(gateName);
     setCalculatedProducts([]);
     setCalculatedTotalPrice(null);
     
-    // Find the branch info to set calculation type
-    const branchInfo = branches.find(b => b.branch === branch);
-    if (branchInfo) {
-      setCalculationType(branchInfo.calculation_type);
+    // Find the gate info to set calculation type
+    const gateInfo = gates.find(g => g.gate_name === gateName);
+    if (gateInfo) {
+      setCalculationType(gateInfo.calculation_type);
     }
   };
 
   const calculatePrices = async () => {
-    if (!selectedPickId || !selectedBranch) {
-      showNotification('Please select both Pick ID and Branch', 'error');
+    if (!selectedPickId || !selectedGate) {
+      showNotification('Please select both Pick ID and Gate', 'error');
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/calculate-with-branch?pick_id=${selectedPickId}&branch=${selectedBranch}`, {
+      const response = await fetch(`${API_URL}/calculate-with-gate?pick_id=${selectedPickId}&gate_name=${selectedGate}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -136,7 +136,7 @@ const PricingApp = () => {
 
   useEffect(() => {
     loadPickIds();
-    loadBranches();
+    loadGates();
     loadSavedCalculations();
   }, []);
 
@@ -201,21 +201,21 @@ const PricingApp = () => {
             </select>
           </div>
 
-          {/* Branch Selection */}
+          {/* Gate Selection */}
           {products.length > 0 && (
             <div className="bg-white rounded-lg border p-6 mb-6">
-              <h2 className="text-xl font-bold mb-4">Select Branch</h2>
+              <h2 className="text-xl font-bold mb-4">Select Gate</h2>
               <select
-                value={selectedBranch}
-                onChange={(e) => handleBranchChange(e.target.value)}
+                value={selectedGate}
+                onChange={(e) => handleGateChange(e.target.value)}
                 className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                <option value="">-- Select a Branch --</option>
-                {branches.map((branch) => (
-                  <option key={branch.branch} value={branch.branch}>
-                    {branch.branch} - {branch.calculation_type === 'gate_pricing' ? 'Gate Pricing' : 
-                     branch.calculation_type === 'direct_pricing' ? 'Direct Pricing' : 'Unknown'}
-                    {branch.price && ` (${branch.price.toLocaleString()} MMK/ton)`}
+                <option value="">-- Select a Gate --</option>
+                {gates.map((gate) => (
+                  <option key={gate.gate_name} value={gate.gate_name}>
+                    {gate.gate_name} ({gate.branch}) - {gate.calculation_type === 'gate_pricing' ? 'Gate Pricing' : 
+                     gate.calculation_type === 'direct_pricing' ? 'Direct Pricing' : 'Unknown'}
+                    {gate.price && ` (${gate.price.toLocaleString()} MMK/ton)`}
                   </option>
                 ))}
               </select>
@@ -223,7 +223,7 @@ const PricingApp = () => {
           )}
 
           {/* Calculation Type Display */}
-          {selectedBranch && calculationType && (
+          {selectedGate && calculationType && (
             <div className="bg-blue-50 rounded-lg border-2 border-blue-300 p-6 mb-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -235,8 +235,8 @@ const PricingApp = () => {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-gray-600">Selected Branch</p>
-                  <p className="text-xl font-bold text-blue-600">{selectedBranch}</p>
+                  <p className="text-sm text-gray-600">Selected Gate</p>
+                  <p className="text-xl font-bold text-blue-600">{selectedGate}</p>
                 </div>
               </div>
             </div>
@@ -287,7 +287,7 @@ const PricingApp = () => {
               </div>
 
               {/* Calculate Button */}
-              {selectedBranch && (
+              {selectedGate && (
                 <div className="mb-6">
                   <button
                     onClick={calculatePrices}
