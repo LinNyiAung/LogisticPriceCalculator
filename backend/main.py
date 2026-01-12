@@ -1,3 +1,4 @@
+import logging
 import pyodbc
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +8,8 @@ import json
 from datetime import datetime
 import csv
 import os
+import shutil
+from datetime import datetime
 
 app = FastAPI()
 
@@ -18,6 +21,317 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add these imports at the top if not already present
+import shutil
+from datetime import datetime
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Helper function to write CSV with proper encoding
+def write_csv_file(file_path, headers, data):
+    """Write data to CSV file with UTF-8 encoding"""
+    try:
+        # Create a backup before writing
+        if os.path.exists(file_path):
+            backup_path = file_path + '.backup'
+            shutil.copy2(file_path, backup_path)
+        
+        with open(file_path, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows(data)
+        
+        logger.info(f"Successfully wrote {len(data)} rows to {file_path}")
+        return True
+    except Exception as e:
+        # Restore from backup if write failed
+        backup_path = file_path + '.backup'
+        if os.path.exists(backup_path):
+            shutil.copy2(backup_path, file_path)
+            logger.error(f"Error writing CSV, restored from backup: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error writing CSV: {str(e)}")
+
+# Gate Data Management Endpoints
+
+@app.get("/admin/gates")
+def get_all_gates():
+    """Get all gates from Gate Data.csv"""
+    try:
+        gate_data = load_gate_data()
+        gates = []
+        
+        for row in gate_data:
+            gate_entry = {
+                "gate_name": row.get('Gate Name', '').strip(),
+                "branch": row.get('Branch', '').strip(),
+                "file_name": row.get('File Name', '').strip(),
+                "price": row.get('Price', '').strip()
+            }
+            gates.append(gate_entry)
+            logger.info(f"Loaded gate: {gate_entry}")
+        
+        return {"gates": gates}
+    except Exception as e:
+        logger.error(f"Error loading gates: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error loading gates: {str(e)}")
+
+@app.post("/admin/gates")
+def save_gate(gate_data: dict):
+    """Add or update a gate in Gate Data.csv"""
+    try:
+        file_path = os.path.join(os.path.dirname(__file__), 'Gate Data.csv')
+        
+        # Load existing data
+        existing_gates = load_gate_data()
+        
+        # Get the gate name to search for (use original_gate_name if editing)
+        gate_name = gate_data.get('gate_name', '').strip()
+        original_gate_name = gate_data.get('original_gate_name', gate_name).strip()
+        
+        logger.info(f"Saving gate - New name: {gate_name}, Original name: {original_gate_name}")
+        
+        found = False
+        
+        new_gate_entry = {
+            'Gate Name': gate_name,
+            'Branch': gate_data.get('branch', '').strip(),
+            'File Name': gate_data.get('file_name', '').strip(),
+            'Price': gate_data.get('price', '').strip()
+        }
+        
+        # Look for existing gate using original_gate_name
+        for i, row in enumerate(existing_gates):
+            existing_name = row.get('Gate Name', '').strip()
+            logger.info(f"Comparing existing gate '{existing_name}' with original '{original_gate_name}'")
+            
+            if existing_name == original_gate_name:
+                # Update existing gate
+                logger.info(f"Updating existing gate at index {i}")
+                existing_gates[i] = new_gate_entry
+                found = True
+                break
+        
+        if not found:
+            # Add new gate
+            logger.info(f"Adding new gate: {gate_name}")
+            existing_gates.append(new_gate_entry)
+        
+        # Write back to CSV
+        headers = ['Gate Name', 'Branch', 'File Name', 'Price']
+        write_csv_file(file_path, headers, existing_gates)
+        
+        return {"message": "Gate saved successfully", "gate": new_gate_entry}
+    
+    except Exception as e:
+        logger.error(f"Error saving gate: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error saving gate: {str(e)}")
+
+@app.delete("/admin/gates/{gate_name}")
+async def delete_gate(gate_name: str):
+    """Delete a gate from Gate Data.csv"""
+    try:
+        logger.info(f"Attempting to delete gate: {gate_name}")
+        file_path = os.path.join(os.path.dirname(__file__), 'Gate Data.csv')
+        
+        # Load existing data
+        existing_gates = load_gate_data()
+        logger.info(f"Loaded {len(existing_gates)} gates")
+        
+        # Filter out the gate to delete
+        updated_gates = [
+            row for row in existing_gates 
+            if row.get('Gate Name', '').strip() != gate_name
+        ]
+        
+        if len(updated_gates) == len(existing_gates):
+            logger.warning(f"Gate {gate_name} not found")
+            raise HTTPException(status_code=404, detail=f"Gate {gate_name} not found")
+        
+        logger.info(f"Deleted gate, {len(updated_gates)} gates remaining")
+        
+        # Write back to CSV
+        headers = ['Gate Name', 'Branch', 'File Name', 'Price']
+        write_csv_file(file_path, headers, updated_gates)
+        
+        return {"message": f"Gate {gate_name} deleted successfully"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting gate: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting gate: {str(e)}")
+
+# Item Master Management Endpoints
+
+@app.get("/admin/item-master-files")
+def get_item_master_files():
+    """Get list of all Item Master CSV files"""
+    try:
+        current_dir = os.path.dirname(__file__)
+        files = [f for f in os.listdir(current_dir) if f.startswith('Item Master') and f.endswith('.csv')]
+        return {"files": sorted(files)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing files: {str(e)}")
+
+@app.get("/admin/item-master/{file_name}")
+def get_item_master(file_name: str):
+    """Get all items from a specific Item Master file"""
+    try:
+        # Security check - ensure file_name is safe
+        if not file_name.startswith('Item Master') or not file_name.endswith('.csv'):
+            raise HTTPException(status_code=400, detail="Invalid file name")
+        
+        data = load_item_master(file_name)
+        
+        items = []
+        for row in data:
+            items.append({
+                "item_code": row.get('Item Code', '').strip(),
+                "item_name": row.get('Item Name', '').strip(),
+                "is_active": row.get('Is Active', '').strip(),
+                "principal": row.get('Principal', '').strip(),
+                "brand": row.get('Brand', '').strip(),
+                "uom": row.get('UOM', '').strip(),
+                "purchase_weight": row.get('Purchase Weight', '').strip(),
+                "transportation_cost": row.get('Transportation Cost', '').strip()
+            })
+        
+        return {"items": items, "file_name": file_name}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading item master: {str(e)}")
+
+@app.post("/admin/item-master/{file_name}")
+def save_item(file_name: str, item_data: dict):
+    """Add or update an item in Item Master file"""
+    try:
+        # Security check
+        if not file_name.startswith('Item Master') or not file_name.endswith('.csv'):
+            raise HTTPException(status_code=400, detail="Invalid file name")
+        
+        file_path = os.path.join(os.path.dirname(__file__), file_name)
+        
+        # Load existing data
+        existing_items = load_item_master(file_name)
+        
+        # Check if updating existing item
+        item_code = item_data.get('item_code', '').strip()
+        found = False
+        
+        for i, row in enumerate(existing_items):
+            if row.get('Item Code', '').strip() == item_code:
+                # Update existing item
+                existing_items[i] = {
+                    'Item Code': item_data.get('item_code', ''),
+                    'Item Name': item_data.get('item_name', ''),
+                    'Is Active': item_data.get('is_active', 'Active'),
+                    'Principal': item_data.get('principal', ''),
+                    'Brand': item_data.get('brand', ''),
+                    'UOM': item_data.get('uom', ''),
+                    'Purchase Weight': item_data.get('purchase_weight', ''),
+                    'Transportation Cost': item_data.get('transportation_cost', 'Ton')
+                }
+                found = True
+                break
+        
+        if not found:
+            # Add new item
+            existing_items.append({
+                'Item Code': item_data.get('item_code', ''),
+                'Item Name': item_data.get('item_name', ''),
+                'Is Active': item_data.get('is_active', 'Active'),
+                'Principal': item_data.get('principal', ''),
+                'Brand': item_data.get('brand', ''),
+                'UOM': item_data.get('uom', ''),
+                'Purchase Weight': item_data.get('purchase_weight', ''),
+                'Transportation Cost': item_data.get('transportation_cost', 'Ton')
+            })
+        
+        # Write back to CSV
+        headers = ['Item Code', 'Item Name', 'Is Active', 'Principal', 'Brand', 'UOM', 'Purchase Weight', 'Transportation Cost']
+        write_csv_file(file_path, headers, existing_items)
+        
+        return {"message": "Item saved successfully", "item": item_data}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving item: {str(e)}")
+
+@app.delete("/admin/item-master/{file_name}/{item_code}")
+def delete_item(file_name: str, item_code: str):
+    """Delete an item from Item Master file"""
+    try:
+        # Security check
+        if not file_name.startswith('Item Master') or not file_name.endswith('.csv'):
+            raise HTTPException(status_code=400, detail="Invalid file name")
+        
+        file_path = os.path.join(os.path.dirname(__file__), file_name)
+        
+        # Load existing data
+        existing_items = load_item_master(file_name)
+        
+        # Filter out the item to delete
+        updated_items = [
+            row for row in existing_items 
+            if row.get('Item Code', '').strip() != item_code
+        ]
+        
+        if len(updated_items) == len(existing_items):
+            raise HTTPException(status_code=404, detail=f"Item {item_code} not found")
+        
+        # Write back to CSV
+        headers = ['Item Code', 'Item Name', 'Is Active', 'Principal', 'Brand', 'UOM', 'Purchase Weight', 'Transportation Cost']
+        write_csv_file(file_path, headers, updated_items)
+        
+        return {"message": f"Item {item_code} deleted successfully"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting item: {str(e)}")
+
+# Optional: Backup functionality
+@app.post("/admin/backup")
+def create_backup():
+    """Create backup of all CSV files"""
+    try:
+        current_dir = os.path.dirname(__file__)
+        backup_dir = os.path.join(current_dir, 'backups')
+        
+        # Create backup directory if it doesn't exist
+        os.makedirs(backup_dir, exist_ok=True)
+        
+        # Create timestamped backup folder
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_folder = os.path.join(backup_dir, f'backup_{timestamp}')
+        os.makedirs(backup_folder, exist_ok=True)
+        
+        # Backup Gate Data.csv
+        gate_file = os.path.join(current_dir, 'Gate Data.csv')
+        if os.path.exists(gate_file):
+            shutil.copy2(gate_file, backup_folder)
+        
+        # Backup all Item Master files
+        item_files = [f for f in os.listdir(current_dir) if f.startswith('Item Master') and f.endswith('.csv')]
+        for file_name in item_files:
+            file_path = os.path.join(current_dir, file_name)
+            shutil.copy2(file_path, backup_folder)
+        
+        return {
+            "message": "Backup created successfully",
+            "backup_folder": backup_folder,
+            "files_backed_up": len(item_files) + 1
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating backup: {str(e)}")
 
 # SQL Server connection string for reading data
 def get_db_connection():
