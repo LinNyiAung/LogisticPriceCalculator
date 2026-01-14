@@ -566,8 +566,8 @@ def get_gate_config(gate_name: str):
         raise HTTPException(status_code=500, detail=f"Error loading gate config: {str(e)}")
 
 @app.post("/calculate-with-gate")
-def calculate_with_gate(pick_id: str, gate_name: str):
-    """Calculate prices using gate configuration"""
+def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Optional[float] = None):
+    """Calculate prices using gate configuration with optional manual total price override"""
     try:
         # Get products from pick ID
         conn = get_db_connection()
@@ -601,44 +601,98 @@ def calculate_with_gate(pick_id: str, gate_name: str):
         
         calculated_products = []
         total_price = 0.0
+        estimated_total_price = 0.0 # To track the theoretical price if manual wasn't provided
         
         if calc_type == "gate_pricing":
-            # Gate pricing: use gate price per kg
             if gate_price is None:
                 raise HTTPException(status_code=400, detail=f"No gate price configured for gate {gate_name}")
             
+            # 1. Segregate items and calculate the base "Ton" cost
+            ton_items = []
+            direct_items = []
+            ton_cost_total = 0.0
+            
             for row in rows:
-                item_code = row[0] if row[0] else ""
-                description = row[1] if row[1] else ""
-                quantity = float(row[2]) if row[2] else 0.0
-                uom = row[3] if row[3] else ""
-                weight = float(row[4]) if row[4] else 0.0
+                item_data = {
+                    "code": row[0] if row[0] else "",
+                    "name": row[1] if row[1] else "",
+                    "quantity": float(row[2]) if row[2] else 0.0,
+                    "uom": row[3] if row[3] else "",
+                    "weight": float(row[4]) if row[4] else 0.0,
+                }
                 
-                # Calculate price based on weight
-                price = weight * gate_price
-                total_price += price
+                # Check item master config for this specific item
+                p_info = item_pricing.get(item_data['code'], {})
+                p_type = p_info.get('type', 'ton') # Default to ton if not specified
+                p_val = p_info.get('value', 0.0)
+                
+                # Calculate Estimated Cost (Standard Logic)
+                if p_type == 'direct':
+                    estimated_total_price += (item_data['quantity'] * (p_val if p_val else 0))
+                    item_data['standard_unit_price'] = p_val if p_val else 0
+                    direct_items.append(item_data)
+                else:
+                    cost = item_data['weight'] * gate_price
+                    estimated_total_price += cost
+                    ton_cost_total += cost
+                    item_data['price'] = cost
+                    ton_items.append(item_data)
+
+            # 2. Determine Direct Item Pricing Strategy
+            direct_unit_price = 0.0
+            
+            if manual_total_price is not None:
+                # User provided total: Calculate remainder for direct items
+                remainder = manual_total_price - ton_cost_total
+                total_direct_qty = sum(item['quantity'] for item in direct_items)
+                
+                if total_direct_qty > 0:
+                    direct_unit_price = remainder / total_direct_qty
+                
+                total_price = manual_total_price
+            else:
+                # Use estimated/standard calculation
+                total_price = estimated_total_price
+            
+            # 3. Build Final Result
+            
+            # Add Ton Items
+            for item in ton_items:
+                calculated_products.append({
+                    **item,
+                    "calculation_type": "weight",
+                    "price_per_one": None,
+                    "price": item['price'] 
+                })
+            
+            # Add Direct Items
+            for item in direct_items:
+                # If manual total exists, use calculated rate. If not, use standard rate.
+                if manual_total_price is not None:
+                    final_unit_price = direct_unit_price
+                else:
+                    final_unit_price = item['standard_unit_price']
+                
+                final_item_price = item['quantity'] * final_unit_price
                 
                 calculated_products.append({
-                    "code": item_code,
-                    "name": description,
-                    "quantity": quantity,
-                    "uom": uom,
-                    "weight": weight,
-                    "calculation_type": "weight",
-                    "price": price
+                    **item,
+                    "calculation_type": "direct_split" if manual_total_price else "direct",
+                    "price_per_one": final_unit_price,
+                    "price": final_item_price
                 })
-        
+                
+                # If we are in standard mode, we sum up here (already done in estimate, but just to be safe for display)
+                # If in manual mode, total is forced to manual_total_price
+                
         elif calc_type == "direct_pricing":
-            # Direct pricing: use transportation cost per item
+            # Direct pricing logic (unchanged)
             for row in rows:
                 item_code = row[0] if row[0] else ""
-                description = row[1] if row[1] else ""
-                quantity = float(row[2]) if row[2] else 0.0
-                uom = row[3] if row[3] else ""
-                weight = float(row[4]) if row[4] else 0.0
-                
-                # Get pricing for this item
                 pricing_info = item_pricing.get(item_code)
+                
+                quantity = float(row[2]) if row[2] else 0.0
+                weight = float(row[4]) if row[4] else 0.0
                 
                 if pricing_info and pricing_info['value'] is not None:
                     price_per_one = pricing_info['value']
@@ -648,12 +702,13 @@ def calculate_with_gate(pick_id: str, gate_name: str):
                     price = 0.0
                 
                 total_price += price
+                estimated_total_price += price
                 
                 calculated_products.append({
                     "code": item_code,
-                    "name": description,
+                    "name": row[1] if row[1] else "",
                     "quantity": quantity,
-                    "uom": uom,
+                    "uom": row[3] if row[3] else "",
                     "weight": weight,
                     "calculation_type": "direct",
                     "price_per_one": price_per_one,
@@ -663,13 +718,17 @@ def calculate_with_gate(pick_id: str, gate_name: str):
         else:
             raise HTTPException(status_code=400, detail="Unable to determine calculation type")
         
+        # Sort by name for clean display
+        calculated_products.sort(key=lambda x: x['name'])
+        
         return {
             "calculation_type": calc_type,
             "gate_name": gate_name,
             "branch": branch,
             "gate_price": gate_price,
             "calculated_products": calculated_products,
-            "total_price": total_price
+            "total_price": total_price,
+            "estimated_total_price": estimated_total_price
         }
         
     except HTTPException:

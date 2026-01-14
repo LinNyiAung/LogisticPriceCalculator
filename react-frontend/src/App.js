@@ -30,6 +30,10 @@ const PricingApp = () => {
   const [originalGateName, setOriginalGateName] = useState(null);
   const [originalItemCode, setOriginalItemCode] = useState(null);
 
+
+  const [manualTotalPrice, setManualTotalPrice] = useState('');
+  const [estimatedTotalPrice, setEstimatedTotalPrice] = useState(null);
+
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
@@ -101,6 +105,8 @@ const PricingApp = () => {
     setCalculationType('');
     setCalculatedProducts([]);
     setCalculatedTotalPrice(null);
+    setEstimatedTotalPrice(null); // Add this
+    setManualTotalPrice('');      // Add this
     
     if (!pickId) {
       setProducts([]);
@@ -133,6 +139,8 @@ const PricingApp = () => {
     setSelectedGate(gateName);
     setCalculatedProducts([]);
     setCalculatedTotalPrice(null);
+    setEstimatedTotalPrice(null); // Add this
+    setManualTotalPrice('');      // Add this
     
     const gateInfo = gates.find(g => g.gate_name === gateName);
     if (gateInfo) {
@@ -148,7 +156,13 @@ const PricingApp = () => {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/calculate-with-gate?pick_id=${selectedPickId}&gate_name=${selectedGate}`, {
+      // Build URL with optional manual_total_price
+      let url = `${API_URL}/calculate-with-gate?pick_id=${selectedPickId}&gate_name=${selectedGate}`;
+      if (manualTotalPrice) {
+        url += `&manual_total_price=${manualTotalPrice}`;
+      }
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -157,6 +171,8 @@ const PricingApp = () => {
         const data = await response.json();
         setCalculatedProducts(data.calculated_products);
         setCalculatedTotalPrice(data.total_price);
+        // Set the estimated price returned from backend
+        setEstimatedTotalPrice(data.estimated_total_price); 
         showNotification('Calculation completed successfully', 'success');
       } else {
         const error = await response.json();
@@ -870,6 +886,45 @@ const PricingApp = () => {
                   <span className="text-3xl font-bold text-purple-600">
                     {totalWeight.toFixed(2)} 
                   </span>
+                </div>
+              </div>
+
+
+              {/* NEW: Total Price Input Section */}
+              <div className="bg-white rounded-lg border p-6 mb-6">
+                <h2 className="text-xl font-bold mb-4">Pricing Options</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Target Total Price (Optional)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={manualTotalPrice}
+                        onChange={(e) => setManualTotalPrice(e.target.value)}
+                        placeholder="Enter total amount to distribute..."
+                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <span className="absolute right-4 top-3 text-gray-400">MMK</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      If provided, Ton items keep their weight price, and the remainder is distributed to other items.
+                    </p>
+                  </div>
+                  
+                  {/* Display Estimated Price if calculation is done and manual price was used */}
+                  {estimatedTotalPrice !== null && manualTotalPrice && (
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col justify-center">
+                      <span className="text-sm text-gray-600">Standard Estimated Total:</span>
+                      <span className="text-xl font-bold text-gray-700">
+                        {estimatedTotalPrice.toLocaleString()} MMK
+                      </span>
+                      <span className="text-xs text-orange-600 mt-1">
+                        (Difference: {(parseFloat(manualTotalPrice) - estimatedTotalPrice).toLocaleString()} MMK)
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
