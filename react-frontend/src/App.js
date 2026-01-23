@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2 } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -75,6 +75,84 @@ const PricingApp = () => {
       showNotification(`Error loading items: ${error.message}`, 'error');
     }
   };
+
+
+  const handleExportExcel = async () => {
+  if (!selectedGateForPricing) {
+    showNotification('Please select a gate first', 'error');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/admin/item-pricing/export/${selectedGateForPricing}`);
+    
+    if (response.ok) {
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'item_pricing.xlsx';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      showNotification('Excel file downloaded successfully', 'success');
+    } else {
+      const error = await response.json();
+      showNotification(error.detail || 'Failed to export Excel', 'error');
+    }
+  } catch (error) {
+    showNotification(`Error: ${error.message}`, 'error');
+  }
+};
+
+const handleImportExcel = async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  if (!selectedGateForPricing) {
+    showNotification('Please select a gate first', 'error');
+    event.target.value = '';
+    return;
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_URL}/admin/item-pricing/import/${selectedGateForPricing}`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      showNotification(
+        `Import successful! Updated: ${result.updates}, Added: ${result.inserts}, Deleted: ${result.deletes}`,
+        'success'
+      );
+      await loadItemPricing(selectedGateForPricing);
+    } else {
+      const error = await response.json();
+      showNotification(error.detail || 'Failed to import Excel', 'error');
+    }
+  } catch (error) {
+    showNotification(`Error: ${error.message}`, 'error');
+  } finally {
+    event.target.value = '';
+  }
+};
 
   const handlePickIdChange = async (pickId) => {
     setSelectedPickId(pickId);
@@ -593,15 +671,36 @@ const PricingApp = () => {
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-3xl font-bold text-gray-800">Product Price Management</h1>
-              {selectedGateForPricing && (
-                <button
-                  onClick={() => setShowAddItemModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-                >
-                  <Plus size={20} />
-                  Add Item
-                </button>
-              )}
+              <div className="flex gap-2">
+                {selectedGateForPricing && (
+                  <>
+                    <button
+                      onClick={handleExportExcel}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    >
+                      <Download size={20} />
+                      Download Excel
+                    </button>
+                    <label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer">
+                      <Upload size={20} />
+                      Upload Excel
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={handleImportExcel}
+                        className="hidden"
+                      />
+                    </label>
+                    <button
+                      onClick={() => setShowAddItemModal(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                    >
+                      <Plus size={20} />
+                      Add Item
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="mb-6">

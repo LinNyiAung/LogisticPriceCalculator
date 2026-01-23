@@ -1,11 +1,15 @@
 import logging
 import pyodbc
 import sqlite3
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import os
+import io
+import openpyxl
+from openpyxl.styles import Font, PatternFill
 
 app = FastAPI()
 
@@ -36,7 +40,6 @@ def get_dwbi_connection():
 
 def get_logistic_connection():
     """Create and return a SQLite connection to logistic.db (Read/Write Source)"""
-    # Connects to a file named 'logistic.db' in the current directory
     db_path = os.path.join(os.path.dirname(__file__), 'logistic.db')
     conn = sqlite3.connect(db_path)
     return conn
@@ -50,7 +53,6 @@ def startup_db():
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # Create Gate table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Gate (
                 [Gate ID] INTEGER PRIMARY KEY,
@@ -60,7 +62,6 @@ def startup_db():
             )
         """)
         
-        # Create Item_Pricing table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Item_Pricing (
                 [Pricing ID] INTEGER PRIMARY KEY,
@@ -144,6 +145,178 @@ def determine_calculation_type_sql(gate_id):
         logger.error(f"Error determining calc type: {str(e)}")
         return "unknown"
 
+# --- Excel Export/Import Endpoints ---
+
+@app.get("/admin/item-pricing/export/{gate_id}")
+def export_item_pricing_excel(gate_id: int):
+    """Export item pricing data to Excel"""
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        # Get gate info
+        cursor.execute("SELECT [Gate Name], [Branch] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
+        gate_row = cursor.fetchone()
+        
+        if not gate_row:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Gate not found")
+        
+        gate_name, branch = gate_row[0], gate_row[1]
+        
+        # Get item pricing data
+        query = """
+            SELECT [Item ID], [Item Name], [Is Active], [Principal], 
+                   [Brand], [UOM], [Purchase Weight], [Transportation Cost]
+            FROM Item_Pricing 
+            WHERE [Gate ID] = ?
+            ORDER BY [Item ID]
+        """
+        cursor.execute(query, (gate_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # Create Excel workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Item Pricing"
+        
+        # Add header with gate info
+        ws['A1'] = f"Gate: {gate_name} ({branch})"
+        ws['A1'].font = Font(bold=True, size=14)
+        
+        # Add column headers
+        headers = ['Item Code', 'Item Name', 'Status', 'Principal', 'Brand', 
+                   'UOM', 'Purchase Weight', 'Transportation Cost']
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=3, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+        
+        # Add data rows
+        for row_num, row_data in enumerate(rows, 4):
+            for col_num, value in enumerate(row_data, 1):
+                ws.cell(row=row_num, column=col_num, value=value)
+        
+        # Adjust column widths
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[col_letter].width = adjusted_width
+        
+        # Save to bytes
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        filename = f"item_pricing_{gate_name.replace(' ', '_')}.xlsx"
+        
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting Excel: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error exporting: {str(e)}")
+
+@app.post("/admin/item-pricing/import/{gate_id}")
+async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...)):
+    """Import item pricing data from Excel"""
+    try:
+        # Read Excel file
+        contents = await file.read()
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+        ws = wb.active
+        
+        # Get existing items to track changes
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT [Item ID] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
+        existing_items = {row[0] for row in cursor.fetchall()}
+        
+        # Parse Excel data (starting from row 4, skipping header rows)
+        updated_items = set()
+        updates_made = 0
+        inserts_made = 0
+        
+        for row in ws.iter_rows(min_row=4, values_only=True):
+            # Skip empty rows
+            if not row[0]:
+                continue
+            
+            item_code = str(row[0]).strip()
+            item_name = str(row[1]) if row[1] else ""
+            is_active = str(row[2]) if row[2] else "Active"
+            principal = str(row[3]) if row[3] else ""
+            brand = str(row[4]) if row[4] else ""
+            uom = str(row[5]) if row[5] else ""
+            purchase_weight = float(row[6]) if row[6] else 0.0
+            transportation_cost = str(row[7]) if row[7] else "Ton"
+            
+            updated_items.add(item_code)
+            
+            if item_code in existing_items:
+                # Update existing item
+                cursor.execute("""
+                    UPDATE Item_Pricing
+                    SET [Item Name] = ?, [Is Active] = ?, [Principal] = ?,
+                        [Brand] = ?, [UOM] = ?, [Purchase Weight] = ?, 
+                        [Transportation Cost] = ?
+                    WHERE [Gate ID] = ? AND [Item ID] = ?
+                """, (item_name, is_active, principal, brand, uom, 
+                      purchase_weight, transportation_cost, gate_id, item_code))
+                updates_made += 1
+            else:
+                # Insert new item
+                cursor.execute("""
+                    INSERT INTO Item_Pricing 
+                    ([Gate ID], [Item ID], [Item Name], [Is Active], [Principal],
+                     [Brand], [UOM], [Purchase Weight], [Transportation Cost])
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (gate_id, item_code, item_name, is_active, principal, 
+                      brand, uom, purchase_weight, transportation_cost))
+                inserts_made += 1
+        
+        # Delete items that were in DB but not in Excel
+        items_to_delete = existing_items - updated_items
+        deletes_made = 0
+        for item_code in items_to_delete:
+            cursor.execute("""
+                DELETE FROM Item_Pricing 
+                WHERE [Gate ID] = ? AND [Item ID] = ?
+            """, (gate_id, item_code))
+            deletes_made += 1
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            "message": "Import completed successfully",
+            "updates": updates_made,
+            "inserts": inserts_made,
+            "deletes": deletes_made
+        }
+        
+    except Exception as e:
+        logger.error(f"Error importing Excel: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error importing: {str(e)}")
+
 # --- Gate Management Endpoints (SQLite) ---
 
 @app.get("/admin/gates")
@@ -183,14 +356,12 @@ def save_gate(gate_data: GateData):
         cursor = conn.cursor()
 
         if gate_data.original_gate_name:
-            # Update
             cursor.execute("""
                 UPDATE Gate 
                 SET [Gate Name] = ?, [Branch] = ?, [Gate Price] = ?
                 WHERE [Gate Name] = ?
             """, (gate_data.gate_name, gate_data.branch, gate_data.price, gate_data.original_gate_name))
         else:
-            # Insert (Auto-increment handles ID usually, but we can rely on schema)
             cursor.execute("""
                 INSERT INTO Gate ([Gate Name], [Branch], [Gate Price])
                 VALUES (?, ?, ?)
@@ -211,7 +382,6 @@ def delete_gate(gate_id: int):
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # Enable foreign keys support if needed, or just manual delete
         cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
         cursor.execute("DELETE FROM Gate WHERE [Gate ID] = ?", (gate_id,))
         
@@ -272,13 +442,11 @@ def save_item_pricing(item_data: ItemPricingData):
         conn = get_logistic_connection()
         cursor = conn.cursor()
 
-        # Check existing using Gate ID + Item Code
         query_check = "SELECT [Pricing ID] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?"
         cursor.execute(query_check, (item_data.gate_id, item_data.original_item_code or item_data.item_code))
         existing = cursor.fetchone()
 
         if existing:
-            # Update
             update_query = """
                 UPDATE Item_Pricing
                 SET [Item ID] = ?, [Item Name] = ?, [Is Active] = ?, [Principal] = ?,
@@ -292,7 +460,6 @@ def save_item_pricing(item_data: ItemPricingData):
                 existing[0]
             ))
         else:
-            # Insert
             insert_query = """
                 INSERT INTO Item_Pricing 
                 ([Gate ID], [Item ID], [Item Name], [Is Active], [Principal],
@@ -342,7 +509,6 @@ def get_branches():
 def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Optional[float] = None):
     """Calculate prices: Joins SQL Server (Pick Data) and SQLite (Gate Data)"""
     try:
-        # 1. Get Pick Details from SQL Server (DWBI)
         try:
             conn_dwbi = get_dwbi_connection()
             cursor_dwbi = conn_dwbi.cursor()
@@ -358,7 +524,6 @@ def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Option
         if not pick_rows:
             raise HTTPException(status_code=404, detail="No products found for this Pick ID")
         
-        # 2. Get Gate Configuration from SQLite (logistic.db)
         try:
             conn_log = get_logistic_connection()
             cursor_log = conn_log.cursor()
@@ -373,7 +538,6 @@ def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Option
             
         gate_id, branch, gate_price = gate_row[0], gate_row[1], float(gate_row[2] or 0)
         
-        # 3. Get Item Pricing from SQLite
         cursor_log.execute("""
             SELECT [Item ID], [Transportation Cost] 
             FROM Item_Pricing 
@@ -382,7 +546,6 @@ def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Option
         pricing_rows = cursor_log.fetchall()
         conn_log.close()
         
-        # 4. Process Pricing Logic
         item_pricing = {}
         has_ton = False
         has_number = False
@@ -402,7 +565,6 @@ def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Option
                 except:
                     item_pricing[i_code] = {'type': 'unknown', 'value': None}
 
-        # Determine Calculation Type
         calc_type = "unknown"
         if has_number and not has_ton:
             calc_type = "direct_pricing"
@@ -419,7 +581,6 @@ def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Option
             ton_cost_total = 0.0
             
             for row in pick_rows:
-                # Note: PyODBC rows are accessed by index
                 item_data = {
                     "code": row[0] if row[0] else "",
                     "name": row[1] if row[1] else "",
@@ -437,14 +598,12 @@ def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Option
                     item_data['standard_unit_price'] = p_val
                     direct_items.append(item_data)
                 else:
-                    # Weight based cost
                     cost = item_data['weight'] * gate_price
                     estimated_total_price += cost
                     ton_cost_total += cost
                     item_data['price'] = cost
                     ton_items.append(item_data)
 
-            # Manual Price Logic
             direct_unit_price = 0.0
             if manual_total_price is not None:
                 remainder = manual_total_price - ton_cost_total
@@ -455,7 +614,6 @@ def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Option
             else:
                 total_price = estimated_total_price
 
-            # Build Result
             for item in ton_items:
                 calculated_products.append({
                     **item,
@@ -500,7 +658,6 @@ def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Option
                     "price": price
                 })
 
-        # Sort by name
         calculated_products.sort(key=lambda x: x['name'])
         
         return {
