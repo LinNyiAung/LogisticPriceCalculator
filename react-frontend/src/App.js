@@ -33,6 +33,10 @@ const PricingApp = () => {
   const [manualTotalPrice, setManualTotalPrice] = useState('');
   const [estimatedTotalPrice, setEstimatedTotalPrice] = useState(null);
 
+
+  const [branches, setBranches] = useState([]);
+  const [selectedBranch, setSelectedBranch] = useState('');
+
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
@@ -62,6 +66,19 @@ const PricingApp = () => {
       showNotification(`Error loading gates: ${error.message}`, 'error');
     }
   };
+
+
+  const loadBranches = async () => {
+  try {
+    const response = await fetch(`${API_URL}/branches-list`);
+    if (response.ok) {
+      const data = await response.json();
+      setBranches(data.branches);
+    }
+  } catch (error) {
+    showNotification(`Error loading branches: ${error.message}`, 'error');
+  }
+};
 
   const loadItemPricing = async (gateId) => {
     if (!gateId) return;
@@ -189,6 +206,15 @@ const handleImportExcel = async (event) => {
       showNotification(`Error: ${error.message}`, 'error');
     }
   };
+
+  const handleBranchChange = (branch) => {
+  setSelectedBranch(branch);
+  setSelectedGate('');
+  setCalculatedProducts([]);
+  setCalculatedTotalPrice(null);
+  setEstimatedTotalPrice(null);
+  setManualTotalPrice('');
+};  
 
   const handleGateChange = (gateName) => {
     setSelectedGate(gateName);
@@ -349,6 +375,7 @@ const handleImportExcel = async (event) => {
   useEffect(() => {
     loadPickIds();
     loadGates();
+    loadBranches();
   }, []);
 
   useEffect(() => {
@@ -818,24 +845,46 @@ const handleImportExcel = async (event) => {
             </select>
           </div>
           {products.length > 0 && (
-            <div className="bg-white rounded-lg border p-6 mb-6">
-              <h2 className="text-xl font-bold mb-4">Select Gate</h2>
-              <select
-                value={selectedGate}
-                onChange={(e) => handleGateChange(e.target.value)}
-                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- Select a Gate --</option>
-                {gates.map((gate) => (
-                  <option key={gate.gate_name} value={gate.gate_name}>
-                    {gate.gate_name} ({gate.branch}) - 
-                    {gate.calculation_type === 'gate_pricing' ? 'Gate Pricing' : 
-                     gate.calculation_type === 'direct_pricing' ? 'Direct Pricing' : 'Unknown'}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+  <>
+    <div className="bg-white rounded-lg border p-6 mb-6">
+      <h2 className="text-xl font-bold mb-4">Select Branch</h2>
+      <select
+        value={selectedBranch}
+        onChange={(e) => handleBranchChange(e.target.value)}
+        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+      >
+        <option value="">-- Select a Branch --</option>
+        {branches.map((branch) => (
+          <option key={branch} value={branch}>
+            YGN to {branch}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    {selectedBranch && (
+      <div className="bg-white rounded-lg border p-6 mb-6">
+        <h2 className="text-xl font-bold mb-4">Select Gate</h2>
+        <select
+          value={selectedGate}
+          onChange={(e) => handleGateChange(e.target.value)}
+          className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">-- Select a Gate --</option>
+          {gates
+            .filter(gate => gate.branch === selectedBranch)
+            .map((gate) => (
+              <option key={gate.gate_name} value={gate.gate_name}>
+                {gate.gate_name} ({gate.branch}) - 
+                {gate.calculation_type === 'gate_pricing' ? 'Gate Pricing' : 
+                 gate.calculation_type === 'direct_pricing' ? 'Direct Pricing' : 'Unknown'}
+              </option>
+            ))}
+        </select>
+      </div>
+    )}
+  </>
+)}
           {/* ... Rest of the Calculator UI (Total Weight, Manual Price, Table) ... */}
            {/* Re-implementing Calculator UI components for completeness */}
             {selectedGate && (

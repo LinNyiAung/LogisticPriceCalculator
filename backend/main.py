@@ -500,6 +500,25 @@ def delete_item_pricing(gate_id: int, item_code: str):
 
 # --- Calculation & Main Endpoints ---
 
+
+@app.get("/branches-list")
+def get_branches_list():
+    """Get unique list of branches from Gate table"""
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT DISTINCT [Branch] FROM Gate WHERE [Branch] IS NOT NULL ORDER BY [Branch]")
+        rows = cursor.fetchall()
+        
+        branches = [row[0] for row in rows]
+        
+        conn.close()
+        return {"branches": branches}
+    except Exception as e:
+        logger.error(f"Error loading branches: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error loading branches: {str(e)}")
+
 @app.get("/branches")
 def get_branches():
     """Get list of gates (Alias for admin/gates)"""

@@ -2,10 +2,10 @@ Item Code,Item Name,Is Active,Principal,Brand,UOM,Purchase Weight,Transportation
 6301111001,Shaloot Noodle Coconut 55g (1x30pcs),Active,The Taste Origins,Shaloot,30,1.6,2000
 6301111002,Shaloot Noodle Tom Yum 55g (1x30pcs),Active,The Taste Origins,Shaloot,30,1.6,2000
 6301111003,Shaloot Noodle Chicken Sichat 52g (1x30pcs),Active,The Taste Origins,Shaloot,30,1.5,2000
-201112028,Ensure Gold (Wheat) 380g (1x24Pcs),Active,Abbott,Ensure,24,11.92,2000
-201112029,Ensure Gold StrengthPro (Vanilla) 380g (1x24Pcs),Active,Abbott,Ensure,24,11.92,2000
-201112030,Ensure Gold StrengthPro (Vanilla) 800g (1x12pcs),Active,Abbott,Ensure,12,12.24,2000
-203112012,Glucerna Powder (Vanilla) 400g (1x24Pcs),Active,Abbott,Glucerna,24,12.4,2000
+0201112028,Ensure Gold (Wheat) 380g (1x24Pcs),Active,Abbott,Ensure,24,11.92,2000
+0201112029,Ensure Gold StrengthPro (Vanilla) 380g (1x24Pcs),Active,Abbott,Ensure,24,11.92,2000
+0201112030,Ensure Gold StrengthPro (Vanilla) 800g (1x12pcs),Active,Abbott,Ensure,12,12.24,2000
+0203112012,Glucerna Powder (Vanilla) 400g (1x24Pcs),Active,Abbott,Glucerna,24,12.4,2000
 1221101010,Active GSM TP 2000,Active,MPT,Top-up,1,0.01,2000
 6201111001,Ayeyarwaddy Peanut Oil 0.25Viss (1x12),Active,Nutripure,Ayeyarwaddy,12,5,2000
 6201111002,Ayeyarwaddy Peanut Oil 0.5Viss (1x12),Active,Nutripure,Ayeyarwaddy,12,10.1,2000
@@ -28,7 +28,7 @@ Item Code,Item Name,Is Active,Principal,Brand,UOM,Purchase Weight,Transportation
 4501111008,Excel Care Dish Washing Liquid Lemon 2Liter (1x6 pcs),Active,Glamdust,Excel Care,6,13.72,2000
 3200000009,May Yee Mon Chicken Congee 25g (1x20 packs) MT pack,Active,Ya Thar Taw Win,May Yee Mon,20,5.5,2000
 6001111003,Mr. Shine Liq Detergent Fresh Blossom 35ml (1x24pcsx10packs),Active,Myat HtarNi,Mr. Shine,10,9.2,2000
-201112027,Ensure Non-HMB Vanilla 380gm (1x24Pcs),Active,Abbott,Ensure,24,11.92,2000
+0201112027,Ensure Non-HMB Vanilla 380gm (1x24Pcs),Active,Abbott,Ensure,24,11.92,2000
 5001121001,May Kha Lar Mango Toffee 125g (1x6pcsx32packs),Active,CMP Fruits Garden,May Kha Lar,192,25,2000
 5001121002,May Kha Lar Lemon Toffee 125g (1x6pcsx32packs),Active,CMP Fruits Garden,May Kha Lar,192,25,2000
 5001121003,May Kha Lar Plum with Ginger Toffee 125g (1x6pcsx32packs),Active,CMP Fruits Garden,May Kha Lar,192,25,2000
@@ -42,8 +42,8 @@ Item Code,Item Name,Is Active,Principal,Brand,UOM,Purchase Weight,Transportation
 4501111006,Excel Care Dish Washing Liquid Lemon 2Liter with Toilet Cleaner 575ml (1x5pcs),Active,Glamdust,Excel Care,5,12,2000
 6001111002,Mr. Shine Liq Detergent Fresh Blossom 35ml (1x24pcsx20packs),Active,Myat HtarNi,Mr. Shine,20,18,2000
 3202211002,May Yee Mon Chicken Congee 25g (1x10x20packs),Active,Ya Thar Taw Win,May Yee Mon,200,5.5,2000
-300000073,Brand's Berry Essence Concentrate 1.5oz (FOC) (1x1pcs),Active,Suntory Beverage,BBE,1,0.14,2000
-300000074,Brand's Prune Essence Concentrate 1.5oz (FOC) (1x1Pcs),Active,Suntory Beverage,BPE,1,0.14,2000
+0300000073,Brand's Berry Essence Concentrate 1.5oz (FOC) (1x1pcs),Active,Suntory Beverage,BBE,1,0.14,2000
+0300000074,Brand's Prune Essence Concentrate 1.5oz (FOC) (1x1Pcs),Active,Suntory Beverage,BPE,1,0.14,2000
 4000000003,Moshi Potato Chips Original 38g - MT Pack (1x12packs),Active,Honesty,Moshi,12,4.68,3000
 4000000004,Moshi Potato Chips Spicy 38g - MT Pack (1x12packs),Active,Honesty,Moshi,12,4.68,3000
 3202211001,May Yee Mon Chicken Congee 25g (1x10x15packs),Active,Ya Thar Taw Win,May Yee Mon,150,4,2000
@@ -182,10 +182,10 @@ Item Code,Item Name,Is Active,Principal,Brand,UOM,Purchase Weight,Transportation
 5001111003,May Kha Lar Preserved Mango Slices Spicy 40g (1x5x70pack),Active,CMP Fruits Garden,May Kha Lar,350,14,2000
 5001111004,May Kha Lar Preserved Plum Seedless Sweet 65g (1x5x40pack),Active,CMP Fruits Garden,May Kha Lar,200,13,2000
 5001111005,May Kha Lar Preserved Plum Seedless Spicy 65g (1x5x40pack),Active,CMP Fruits Garden,May Kha Lar,200,13,2000
-203112010,Glucerna Powder (Vanilla) 380g (1x24Pcs),Active,Abbott,Glucerna,24,12.4,2000
-203112011,Glucerna Powder (Vanilla) 800g (1x12Pcs),Active,Abbott,Glucerna,12,12.24,2000
-201112025,Ensure Gold Vanilla 380gm (1x24Pcs),Active,Abbott,Ensure,24,12.4,2000
-201112026,Ensure Gold Vanilla 800gm (1x12Pcs),Active,Abbott,Ensure,12,12.24,2000
+0203112010,Glucerna Powder (Vanilla) 380g (1x24Pcs),Active,Abbott,Glucerna,24,12.4,2000
+0203112011,Glucerna Powder (Vanilla) 800g (1x12Pcs),Active,Abbott,Glucerna,12,12.24,2000
+0201112025,Ensure Gold Vanilla 380gm (1x24Pcs),Active,Abbott,Ensure,24,12.4,2000
+0201112026,Ensure Gold Vanilla 800gm (1x12Pcs),Active,Abbott,Ensure,12,12.24,2000
 4901111001,Danuphyu Daw Saw Yee Balachaung Streamer - 25g 10's ( 1x 20 streamers),Active,Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,20,5,2000
 4901111002,Danuphyu Daw Saw Yee Pounded Fish Paste Streamer- 25g 10's ( 1x 20 streamers),Active,Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,20,5,2000
 4901112003,Danuphyu Daw Saw Yee Balachaung 500g Pack ( 1 x 10 packs),Active,Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,10,5,2000
@@ -236,26 +236,26 @@ Item Code,Item Name,Is Active,Principal,Brand,UOM,Purchase Weight,Transportation
 3102211006,O'MaMa Danish Strawberry 55g (1x1pcs),Active,O'Ma Ma,O'MaMa,1,0.06,2000
 3102211009,O'MaMa Milk Toast Slice Bread 315g (1x1pcs),Active,O'Ma Ma,O'MaMa,1,0.32,2000
 3102211010,O'MaMa Sandwich Bread 200g (1x1pcs),Active,O'Ma Ma,O'MaMa,1,0.2,2000
-203112008,Glucerna Powder (Vanilla) 400g (1x24Pcs),Active,Abbott,Glucerna,24,9.6,2000
-203112009,Glucerna Powder (Vanilla) 850g (1x12Pcs),Active,Abbott,Glucerna,12,10.2,2000
+0203112008,Glucerna Powder (Vanilla) 400g (1x24Pcs),Active,Abbott,Glucerna,24,9.6,2000
+0203112009,Glucerna Powder (Vanilla) 850g (1x12Pcs),Active,Abbott,Glucerna,12,10.2,2000
 3102111004,O'MaMa Mixed Fruit Cake Rusk 65g (1x72),Active,O'Ma Ma,O'MaMa,72,4.7,2000
-200000180,Ensure Gold (Vanilla) Gift Pack (400g x 2 pcs),Active,Abbott,Ensure,6,6.65,2000
-200000178,Pediasure 3+ Vanilla 850g with Mini Peptides Can Top Sticker (1x12pcs),Active,Abbott,Pediasure,12,12.8,2000
-300000071,BBN 1.5oz Bundle Pack (1x12x4),Active,Suntory Beverage,BBN,4,6.24,2000
-201112024,Ensure Non-HMB Vanilla 400gm (1x24Pcs),Active,Abbott,Ensure,24,12.49,2000
+0200000180,Ensure Gold (Vanilla) Gift Pack (400g x 2 pcs),Active,Abbott,Ensure,6,6.65,2000
+0200000178,Pediasure 3+ Vanilla 850g with Mini Peptides Can Top Sticker (1x12pcs),Active,Abbott,Pediasure,12,12.8,2000
+0300000071,BBN 1.5oz Bundle Pack (1x12x4),Active,Suntory Beverage,BBN,4,6.24,2000
+0201112024,Ensure Non-HMB Vanilla 400gm (1x24Pcs),Active,Abbott,Ensure,24,12.49,2000
 3102211001,O'MaMa Cheese Custard Solo pack 55g (1x1pcs),Active,O'Ma Ma,O'MaMa,1,0.06,2000
 3102211002,O'MaMa Cheese Mayo Solo pack 55g (1x1pcs),Active,O'Ma Ma,O'MaMa,1,0.06,2000
 3401121002,Maymyo Fresh Nature Blend Coffee 100g (1x100Pack),Active,MayMyo Fresh Coffee,Maymyo Fresh,100,11,2000
 3401121003,Maymyo Fresh Nature Blend Coffee 200g (1x60Pack),Active,MayMyo Fresh Coffee,Maymyo Fresh,60,14,2000
 3401211001,Maymyo Burmese Milk Tea 10's (1x30Pack),Active,MayMyo Fresh Coffee,Maymyo Fresh,30,12,2000
-208111017,Similac Follow On PRODI-G and 5HMOs 850g (1x12pcs),Active,Abbott,Similac,12,12.76,2000
-208121015,Similac Infant PRODI-G and 5 HMOs 400g(1x24 pcs),Active,Abbott,Similac,24,12.63,2000
-208121016,Similac Infant PRODI-G and 5 HMOs 850g(1x12pcs),Active,Abbott,Similac,12,12.76,2000
-206123004,Pediasure 3+ Vanilla 850g  with Mini Peptides (1x12pcs),Active,Abbott,Pediasure,12,12.8,2000
-206123006,Pediasure 3+ Vanilla 48.6g sachet   with Mini Peptides (1x100pcs),Active,Abbott,Pediasure,100,6.32,2000
-206123007,Pediasure 3+ Strawberry  48.6g sachet   with Mini Peptides (1x100pcs),Active,Abbott,Pediasure,100,6.32,2000
-206123001,Pediasure 1+ Vanilla 400g  with Mini Peptides (1x24pcs),Active,Abbott,Pediasure,24,10,2000
-206123003,Pediasure 3+ Vanilla 400g  with Mini Peptides (1x24pcs),Active,Abbott,Pediasure,24,10,2000
+0208111017,Similac Follow On PRODI-G and 5HMOs 850g (1x12pcs),Active,Abbott,Similac,12,12.76,2000
+0208121015,Similac Infant PRODI-G and 5 HMOs 400g(1x24 pcs),Active,Abbott,Similac,24,12.63,2000
+0208121016,Similac Infant PRODI-G and 5 HMOs 850g(1x12pcs),Active,Abbott,Similac,12,12.76,2000
+0206123004,Pediasure 3+ Vanilla 850g  with Mini Peptides (1x12pcs),Active,Abbott,Pediasure,12,12.8,2000
+0206123006,Pediasure 3+ Vanilla 48.6g sachet   with Mini Peptides (1x100pcs),Active,Abbott,Pediasure,100,6.32,2000
+0206123007,Pediasure 3+ Strawberry  48.6g sachet   with Mini Peptides (1x100pcs),Active,Abbott,Pediasure,100,6.32,2000
+0206123001,Pediasure 1+ Vanilla 400g  with Mini Peptides (1x24pcs),Active,Abbott,Pediasure,24,10,2000
+0206123003,Pediasure 3+ Vanilla 400g  with Mini Peptides (1x24pcs),Active,Abbott,Pediasure,24,10,2000
 4101111001,Sardines in Tomato Sauce 155g (1x100),Active,Yummee,Yummee,100,15.5,2000
 3202111001,May Yee Mon Rakhine Fish Paste 50g (1x5x20packs),Active,Ya Thar Taw Win,May Yee Mon,100,5,2000
 3202111002,May Yee Mon Marine Fish Paste 50g (1x5x20packs),Active,Ya Thar Taw Win,May Yee Mon,100,5,2000
@@ -267,8 +267,8 @@ Item Code,Item Name,Is Active,Principal,Brand,UOM,Purchase Weight,Transportation
 3801111003,Wasuka Crepes Orange Flavored 50g(1x60),Active,Win Food,Wasuka,60,3.5,2000
 3701111001,Kyu Kyu Hmwe Fish Sauce 850ml (1x12),Active,Kyu Kyu Hmwe,Kyu Kyu Hmwe,12,12,2000
 1222401006,Sim Card WCDMA (Blank SIM-Promotion Card),Active,MPT,Sim,1,0,2000
-211111001,Nepro Low Protein 400g (1 x 24pcs),Active,Abbott,Nepro,24,13.5,2000
-211111002,Nepro High Protein 400g (1 x 24pcs),Active,Abbott,Nepro,24,13.5,2000
+0211111001,Nepro Low Protein 400g (1 x 24pcs),Active,Abbott,Nepro,24,13.5,2000
+0211111002,Nepro High Protein 400g (1 x 24pcs),Active,Abbott,Nepro,24,13.5,2000
 3501111001,Mobicorn Premium Popcorn Crunchy Caramel 75g (1x100),Active,Trine,Mobicorn,100,9.2,2000
 3501111002,Mobicorn Premium Popcorn Choco Crunch 75g (1x100),Active,Trine,Mobicorn,100,9.2,2000
 3501111003,Mobicorn Premium Popcorn cheesy Kraze 75g (1x100),Active,Trine,Mobicorn,100,9.2,2000
@@ -289,105 +289,105 @@ Item Code,Item Name,Is Active,Principal,Brand,UOM,Purchase Weight,Transportation
 3305111004,Quaker Quick Cook Oatmeal  800g (1x12),Active,Pepsico,QUAKER OAT,12,10.24,2000
 3305112001,Quaker Instant Oatmeal 1kg (1x12),Active,Pepsico,QUAKER OAT,12,12.35,2000
 3001111002,Clorox Liquid Bleach Original 1L (1x12Pcs),Active,Clorox,Clorox,12,14.5,2000
-200000139,Similac Total Comfort Stage 3 (ML) 820gm with Can top Sticker (1x12pcs),Active,Abbott,Similac,12,12.36,2000
-301181001,Brand's Berry Essence Concentrate (1X72),Active,Suntory Beverage,BBE,72,10.4,2000
-301181002,Brand's Prune Essence Concentrate (1X72),Active,Suntory Beverage,BPE,72,10.4,2000
+0200000139,Similac Total Comfort Stage 3 (ML) 820gm with Can top Sticker (1x12pcs),Active,Abbott,Similac,12,12.36,2000
+0301181001,Brand's Berry Essence Concentrate (1X72),Active,Suntory Beverage,BBE,72,10.4,2000
+0301181002,Brand's Prune Essence Concentrate (1X72),Active,Suntory Beverage,BPE,72,10.4,2000
 2301111007,Gullon Sugar Free Cookie Choco Chip 125g (1x12),Active,Gullon,Gullon,12,1.8,2000
 2301112001,Gullon Sugar Free Wafer Vanilla 3'S 180g (1x12),Active,Gullon,Gullon,12,2.45,2000
-301122011,BEC Junior Chocolate 1.5oz (1x72Pcs),Active,Suntory Beverage,BEC,72,9.13,2000
-100000213,Oral B Shiny Clean 35 Soft BCd On Pack (1x6Pcs),Active,P&G,Oral-B,16,2.05,2000
-701104019,NONG SHIM Shin Kimchi Ramyun Noodle 120g (1x40),Active,Nong Shim,NONG SHIM,40,5.65,2000
+0301122011,BEC Junior Chocolate 1.5oz (1x72Pcs),Active,Suntory Beverage,BEC,72,9.13,2000
+0100000213,Oral B Shiny Clean 35 Soft BCd On Pack (1x6Pcs),Active,P&G,Oral-B,16,2.05,2000
+0701104019,NONG SHIM Shin Kimchi Ramyun Noodle 120g (1x40),Active,Nong Shim,NONG SHIM,40,5.65,2000
 2301111001,Gullon Sugar Free Fibre Biscuits 170g (1x16),Active,Gullon,Gullon,16,2.91,2000
 2301111002,Gullon Sugar Free Digestive Biscuits (Cookies) 400g (1x15),Active,Gullon,Gullon,15,6.74,2000
 2301111003,Gullon Digestive Classics Biscuits 400g (1x20),Active,Gullon,Gullon,20,8.35,2000
 2301111004,Gullon Cuor Di Cereale Chocolate Biscuits 280g (1x16),Active,Gullon,Gullon,16,4.72,2000
-300000057,Brand’s Prune 1.5oz Price Off Promotion (1x6pcs),Active,Suntory Beverage,BPE,12,10.4,2000
-300000058,Brand’s Berry 1.5oz Price Off Promotion (1x6pcs),Active,Suntory Beverage,BBE,12,10.4,2000
-301112009,BNSF Collagen 1.5oz (1x48),Active,Suntory Beverage,BBN,48,6.9,2000
+0300000057,Brand’s Prune 1.5oz Price Off Promotion (1x6pcs),Active,Suntory Beverage,BPE,12,10.4,2000
+0300000058,Brand’s Berry 1.5oz Price Off Promotion (1x6pcs),Active,Suntory Beverage,BBE,12,10.4,2000
+0301112009,BNSF Collagen 1.5oz (1x48),Active,Suntory Beverage,BBN,48,6.9,2000
 2201111001,Dr Care Disinfectant Liquid 750ml (1x12),Active,Dr.Care,Dr Care,12,10.53,2000
-106122013,Head & Shoulders-12ml (Menthol)(1x42Dz),Active,P&G,Head&Shoulder,42,7.22,2000
-701104018,NONG SHIM Shin Red Super Spicy Noodle 120g (1x20),Active,Nong Shim,NONG SHIM,20,2.88,2000
-106122011,Head & Shoulders-12ml (Silky Smooth) (1x36Dz),Active,P&G,Head&Shoulder,36,6.25,2000
-201112017,Ensure Gold Strawberry 400gm (1x24Pcs),Active,Abbott,Ensure,24,12.58,2000
-201112018,Ensure Gold Strawberry 850gm (1x12Pcs),Active,Abbott,Ensure,12,12.95,2000
+0106122013,Head & Shoulders-12ml (Menthol)(1x42Dz),Active,P&G,Head&Shoulder,42,7.22,2000
+0701104018,NONG SHIM Shin Red Super Spicy Noodle 120g (1x20),Active,Nong Shim,NONG SHIM,20,2.88,2000
+0106122011,Head & Shoulders-12ml (Silky Smooth) (1x36Dz),Active,P&G,Head&Shoulder,36,6.25,2000
+0201112017,Ensure Gold Strawberry 400gm (1x24Pcs),Active,Abbott,Ensure,24,12.58,2000
+0201112018,Ensure Gold Strawberry 850gm (1x12Pcs),Active,Abbott,Ensure,12,12.95,2000
 1900000001,Equal Classic 50`S 50g with 10`S FOC (Promo Pack) (1x12),Active,Merisant,Equal,12,6.85,2000
 1900000002,Equal Classic 100`S 100g with 20`S FOC (Promo Pack) (1x36),Active,Merisant,Equal,36,1.33,2000
 1222401005,Sim Card WCDMA (Beautiful Number SIM Card),Active,MPT,Sim,1,0,2000
-200000113,Ensure Gold Wheat 400gm with Can Top Sticker (1x24Pcs),Active,Abbott,Ensure,24,12.95,2000
-200000114,Ensure Gold Wheat 850gm with Can Top Sticker (1x12Pcs),Active,Abbott,Ensure,12,12.95,2000
-101121009,Ambi Pur Aerosol Blue Ocean 300ml (1x6Pcs),Active,P&G,Ambi Pur,6,1.67,2000
-101121012,Ambi Pur Aerosol Lavender Breeze 300ml (1x6Pcs),Active,P&G,Ambi Pur,6,1.67,2000
-101122004,Ambi Pur GEL Fresh Relaxing Lavender 180g (1x12Pcs),Active,P&G,Ambi Pur,12,2.96,2000
-101122005,Ambi Pur GEL Fresh Refreshing Lemon 180g (1x12Pcs),Active,P&G,Ambi Pur,12,2.96,2000
-110122005,Pantene 10ml-(Hair Fall Control)(1x40Dz),Active,P&G,Pantene,40,5.92,2000
-113111003,Whisper Heavy Flow -16's(1x12Pcs),Active,P&G,Whispers,12,2.2,2000
-113112007,Whisper Regular Flow Wing -20's(1x12Pcs),Active,P&G,Whispers,12,2.36,2000
-200000037,Similac Gain IQ PRODI-G and 5HMOs 400gm with Can Top Sticker (1x24Pcs),Active,Abbott,Similac,24,12.98,2000
-200000040,Glucerna Powder with 4xInositol (Vanilla) 850g with Can Top Sticker (1x12Pcs),Active,Abbott,Glucerna,12,12.95,2000
-200000087,Similac Gain IQ PRODI-G and 5HMOs 850gm with Can Top Sticker (1x12Pcs),Active,Abbott,Similac,12,14.2,2000
-200000090,Similac Mum Eye-Q(IQ) Vanilla 400g with Can Top Sticker (1x24Pcs),Active,Abbott,Similac,24,10,2000
-201112013,Ensure Gold Vanilla 400gm (1x24Pcs),Active,Abbott,Ensure,24,12.58,2000
-201112015,Ensure Gold (Wheat) 400gm (1x24Pcs),Active,Abbott,Ensure,24,12.58,2000
-201112016,Ensure Gold (Wheat) 850gm (1x12Pcs),Active,Abbott,Ensure,12,12.95,2000
-201113005,Ensure Gold Vanilla Sachet 60.6gm (1x100Pcs),Active,Abbott,Ensure,100,6.33,2000
-203112005,Glucerna Powder Triple Care (Vanilla) 400gm (Thai Label) (1x24Pcs),Active,Abbott,Glucerna,24,12.5,2000
-208131004,Similac Mum Eye-Q(IQ) Strawberry Yoghurt 400g (1x24Pcs),Active,Abbott,Similac,24,10,2000
-208141003,Similac Neosure HMO 850gm (1x12Pcs),Active,Abbott,Similac,12,13,2000
-208211001,Similac Baby Changing Mat - Black Fabric(1x50Pcs),Active,Abbott,FOC,50,0,2000
-208211002,Similac Baby Changing Mat - Green Fabric(1x50Pcs),Active,Abbott,FOC,50,12.71,2000
-207112001,Prosure Orange  380gm (1x24),Active,Abbott,Prosure,24,12.16,2000
-105111001,Gillette MACH 3 Cart 4's Blade(1x72pcs),Active,P&G,Gillette,72,2.45,2000
-105111011,Gillette MACH 3 Cart 2's Blade(1x72pcs),Active,P&G,Gillette,72,2.17,2000
-105111012,Gillette Fusion Cart 2s(1x40Pcs),Active,P&G,Gillette,40,19.34,2000
-105112001,Gillette Blue II Plus dis  2 sent(1 x240Pcs),Active,P&G,Gillette,240,5.89,2000
-105112002,Gillette Blue II Plus dis  5 sent(1 x144Pcs),Active,P&G,Gillette,144,8.73,2000
-105112004,Gillette Super Thin 2 dis 24 Fxd Blade(1x288pcs),Active,P&G,Gillette,288,2.95,2000
-105113001,Gillette Super Click Razor(1x144pcs),Active,P&G,Gillette,144,2.84,2000
-105113002,Gillette Super Thin Blade 5+1(1x1000Pcs),Active,P&G,Gillette,"1,000",7.48,2000
-105114002,Gillette MACH 3  Turbo 1 Up(1x30pcs),Active,P&G,Gillette,30,2.02,2000
-105114004,Gillette Vector Plus 1 Up (1x144Pcs),Active,P&G,Gillette,144,5.73,2000
-105114007,Gillette Fusion Manual Razor(1x16Pcs),Active,P&G,Gillette,16,2.08,2000
-107112019,Olay Total Effects UV Normal Cream SPF-15  50g (1X6),Active,P&G,Olay,6,0.8,2000
-107112031,Olay Natural White Light Night Shine 50g (1X24),Active,P&G,Olay,24,2.8,2000
-107112034,Olay Natural White Light 50g (1X24),Active,P&G,Olay,24,3.18,2000
-106121056,Head & Shoulder-300ml (Silky Smooth)(1x12Pcs),Active,P&G,Head&Shoulder,12,4.9,2000
-106121058,Head & Shoulder-300ml (Menthol)(1x12Pcs),Active,P&G,Head&Shoulder,12,4.9,2000
-107114003,Olay Regenerist Serum  50ml (1X6),Active,P&G,Olay,6,0.65,2000
-107114006,Olay Regenerist Micro-Sculpting Serum 50ml(1x6Pcs),Active,P&G,Olay,6,0.65,2000
-107114009,Olay Total Effects Serum 50ml (1x6),Active,P&G,Olay,6,6.5,2000
-108120043,Oral B Multi Brush set(1x24Pcs),Active,P&G,Oral-B,24,1.01,2000
-108211001,Oral B All Rounder MICROTHIN CLN 40XS AS(1x96Pcs),Active,P&G,Oral-B,96,2.53,2000
-108211003,Oral B Classic 40 Soft TB(1x96Pcs),Active,P&G,Oral-B,96,2.26,2000
-108211007,Oral B Complete Easy Clean 40 Medium BCd(1x96Pcs),Active,P&G,Oral-B,96,2.53,2000
-108211012,Oral B Cross ProHlth Clinic Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,3.19,2000
-108211013,Oral B Cross ProHlth Clinic Soft 3 BCd(1x96Pcs),Active,P&G,Oral-B,96,8.61,2000
-108211014,Oral B Cross Action ProHlth 7 Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,2.67,2000
-108211015,Oral B Cross Action ProHlth 7 Soft 3 BCd(1x96Pcs),Active,P&G,Oral-B,96,7.06,2000
-108211016,Oral B Interdental Kit BCd(1x24Pcs),Active,P&G,Oral-B,24,0.67,2000
-108211017,Oral B Stage 8 Yrs+ Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,3.23,2000
-108211019,Oral B Stage 2-4 Yrs Mickey/Minnie Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,2.2,2000
-108211020,Oral B Stage 4-24 Mth Disney Baby Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,2.2,2000
-108211021,Oral B Shiny Clean 35 Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,2.05,2000
-108211022,Oral B Ultra Thin Black Tea Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,3.17,2000
-108211023,Oral B Ultra Thin Black Tea Soft 3 BCd(1x96Pcs),Active,P&G,Oral-B,96,7.85,2000
-108211024,Oral B Ultra Thin Pro Deep Clean Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,3.17,2000
-108211025,Oral B Ultra Thin Pro Deep Clean Soft 3 BCd(1x96Pcs),Active,P&G,Oral-B,96,7.85,2000
-108211026,Oral B Ultra Thin Green Tea Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,3.17,2000
-108211027,Oral B Ultra Thin Green Tea Soft 3 BCd(1x96Pcs),Active,P&G,Oral-B,96,7.86,2000
-108311001,Oral B Power Refill Precision Clean 2s(1x24Pcs),Active,P&G,Oral-B,24,0.97,2000
-108311002,Oral B Power Pro 500 Power Handle(1x6Pcs),Active,P&G,Oral-B,6,2.14,2000
-108311004,Oral B Power Refill Cross Action 2s(1x24Pcs),Active,P&G,Oral-B,24,1,2000
-301122003,BEC1.5oz(1x72),Active,Suntory Beverage,BEC,72,9.64,2000
-301122005,BEC2.5oz(1x72),Active,Suntory Beverage,BEC,72,12.86,2000
-301112003,BBN1.5oz(1x48),Active,Suntory Beverage,BBN,48,6.24,2000
-301112004,BNSF 1.5 oz (1x48Pcs),Active,Suntory Beverage,BBN,48,6.24,2000
-301112005,BBN2.5oz(1x48),Active,Suntory Beverage,BBN,48,8.51,2000
-301112006,BNSF 2.5 oz (1x48Pcs),Active,Suntory Beverage,BBN,48,8.51,2000
-502111003,Nescafe Gold Blend 200g (8x200g),Active,Nestrade,Nescafe Gold,8,5.37,2000
-701104007,NONG SHIM Shin Ramyun Hot  Spicy Noodle 120g (1x40),Active,Nong Shim,NONG SHIM,40,5.83,2000
-701104010,NONG SHIM Neoguri Seafood Spicy Noodle 120g (1x20),Active,Nong Shim,NONG SHIM,20,2.87,2000
-701104013,NONG SHIM Chapaghetti Noodle 140g (1x40),Active,Nong Shim,NONG SHIM,40,6.25,2000
-701104014,NONG SHIM Chapaghetti Spicy Noodle 137g (1x40),Active,Nong Shim,NONG SHIM,40,6.15,2000
+0200000113,Ensure Gold Wheat 400gm with Can Top Sticker (1x24Pcs),Active,Abbott,Ensure,24,12.95,2000
+0200000114,Ensure Gold Wheat 850gm with Can Top Sticker (1x12Pcs),Active,Abbott,Ensure,12,12.95,2000
+0101121009,Ambi Pur Aerosol Blue Ocean 300ml (1x6Pcs),Active,P&G,Ambi Pur,6,1.67,2000
+0101121012,Ambi Pur Aerosol Lavender Breeze 300ml (1x6Pcs),Active,P&G,Ambi Pur,6,1.67,2000
+0101122004,Ambi Pur GEL Fresh Relaxing Lavender 180g (1x12Pcs),Active,P&G,Ambi Pur,12,2.96,2000
+0101122005,Ambi Pur GEL Fresh Refreshing Lemon 180g (1x12Pcs),Active,P&G,Ambi Pur,12,2.96,2000
+0110122005,Pantene 10ml-(Hair Fall Control)(1x40Dz),Active,P&G,Pantene,40,5.92,2000
+0113111003,Whisper Heavy Flow -16's(1x12Pcs),Active,P&G,Whispers,12,2.2,2000
+0113112007,Whisper Regular Flow Wing -20's(1x12Pcs),Active,P&G,Whispers,12,2.36,2000
+0200000037,Similac Gain IQ PRODI-G and 5HMOs 400gm with Can Top Sticker (1x24Pcs),Active,Abbott,Similac,24,12.98,2000
+0200000040,Glucerna Powder with 4xInositol (Vanilla) 850g with Can Top Sticker (1x12Pcs),Active,Abbott,Glucerna,12,12.95,2000
+0200000087,Similac Gain IQ PRODI-G and 5HMOs 850gm with Can Top Sticker (1x12Pcs),Active,Abbott,Similac,12,14.2,2000
+0200000090,Similac Mum Eye-Q(IQ) Vanilla 400g with Can Top Sticker (1x24Pcs),Active,Abbott,Similac,24,10,2000
+0201112013,Ensure Gold Vanilla 400gm (1x24Pcs),Active,Abbott,Ensure,24,12.58,2000
+0201112015,Ensure Gold (Wheat) 400gm (1x24Pcs),Active,Abbott,Ensure,24,12.58,2000
+0201112016,Ensure Gold (Wheat) 850gm (1x12Pcs),Active,Abbott,Ensure,12,12.95,2000
+0201113005,Ensure Gold Vanilla Sachet 60.6gm (1x100Pcs),Active,Abbott,Ensure,100,6.33,2000
+0203112005,Glucerna Powder Triple Care (Vanilla) 400gm (Thai Label) (1x24Pcs),Active,Abbott,Glucerna,24,12.5,2000
+0208131004,Similac Mum Eye-Q(IQ) Strawberry Yoghurt 400g (1x24Pcs),Active,Abbott,Similac,24,10,2000
+0208141003,Similac Neosure HMO 850gm (1x12Pcs),Active,Abbott,Similac,12,13,2000
+0208211001,Similac Baby Changing Mat - Black Fabric(1x50Pcs),Active,Abbott,FOC,50,0,2000
+0208211002,Similac Baby Changing Mat - Green Fabric(1x50Pcs),Active,Abbott,FOC,50,12.71,2000
+0207112001,Prosure Orange  380gm (1x24),Active,Abbott,Prosure,24,12.16,2000
+0105111001,Gillette MACH 3 Cart 4's Blade(1x72pcs),Active,P&G,Gillette,72,2.45,2000
+0105111011,Gillette MACH 3 Cart 2's Blade(1x72pcs),Active,P&G,Gillette,72,2.17,2000
+0105111012,Gillette Fusion Cart 2s(1x40Pcs),Active,P&G,Gillette,40,19.34,2000
+0105112001,Gillette Blue II Plus dis  2 sent(1 x240Pcs),Active,P&G,Gillette,240,5.89,2000
+0105112002,Gillette Blue II Plus dis  5 sent(1 x144Pcs),Active,P&G,Gillette,144,8.73,2000
+0105112004,Gillette Super Thin 2 dis 24 Fxd Blade(1x288pcs),Active,P&G,Gillette,288,2.95,2000
+0105113001,Gillette Super Click Razor(1x144pcs),Active,P&G,Gillette,144,2.84,2000
+0105113002,Gillette Super Thin Blade 5+1(1x1000Pcs),Active,P&G,Gillette,"1,000",7.48,2000
+0105114002,Gillette MACH 3  Turbo 1 Up(1x30pcs),Active,P&G,Gillette,30,2.02,2000
+0105114004,Gillette Vector Plus 1 Up (1x144Pcs),Active,P&G,Gillette,144,5.73,2000
+0105114007,Gillette Fusion Manual Razor(1x16Pcs),Active,P&G,Gillette,16,2.08,2000
+0107112019,Olay Total Effects UV Normal Cream SPF-15  50g (1X6),Active,P&G,Olay,6,0.8,2000
+0107112031,Olay Natural White Light Night Shine 50g (1X24),Active,P&G,Olay,24,2.8,2000
+0107112034,Olay Natural White Light 50g (1X24),Active,P&G,Olay,24,3.18,2000
+0106121056,Head & Shoulder-300ml (Silky Smooth)(1x12Pcs),Active,P&G,Head&Shoulder,12,4.9,2000
+0106121058,Head & Shoulder-300ml (Menthol)(1x12Pcs),Active,P&G,Head&Shoulder,12,4.9,2000
+0107114003,Olay Regenerist Serum  50ml (1X6),Active,P&G,Olay,6,0.65,2000
+0107114006,Olay Regenerist Micro-Sculpting Serum 50ml(1x6Pcs),Active,P&G,Olay,6,0.65,2000
+0107114009,Olay Total Effects Serum 50ml (1x6),Active,P&G,Olay,6,6.5,2000
+0108120043,Oral B Multi Brush set(1x24Pcs),Active,P&G,Oral-B,24,1.01,2000
+0108211001,Oral B All Rounder MICROTHIN CLN 40XS AS(1x96Pcs),Active,P&G,Oral-B,96,2.53,2000
+0108211003,Oral B Classic 40 Soft TB(1x96Pcs),Active,P&G,Oral-B,96,2.26,2000
+0108211007,Oral B Complete Easy Clean 40 Medium BCd(1x96Pcs),Active,P&G,Oral-B,96,2.53,2000
+0108211012,Oral B Cross ProHlth Clinic Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,3.19,2000
+0108211013,Oral B Cross ProHlth Clinic Soft 3 BCd(1x96Pcs),Active,P&G,Oral-B,96,8.61,2000
+0108211014,Oral B Cross Action ProHlth 7 Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,2.67,2000
+0108211015,Oral B Cross Action ProHlth 7 Soft 3 BCd(1x96Pcs),Active,P&G,Oral-B,96,7.06,2000
+0108211016,Oral B Interdental Kit BCd(1x24Pcs),Active,P&G,Oral-B,24,0.67,2000
+0108211017,Oral B Stage 8 Yrs+ Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,3.23,2000
+0108211019,Oral B Stage 2-4 Yrs Mickey/Minnie Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,2.2,2000
+0108211020,Oral B Stage 4-24 Mth Disney Baby Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,2.2,2000
+0108211021,Oral B Shiny Clean 35 Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,2.05,2000
+0108211022,Oral B Ultra Thin Black Tea Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,3.17,2000
+0108211023,Oral B Ultra Thin Black Tea Soft 3 BCd(1x96Pcs),Active,P&G,Oral-B,96,7.85,2000
+0108211024,Oral B Ultra Thin Pro Deep Clean Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,3.17,2000
+0108211025,Oral B Ultra Thin Pro Deep Clean Soft 3 BCd(1x96Pcs),Active,P&G,Oral-B,96,7.85,2000
+0108211026,Oral B Ultra Thin Green Tea Soft BCd(1x96Pcs),Active,P&G,Oral-B,96,3.17,2000
+0108211027,Oral B Ultra Thin Green Tea Soft 3 BCd(1x96Pcs),Active,P&G,Oral-B,96,7.86,2000
+0108311001,Oral B Power Refill Precision Clean 2s(1x24Pcs),Active,P&G,Oral-B,24,0.97,2000
+0108311002,Oral B Power Pro 500 Power Handle(1x6Pcs),Active,P&G,Oral-B,6,2.14,2000
+0108311004,Oral B Power Refill Cross Action 2s(1x24Pcs),Active,P&G,Oral-B,24,1,2000
+0301122003,BEC1.5oz(1x72),Active,Suntory Beverage,BEC,72,9.64,2000
+0301122005,BEC2.5oz(1x72),Active,Suntory Beverage,BEC,72,12.86,2000
+0301112003,BBN1.5oz(1x48),Active,Suntory Beverage,BBN,48,6.24,2000
+0301112004,BNSF 1.5 oz (1x48Pcs),Active,Suntory Beverage,BBN,48,6.24,2000
+0301112005,BBN2.5oz(1x48),Active,Suntory Beverage,BBN,48,8.51,2000
+0301112006,BNSF 2.5 oz (1x48Pcs),Active,Suntory Beverage,BBN,48,8.51,2000
+0502111003,Nescafe Gold Blend 200g (8x200g),Active,Nestrade,Nescafe Gold,8,5.37,2000
+0701104007,NONG SHIM Shin Ramyun Hot  Spicy Noodle 120g (1x40),Active,Nong Shim,NONG SHIM,40,5.83,2000
+0701104010,NONG SHIM Neoguri Seafood Spicy Noodle 120g (1x20),Active,Nong Shim,NONG SHIM,20,2.87,2000
+0701104013,NONG SHIM Chapaghetti Noodle 140g (1x40),Active,Nong Shim,NONG SHIM,40,6.25,2000
+0701104014,NONG SHIM Chapaghetti Spicy Noodle 137g (1x40),Active,Nong Shim,NONG SHIM,40,6.15,2000
 1221102001,Active GSM E-Top Up,Active,MPT,Top-up,1,0,2000
 1222401001,Active WCDMA SimCard,Active,MPT,Sim,1,0,2000
 1222401002,Sim Card WCDMA (Blank SIM),Active,MPT,Sim,1,0,2000
@@ -408,13 +408,13 @@ Item Code,Item Name,Is Active,Principal,Brand,UOM,Purchase Weight,Transportation
 1103213014,Oreo Sandwich Cookies Vanilla Cream-27.6gm (1x9x12Packs),Active,MDLZ,Oreo,12,3.94,2000
 1103213017,Oreo Sandwich Cookies Chocolate Cream-26.25gm (12x12Packs),Active,MDLZ,Oreo,12,4.8,2000
 1103213018,Oreo Sandwich Cookies Vanilla Cream-26.25gm (12x12Packs),Active,MDLZ,Oreo,12,4.8,2000
-801111011,Philips Tornado Cool daylight 24W E27 220-240V(1x12Pcs),Active,Philips,Philips,12,1.5,2000
-801111012,Philips Tornado Warm White 24W E27 220-240V Energy Saver(1x12Pcs),Active,Philips,Philips,12,1.5,2000
-801111026,Philips Tornado Cool daylight 24W B22 220-240V(1x12Pcs),Active,Philips,Philips,12,1.48,2000
-801112002,Philips Brightboost Super 80 Tubelight TL-D 36W/865(1x25Pcs),Active,Philips,Philips,25,4.65,2000
-801112004,Philips Lifemax Tubelight TL-D 36W/54-765(1x25Pcs),Active,Philips,Philips,25,4.65,2000
-801112007,Philips Brightboost Super 80 Tubelight TL-D 36W/840(1x25Pcs),Active,Philips,Philips,25,4.6,2000
-801114001,Philips Essential Cool Daylight TCH086 TL5-28W/865(1x24pcs),Active,Philips,Philips,24,8.47,2000
+0801111011,Philips Tornado Cool daylight 24W E27 220-240V(1x12Pcs),Active,Philips,Philips,12,1.5,2000
+0801111012,Philips Tornado Warm White 24W E27 220-240V Energy Saver(1x12Pcs),Active,Philips,Philips,12,1.5,2000
+0801111026,Philips Tornado Cool daylight 24W B22 220-240V(1x12Pcs),Active,Philips,Philips,12,1.48,2000
+0801112002,Philips Brightboost Super 80 Tubelight TL-D 36W/865(1x25Pcs),Active,Philips,Philips,25,4.65,2000
+0801112004,Philips Lifemax Tubelight TL-D 36W/54-765(1x25Pcs),Active,Philips,Philips,25,4.65,2000
+0801112007,Philips Brightboost Super 80 Tubelight TL-D 36W/840(1x25Pcs),Active,Philips,Philips,25,4.6,2000
+0801114001,Philips Essential Cool Daylight TCH086 TL5-28W/865(1x24pcs),Active,Philips,Philips,24,8.47,2000
 1901111001,Equal Classic 15`S 15g (1x36),Active,Merisant,Equal,36,0.98,2000
 1901111002,Equal Classic 25`S 25g (1x36),Active,Merisant,Equal,36,2.91,2000
 1901111003,Equal Classic 50`S 50g (1x12),Active,Merisant,Equal,12,1.01,2000
