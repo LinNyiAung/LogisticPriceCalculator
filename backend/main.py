@@ -1,7 +1,8 @@
+#
 import logging
 import pyodbc
 import sqlite3
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -53,11 +54,14 @@ def startup_db():
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
+        # Updated Gate Table Schema: Removed Branch, Added [From] and [To]
+        # Note: 'From' is a SQL keyword, so brackets [] are crucial
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Gate (
                 [Gate ID] INTEGER PRIMARY KEY,
                 [Gate Name] TEXT,
-                [Branch] TEXT,
+                [From] TEXT,
+                [To] TEXT,
                 [Gate Price] REAL
             )
         """)
@@ -89,7 +93,8 @@ def startup_db():
 class GateData(BaseModel):
     gate_id: Optional[int] = None
     gate_name: str
-    branch: str
+    from_loc: str  
+    to_loc: str    
     price: Optional[float] = None
     original_gate_name: Optional[str] = None
 
@@ -154,15 +159,17 @@ def export_item_pricing_excel(gate_id: int):
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # Get gate info
-        cursor.execute("SELECT [Gate Name], [Branch] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
+        # Get gate info with From/To
+        cursor.execute("SELECT [Gate Name], [From], [To] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
         gate_row = cursor.fetchone()
         
         if not gate_row:
             conn.close()
             raise HTTPException(status_code=404, detail="Gate not found")
         
-        gate_name, branch = gate_row[0], gate_row[1]
+        gate_name = gate_row[0]
+        from_loc = gate_row[1] or ""
+        to_loc = gate_row[2] or ""
         
         # Get item pricing data
         query = """
@@ -182,7 +189,7 @@ def export_item_pricing_excel(gate_id: int):
         ws.title = "Item Pricing"
         
         # Add header with gate info
-        ws['A1'] = f"Gate: {gate_name} ({branch})"
+        ws['A1'] = f"Gate: {gate_name} ({from_loc} -> {to_loc})"
         ws['A1'].font = Font(bold=True, size=14)
         
         # Add column headers
@@ -326,7 +333,7 @@ def get_all_gates():
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT [Gate ID], [Gate Name], [Branch], [Gate Price] FROM Gate")
+        cursor.execute("SELECT [Gate ID], [Gate Name], [From], [To], [Gate Price] FROM Gate")
         rows = cursor.fetchall()
         
         gates = []
@@ -337,8 +344,9 @@ def get_all_gates():
             gates.append({
                 "gate_id": gate_id,
                 "gate_name": row[1],
-                "branch": row[2],
-                "price": float(row[3]) if row[3] is not None else None,
+                "from_loc": row[2], 
+                "to_loc": row[3],   
+                "price": float(row[4]) if row[4] is not None else None,
                 "calculation_type": calc_type
             })
         
@@ -358,14 +366,15 @@ def save_gate(gate_data: GateData):
         if gate_data.original_gate_name:
             cursor.execute("""
                 UPDATE Gate 
-                SET [Gate Name] = ?, [Branch] = ?, [Gate Price] = ?
+                SET [Gate Name] = ?, [From] = ?, [To] = ?, [Gate Price] = ?
                 WHERE [Gate Name] = ?
-            """, (gate_data.gate_name, gate_data.branch, gate_data.price, gate_data.original_gate_name))
+            """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, 
+                  gate_data.price, gate_data.original_gate_name))
         else:
             cursor.execute("""
-                INSERT INTO Gate ([Gate Name], [Branch], [Gate Price])
-                VALUES (?, ?, ?)
-            """, (gate_data.gate_name, gate_data.branch, gate_data.price))
+                INSERT INTO Gate ([Gate Name], [From], [To], [Gate Price])
+                VALUES (?, ?, ?, ?)
+            """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.price))
         
         conn.commit()
         conn.close()
@@ -500,34 +509,52 @@ def delete_item_pricing(gate_id: int, item_code: str):
 
 # --- Calculation & Main Endpoints ---
 
+@app.get("/locations/from")
+def get_from_locations():
+    """Get unique 'From' locations"""
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        # [From] is a keyword, must be bracketed
+        cursor.execute("SELECT DISTINCT [From] FROM Gate WHERE [From] IS NOT NULL ORDER BY [From]")
+        rows = cursor.fetchall()
+        locations = [row[0] for row in rows if row[0]]
+        conn.close()
+        return {"locations": locations}
+    except Exception as e:
+        logger.error(f"Error loading from locations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error loading from locations: {str(e)}")
 
-@app.get("/branches-list")
-def get_branches_list():
-    """Get unique list of branches from Gate table"""
+@app.get("/locations/to")
+def get_to_locations(from_loc: Optional[str] = None):
+    """Get unique 'To' locations, optionally filtered by 'From'"""
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT DISTINCT [Branch] FROM Gate WHERE [Branch] IS NOT NULL ORDER BY [Branch]")
+        if from_loc:
+            cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [From] = ? AND [To] IS NOT NULL ORDER BY [To]", (from_loc,))
+        else:
+            cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [To] IS NOT NULL ORDER BY [To]")
+            
         rows = cursor.fetchall()
-        
-        branches = [row[0] for row in rows]
-        
+        locations = [row[0] for row in rows if row[0]]
         conn.close()
-        return {"branches": branches}
+        return {"locations": locations}
     except Exception as e:
-        logger.error(f"Error loading branches: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error loading branches: {str(e)}")
+        logger.error(f"Error loading to locations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error loading to locations: {str(e)}")
 
 @app.get("/branches")
 def get_branches():
-    """Get list of gates (Alias for admin/gates)"""
+    """Get list of gates (Alias for admin/gates - Keeping for backward compatibility if needed)"""
     return get_all_gates()
 
 @app.post("/calculate-with-gate")
 def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Optional[float] = None):
     """Calculate prices: Joins SQL Server (Pick Data) and SQLite (Gate Data)"""
     try:
+        # 1. Get Pick Data from DWBI
         try:
             conn_dwbi = get_dwbi_connection()
             cursor_dwbi = conn_dwbi.cursor()
@@ -543,10 +570,11 @@ def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Option
         if not pick_rows:
             raise HTTPException(status_code=404, detail="No products found for this Pick ID")
         
+        # 2. Get Gate Data from SQLite
         try:
             conn_log = get_logistic_connection()
             cursor_log = conn_log.cursor()
-            cursor_log.execute("SELECT [Gate ID], [Branch], [Gate Price] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
+            cursor_log.execute("SELECT [Gate ID], [From], [To], [Gate Price] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
             gate_row = cursor_log.fetchone()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching gate config: {str(e)}")
@@ -555,8 +583,12 @@ def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Option
             if 'conn_log' in locals(): conn_log.close()
             raise HTTPException(status_code=404, detail=f"Gate {gate_name} not found")
             
-        gate_id, branch, gate_price = gate_row[0], gate_row[1], float(gate_row[2] or 0)
+        gate_id = gate_row[0]
+        from_loc = gate_row[1]
+        to_loc = gate_row[2]
+        gate_price = float(gate_row[3] or 0)
         
+        # 3. Get Item Pricing
         cursor_log.execute("""
             SELECT [Item ID], [Transportation Cost] 
             FROM Item_Pricing 
@@ -682,7 +714,8 @@ def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Option
         return {
             "calculation_type": calc_type,
             "gate_name": gate_name,
-            "branch": branch,
+            "from_loc": from_loc,
+            "to_loc": to_loc,
             "gate_price": gate_price,
             "calculated_products": calculated_products,
             "total_price": total_price,

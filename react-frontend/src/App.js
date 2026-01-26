@@ -1,3 +1,4 @@
+//
 import React, { useState, useEffect } from 'react';
 import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload } from 'lucide-react';
 
@@ -7,8 +8,16 @@ const PricingApp = () => {
   const [currentPage, setCurrentPage] = useState('calculator');
   const [pickIds, setPickIds] = useState([]);
   const [selectedPickId, setSelectedPickId] = useState('');
+  
+  // New Location/Gate State
+  const [fromLocations, setFromLocations] = useState([]);
+  const [toLocations, setToLocations] = useState([]);
+  const [selectedFrom, setSelectedFrom] = useState('');
+  const [selectedTo, setSelectedTo] = useState('');
+  
   const [gates, setGates] = useState([]);
   const [selectedGate, setSelectedGate] = useState('');
+  
   const [products, setProducts] = useState([]);
   const [totalWeight, setTotalWeight] = useState(0);
   const [calculationType, setCalculationType] = useState('');
@@ -19,8 +28,8 @@ const PricingApp = () => {
 
   // Data management states
   const [gateData, setGateData] = useState([]);
-  const [selectedGateForPricing, setSelectedGateForPricing] = useState(''); // New state
-  const [itemPricingData, setItemPricingData] = useState([]); // Renamed from itemMasterData
+  const [selectedGateForPricing, setSelectedGateForPricing] = useState('');
+  const [itemPricingData, setItemPricingData] = useState([]);
   
   const [editingGate, setEditingGate] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
@@ -32,10 +41,6 @@ const PricingApp = () => {
 
   const [manualTotalPrice, setManualTotalPrice] = useState('');
   const [estimatedTotalPrice, setEstimatedTotalPrice] = useState(null);
-
-
-  const [branches, setBranches] = useState([]);
-  const [selectedBranch, setSelectedBranch] = useState('');
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
@@ -59,26 +64,41 @@ const PricingApp = () => {
       const response = await fetch(`${API_URL}/admin/gates`);
       if (response.ok) {
         const data = await response.json();
-        setGates(data.gates); // Used for dropdowns
-        setGateData(data.gates); // Used for management table
+        setGates(data.gates); 
+        setGateData(data.gates);
       }
     } catch (error) {
       showNotification(`Error loading gates: ${error.message}`, 'error');
     }
   };
 
-
-  const loadBranches = async () => {
-  try {
-    const response = await fetch(`${API_URL}/branches-list`);
-    if (response.ok) {
-      const data = await response.json();
-      setBranches(data.branches);
+  const loadFromLocations = async () => {
+    try {
+      const response = await fetch(`${API_URL}/locations/from`);
+      if (response.ok) {
+        const data = await response.json();
+        setFromLocations(data.locations);
+      }
+    } catch (error) {
+      showNotification(`Error loading locations: ${error.message}`, 'error');
     }
-  } catch (error) {
-    showNotification(`Error loading branches: ${error.message}`, 'error');
-  }
-};
+  };
+
+  const loadToLocations = async (fromLoc) => {
+    try {
+      let url = `${API_URL}/locations/to`;
+      if (fromLoc) {
+        url += `?from_loc=${encodeURIComponent(fromLoc)}`;
+      }
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        setToLocations(data.locations);
+      }
+    } catch (error) {
+      showNotification(`Error loading destinations: ${error.message}`, 'error');
+    }
+  };
 
   const loadItemPricing = async (gateId) => {
     if (!gateId) return;
@@ -93,86 +113,76 @@ const PricingApp = () => {
     }
   };
 
+  // --- Handlers ---
 
   const handleExportExcel = async () => {
-  if (!selectedGateForPricing) {
-    showNotification('Please select a gate first', 'error');
-    return;
-  }
-
-  try {
-    const response = await fetch(`${API_URL}/admin/item-pricing/export/${selectedGateForPricing}`);
-    
-    if (response.ok) {
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let filename = 'item_pricing.xlsx';
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
-        if (filenameMatch) {
-          filename = filenameMatch[1];
+    if (!selectedGateForPricing) {
+      showNotification('Please select a gate first', 'error');
+      return;
+    }
+    try {
+      const response = await fetch(`${API_URL}/admin/item-pricing/export/${selectedGateForPricing}`);
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'item_pricing.xlsx';
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+          if (filenameMatch) filename = filenameMatch[1];
         }
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        showNotification('Excel file downloaded successfully', 'success');
+      } else {
+        const error = await response.json();
+        showNotification(error.detail || 'Failed to export Excel', 'error');
       }
-      
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      
-      showNotification('Excel file downloaded successfully', 'success');
-    } else {
-      const error = await response.json();
-      showNotification(error.detail || 'Failed to export Excel', 'error');
+    } catch (error) {
+      showNotification(`Error: ${error.message}`, 'error');
     }
-  } catch (error) {
-    showNotification(`Error: ${error.message}`, 'error');
-  }
-};
+  };
 
-const handleImportExcel = async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  if (!selectedGateForPricing) {
-    showNotification('Please select a gate first', 'error');
-    event.target.value = '';
-    return;
-  }
-
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await fetch(`${API_URL}/admin/item-pricing/import/${selectedGateForPricing}`, {
-      method: 'POST',
-      body: formData
-    });
-
-    if (response.ok) {
-      const result = await response.json();
-      showNotification(
-        `Import successful! Updated: ${result.updates}, Added: ${result.inserts}, Deleted: ${result.deletes}`,
-        'success'
-      );
-      await loadItemPricing(selectedGateForPricing);
-    } else {
-      const error = await response.json();
-      showNotification(error.detail || 'Failed to import Excel', 'error');
+  const handleImportExcel = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!selectedGateForPricing) {
+      showNotification('Please select a gate first', 'error');
+      event.target.value = '';
+      return;
     }
-  } catch (error) {
-    showNotification(`Error: ${error.message}`, 'error');
-  } finally {
-    event.target.value = '';
-  }
-};
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch(`${API_URL}/admin/item-pricing/import/${selectedGateForPricing}`, {
+        method: 'POST',
+        body: formData
+      });
+      if (response.ok) {
+        const result = await response.json();
+        showNotification(`Import successful! Updated: ${result.updates}, Added: ${result.inserts}, Deleted: ${result.deletes}`, 'success');
+        await loadItemPricing(selectedGateForPricing);
+      } else {
+        const error = await response.json();
+        showNotification(error.detail || 'Failed to import Excel', 'error');
+      }
+    } catch (error) {
+      showNotification(`Error: ${error.message}`, 'error');
+    } finally {
+      event.target.value = '';
+    }
+  };
 
   const handlePickIdChange = async (pickId) => {
     setSelectedPickId(pickId);
+    // Reset subsequent selections
+    setSelectedFrom('');
+    setSelectedTo('');
     setSelectedGate('');
     setCalculationType('');
     setCalculatedProducts([]);
@@ -207,14 +217,30 @@ const handleImportExcel = async (event) => {
     }
   };
 
-  const handleBranchChange = (branch) => {
-  setSelectedBranch(branch);
-  setSelectedGate('');
-  setCalculatedProducts([]);
-  setCalculatedTotalPrice(null);
-  setEstimatedTotalPrice(null);
-  setManualTotalPrice('');
-};  
+  const handleFromChange = (val) => {
+    setSelectedFrom(val);
+    setSelectedTo('');
+    setSelectedGate('');
+    setCalculatedProducts([]);
+    setCalculatedTotalPrice(null);
+    setEstimatedTotalPrice(null);
+    setManualTotalPrice('');
+    
+    if (val) {
+      loadToLocations(val);
+    } else {
+      setToLocations([]);
+    }
+  };
+
+  const handleToChange = (val) => {
+    setSelectedTo(val);
+    setSelectedGate('');
+    setCalculatedProducts([]);
+    setCalculatedTotalPrice(null);
+    setEstimatedTotalPrice(null);
+    setManualTotalPrice('');
+  };
 
   const handleGateChange = (gateName) => {
     setSelectedGate(gateName);
@@ -231,7 +257,7 @@ const handleImportExcel = async (event) => {
 
   const calculatePrices = async () => {
     if (!selectedPickId || !selectedGate) {
-      showNotification('Please select both Pick ID and Gate', 'error');
+      showNotification('Please select Pick ID, From, To, and Gate', 'error');
       return;
     }
 
@@ -264,13 +290,14 @@ const handleImportExcel = async (event) => {
     }
   };
 
+  // --- CRUD Operations ---
+
   const saveGate = async (gateData) => {
     try {
       const payload = {
         ...gateData,
         original_gate_name: originalGateName
       };
-      
       const response = await fetch(`${API_URL}/admin/gates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -280,6 +307,7 @@ const handleImportExcel = async (event) => {
       if (response.ok) {
         showNotification('Gate saved successfully', 'success');
         await loadGates();
+        await loadFromLocations(); // Refresh locations list
         setShowAddGateModal(false);
         setEditingGate(null);
         setOriginalGateName(null);
@@ -300,10 +328,10 @@ const handleImportExcel = async (event) => {
           const response = await fetch(`${API_URL}/admin/gates/${gateId}`, {
             method: 'DELETE'
           });
-
           if (response.ok) {
             showNotification('Gate deleted successfully', 'success');
             await loadGates();
+            await loadFromLocations();
           } else {
             const error = await response.json();
             showNotification(error.detail || 'Failed to delete gate', 'error');
@@ -321,10 +349,9 @@ const handleImportExcel = async (event) => {
     try {
       const payload = {
         ...itemData,
-        gate_id: selectedGateForPricing, // SQL link
+        gate_id: selectedGateForPricing,
         original_item_code: originalItemCode || itemData.item_code
       };
-      
       const response = await fetch(`${API_URL}/admin/item-pricing`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -355,7 +382,6 @@ const handleImportExcel = async (event) => {
           const response = await fetch(`${API_URL}/admin/item-pricing/${selectedGateForPricing}/${encodedItemCode}`, {
             method: 'DELETE'
           });
-
           if (response.ok) {
             showNotification('Item deleted successfully', 'success');
             await loadItemPricing(selectedGateForPricing);
@@ -375,7 +401,7 @@ const handleImportExcel = async (event) => {
   useEffect(() => {
     loadPickIds();
     loadGates();
-    loadBranches();
+    loadFromLocations();
   }, []);
 
   useEffect(() => {
@@ -391,7 +417,8 @@ const handleImportExcel = async (event) => {
   const GateModal = ({ gate, onSave, onClose }) => {
     const [formData, setFormData] = useState(gate || {
       gate_name: '',
-      branch: '',
+      from_loc: '',
+      to_loc: '',
       price: ''
     });
 
@@ -410,15 +437,25 @@ const handleImportExcel = async (event) => {
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold mb-1">Branch</label>
+              <label className="block text-sm font-semibold mb-1">From</label>
               <input
                 type="text"
-                value={formData.branch}
-                onChange={(e) => setFormData({...formData, branch: e.target.value})}
+                value={formData.from_loc}
+                onChange={(e) => setFormData({...formData, from_loc: e.target.value})}
                 className="w-full p-2 border rounded"
+                placeholder="e.g. YGN"
               />
             </div>
-            {/* Removed File Name input */}
+            <div>
+              <label className="block text-sm font-semibold mb-1">To</label>
+              <input
+                type="text"
+                value={formData.to_loc}
+                onChange={(e) => setFormData({...formData, to_loc: e.target.value})}
+                className="w-full p-2 border rounded"
+                placeholder="e.g. MDY"
+              />
+            </div>
             <div>
               <label className="block text-sm font-semibold mb-1">Price (MMK/ton)</label>
               <input
@@ -505,8 +542,7 @@ const handleImportExcel = async (event) => {
                 placeholder="Ton or numeric value"
               />
             </div>
-             {/* Additional fields hidden for brevity, add back if needed */}
-             <div>
+            <div>
               <label className="block text-sm font-semibold mb-1">Purchase Weight</label>
               <input
                 type="number"
@@ -623,7 +659,8 @@ const handleImportExcel = async (event) => {
                 <thead className="bg-gray-100">
                   <tr>
                     <th className="border p-3 text-left">Gate Name</th>
-                    <th className="border p-3 text-left">Branch</th>
+                    <th className="border p-3 text-left">From</th>
+                    <th className="border p-3 text-left">To</th>
                     <th className="border p-3 text-left">Price (MMK/ton)</th>
                     <th className="border p-3 text-left">Actions</th>
                   </tr>
@@ -632,7 +669,8 @@ const handleImportExcel = async (event) => {
                   {gateData.map((gate, index) => (
                     <tr key={index}>
                       <td className="border p-3">{gate.gate_name}</td>
-                      <td className="border p-3">{gate.branch}</td>
+                      <td className="border p-3">{gate.from_loc}</td>
+                      <td className="border p-3">{gate.to_loc}</td>
                       <td className="border p-3">{gate.price || '-'}</td>
                       <td className="border p-3">
                         <div className="flex gap-2">
@@ -740,7 +778,7 @@ const handleImportExcel = async (event) => {
                 <option value="">-- Select a Gate --</option>
                 {gates.map((gate) => (
                   <option key={gate.gate_id} value={gate.gate_id}>
-                    {gate.gate_name} ({gate.branch})
+                    {gate.gate_name} ({gate.from_loc} &rarr; {gate.to_loc})
                   </option>
                 ))}
               </select>
@@ -817,7 +855,7 @@ const handleImportExcel = async (event) => {
     );
   }
 
-  // Calculator View (Mostly unchanged, just reusing components)
+  // Calculator View
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto">
@@ -844,50 +882,72 @@ const handleImportExcel = async (event) => {
               ))}
             </select>
           </div>
+          
           {products.length > 0 && (
-  <>
-    <div className="bg-white rounded-lg border p-6 mb-6">
-      <h2 className="text-xl font-bold mb-4">Select Branch</h2>
-      <select
-        value={selectedBranch}
-        onChange={(e) => handleBranchChange(e.target.value)}
-        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-      >
-        <option value="">-- Select a Branch --</option>
-        {branches.map((branch) => (
-          <option key={branch} value={branch}>
-            YGN to {branch}
-          </option>
-        ))}
-      </select>
-    </div>
+            <>
+              {/* Select From */}
+              <div className="bg-white rounded-lg border p-6 mb-6">
+                <h2 className="text-xl font-bold mb-4">Select From</h2>
+                <select
+                  value={selectedFrom}
+                  onChange={(e) => handleFromChange(e.target.value)}
+                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Select Origin --</option>
+                  {fromLocations.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {loc}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-    {selectedBranch && (
-      <div className="bg-white rounded-lg border p-6 mb-6">
-        <h2 className="text-xl font-bold mb-4">Select Gate</h2>
-        <select
-          value={selectedGate}
-          onChange={(e) => handleGateChange(e.target.value)}
-          className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">-- Select a Gate --</option>
-          {gates
-            .filter(gate => gate.branch === selectedBranch)
-            .map((gate) => (
-              <option key={gate.gate_name} value={gate.gate_name}>
-                {gate.gate_name} ({gate.branch}) - 
-                {gate.calculation_type === 'gate_pricing' ? 'Gate Pricing' : 
-                 gate.calculation_type === 'direct_pricing' ? 'Direct Pricing' : 'Unknown'}
-              </option>
-            ))}
-        </select>
-      </div>
-    )}
-  </>
-)}
-          {/* ... Rest of the Calculator UI (Total Weight, Manual Price, Table) ... */}
-           {/* Re-implementing Calculator UI components for completeness */}
-            {selectedGate && (
+              {/* Select To (Only if From is selected) */}
+              {selectedFrom && (
+                <div className="bg-white rounded-lg border p-6 mb-6">
+                  <h2 className="text-xl font-bold mb-4">Select To</h2>
+                  <select
+                    value={selectedTo}
+                    onChange={(e) => handleToChange(e.target.value)}
+                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- Select Destination --</option>
+                    {toLocations.map((loc) => (
+                      <option key={loc} value={loc}>
+                        {loc}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Select Gate (Only if To is selected) */}
+              {selectedTo && (
+                <div className="bg-white rounded-lg border p-6 mb-6">
+                  <h2 className="text-xl font-bold mb-4">Select Gate</h2>
+                  <select
+                    value={selectedGate}
+                    onChange={(e) => handleGateChange(e.target.value)}
+                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- Select a Gate --</option>
+                    {gates
+                      .filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo)
+                      .map((gate) => (
+                        <option key={gate.gate_name} value={gate.gate_name}>
+                          {gate.gate_name} - 
+                          {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : 
+                           gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Rest of the Calculator (Unchanged in logic, just re-rendered) */}
+          {selectedGate && (
               <div className="bg-blue-50 rounded-lg border-2 border-blue-300 p-6 mb-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -899,8 +959,8 @@ const handleImportExcel = async (event) => {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-gray-600">Selected Gate</p>
-                  <p className="text-xl font-bold text-blue-600">{selectedGate}</p>
+                  <p className="text-sm text-gray-600">Route</p>
+                  <p className="text-xl font-bold text-blue-600">{selectedFrom} &rarr; {selectedTo}</p>
                 </div>
               </div>
             </div>
@@ -936,7 +996,7 @@ const handleImportExcel = async (event) => {
                 </div>
               </div>
               
-                 <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border-2 border-purple-300 p-6 mb-6">
+              <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border-2 border-purple-300 p-6 mb-6">
                 <div className="flex items-center justify-between">
                   <span className="text-lg font-semibold text-gray-700">Total Weight:</span>
                   <span className="text-3xl font-bold text-purple-600">{totalWeight.toFixed(2)}</span>

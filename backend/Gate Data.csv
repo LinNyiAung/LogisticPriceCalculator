@@ -1,8 +1,8 @@
-Gate Name,Branch,File Name,Price
-Gate 1,MDY,Item Master MDY.csv,140000
-Gate 2,TGI,Item Master TGI.csv,200000
-Gate 3,TGU,Item Master TGU.csv,
-Gate 4,MGW,Item Master MGW.csv,168000
-Gate 5,PTN,Item Master PTN.csv,
-Gate 6,NPT,Item Master NPT.csv,120000
-Gate 7,MLM,Item Master MLM.csv,
+Gate Name,From,To,File Name,Price
+Gate 1,YGN,MDY,Item Master MDY.csv,140000
+Gate 2,YGN,TGI,Item Master TGI.csv,200000
+Gate 3,YGN,TGU,Item Master TGU.csv,
+Gate 4,YGN,MGW,Item Master MGW.csv,168000
+Gate 5,YGN,PTN,Item Master PTN.csv,
+Gate 6,YGN,NPT,Item Master NPT.csv,120000
+Gate 7,YGN,MLM,Item Master MLM.csv,

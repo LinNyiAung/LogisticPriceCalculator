@@ -42,7 +42,7 @@ def generate_sql():
     sql_statements = []
     
     # Create Table Definitions (DDL)
-    sql_statements.append("CREATE TABLE Gate ([Gate ID] INT, [Gate Name] VARCHAR(255), [Branch] VARCHAR(255), [Gate Price] DECIMAL(18,2));")
+    sql_statements.append("CREATE TABLE Gate ([Gate ID] INT, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [Gate Price] DECIMAL(18,2));")
     sql_statements.append("CREATE TABLE Item_Pricing ([Pricing ID] INT, [Gate ID] INT, [Item ID] VARCHAR(50), [Item Name] VARCHAR(255), [Is Active] VARCHAR(50), [Principal] VARCHAR(255), [Brand] VARCHAR(255), [UOM] VARCHAR(50), [Purchase Weight] FLOAT, [Transportation Cost] VARCHAR(50));")
     sql_statements.append("")
 
@@ -54,18 +54,20 @@ def generate_sql():
         gate_id = index + 1
         
         gate_name = row['Gate Name']
-        branch = row['Branch']
+        from_location = row['From']
+        to_location = row['To']
         gate_price = row['Price']
         file_name = row['File Name']
         
         # Prepare values for SQL
         val_gate_id = str(gate_id)
         val_gate_name = clean_sql_string(gate_name)
-        val_branch = clean_sql_string(branch)
+        val_from = clean_sql_string(from_location)
+        val_to = clean_sql_string(to_location)
         val_gate_price = clean_sql_number(gate_price)
         
         # INSERT statement for Gate table
-        sql_statements.append(f"INSERT INTO Gate ([Gate ID], [Gate Name], [Branch], [Gate Price]) VALUES ({val_gate_id}, {val_gate_name}, {val_branch}, {val_gate_price});")
+        sql_statements.append(f"INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [Gate Price]) VALUES ({val_gate_id}, {val_gate_name}, {val_from}, {val_to}, {val_gate_price});")
         
         # 3. Process the corresponding Item Master file if it exists
         if pd.notna(file_name):
