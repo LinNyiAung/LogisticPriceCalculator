@@ -1,5 +1,5 @@
-CREATE TABLE Gate ([Gate ID] INT, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [Gate Price] DECIMAL(18,2));
-CREATE TABLE Item_Pricing ([Pricing ID] INT, [Gate ID] INT, [Item ID] VARCHAR(50), [Item Name] VARCHAR(255), [Is Active] VARCHAR(50), [Principal] VARCHAR(255), [Brand] VARCHAR(255), [UOM] VARCHAR(50), [Purchase Weight] FLOAT, [Transportation Cost] VARCHAR(50));
+CREATE TABLE Gate ([Gate ID] INTEGER PRIMARY KEY, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [Gate Price] DECIMAL(18,2));
+CREATE TABLE Item_Pricing ([Pricing ID] INTEGER PRIMARY KEY, [Gate ID] INT, [Item ID] VARCHAR(50), [Item Name] VARCHAR(255), [Is Active] VARCHAR(50), [Principal] VARCHAR(255), [Brand] VARCHAR(255), [UOM] VARCHAR(50), [Purchase Weight] FLOAT, [Transportation Cost] VARCHAR(50));
 
 INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [Gate Price]) VALUES (1, 'Gate 1', 'YGN', 'MDY', 140000.0);
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Is Active], [Principal], [Brand], [UOM], [Purchase Weight], [Transportation Cost]) VALUES (1, 1, '6301111001', 'Shaloot Noodle Coconut 55g (1x30pcs)', 'Active', 'The Taste Origins', 'Shaloot', '30', 1.6, 'Ton');

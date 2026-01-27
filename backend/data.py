@@ -42,8 +42,8 @@ def generate_sql():
     sql_statements = []
     
     # Create Table Definitions (DDL)
-    sql_statements.append("CREATE TABLE Gate ([Gate ID] INT, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [Gate Price] DECIMAL(18,2));")
-    sql_statements.append("CREATE TABLE Item_Pricing ([Pricing ID] INT, [Gate ID] INT, [Item ID] VARCHAR(50), [Item Name] VARCHAR(255), [Is Active] VARCHAR(50), [Principal] VARCHAR(255), [Brand] VARCHAR(255), [UOM] VARCHAR(50), [Purchase Weight] FLOAT, [Transportation Cost] VARCHAR(50));")
+    sql_statements.append("CREATE TABLE Gate ([Gate ID] INTEGER PRIMARY KEY, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [Gate Price] DECIMAL(18,2));")
+    sql_statements.append("CREATE TABLE Item_Pricing ([Pricing ID] INTEGER PRIMARY KEY, [Gate ID] INT, [Item ID] VARCHAR(50), [Item Name] VARCHAR(255), [Is Active] VARCHAR(50), [Principal] VARCHAR(255), [Brand] VARCHAR(255), [UOM] VARCHAR(50), [Purchase Weight] FLOAT, [Transportation Cost] VARCHAR(50));")
     sql_statements.append("")
 
     pricing_id_counter = 1
