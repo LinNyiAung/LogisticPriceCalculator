@@ -63,17 +63,15 @@ def startup_db():
             )
         """)
         
+        # REMOVED: [Is Active], [UOM], [Purchase Weight]
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Item_Pricing (
                 [Pricing ID] INTEGER PRIMARY KEY,
                 [Gate ID] INTEGER,
                 [Item ID] TEXT,
                 [Item Name] TEXT,
-                [Is Active] TEXT,
                 [Principal] TEXT,
                 [Brand] TEXT,
-                [UOM] TEXT,
-                [Purchase Weight] REAL,
                 [Transportation Cost] TEXT,
                 FOREIGN KEY([Gate ID]) REFERENCES Gate([Gate ID])
             )
@@ -95,16 +93,14 @@ class GateData(BaseModel):
     price: Optional[float] = None
     original_gate_name: Optional[str] = None
 
+# UPDATED: Removed is_active, uom, purchase_weight
 class ItemPricingData(BaseModel):
     pricing_id: Optional[int] = None
     gate_id: int
     item_code: str
     item_name: str
-    is_active: str
     principal: Optional[str] = ""
     brand: Optional[str] = ""
-    uom: Optional[str] = ""
-    purchase_weight: Optional[float] = 0.0
     transportation_cost: str
     original_item_code: Optional[str] = None
 
@@ -120,7 +116,6 @@ def determine_calculation_type_sql(gate_id):
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # CHANGED: Query Gate table instead of Item_Pricing
         cursor.execute("SELECT [Gate Price] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
         row = cursor.fetchone()
         conn.close()
@@ -158,9 +153,9 @@ def export_item_pricing_excel(gate_id: int):
         from_loc = gate_row[1] or ""
         to_loc = gate_row[2] or ""
         
+        # UPDATED: Removed [Is Active], [UOM], [Purchase Weight]
         query = """
-            SELECT [Item ID], [Item Name], [Is Active], [Principal], 
-                   [Brand], [UOM], [Purchase Weight], [Transportation Cost]
+            SELECT [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]
             FROM Item_Pricing 
             WHERE [Gate ID] = ?
             ORDER BY [Item ID]
@@ -176,8 +171,8 @@ def export_item_pricing_excel(gate_id: int):
         ws['A1'] = f"Gate: {gate_name} ({from_loc} -> {to_loc})"
         ws['A1'].font = Font(bold=True, size=14)
         
-        headers = ['Item Code', 'Item Name', 'Status', 'Principal', 'Brand', 
-                   'UOM', 'Purchase Weight', 'Transportation Cost']
+        # UPDATED Headers
+        headers = ['Item Code', 'Item Name', 'Principal', 'Brand', 'Transportation Cost']
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
         header_font = Font(bold=True, color='FFFFFF')
         
@@ -242,35 +237,28 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...)):
             if not row[0]:
                 continue
             
+            # UPDATED: Adjusted indices based on new columns
             item_code = str(row[0]).strip()
             item_name = str(row[1]) if row[1] else ""
-            is_active = str(row[2]) if row[2] else "Active"
-            principal = str(row[3]) if row[3] else ""
-            brand = str(row[4]) if row[4] else ""
-            uom = str(row[5]) if row[5] else ""
-            purchase_weight = float(row[6]) if row[6] else 0.0
-            transportation_cost = str(row[7]) if row[7] else "Ton"
+            principal = str(row[2]) if row[2] else ""
+            brand = str(row[3]) if row[3] else ""
+            transportation_cost = str(row[4]) if row[4] else "Ton"
             
             updated_items.add(item_code)
             
             if item_code in existing_items:
                 cursor.execute("""
                     UPDATE Item_Pricing
-                    SET [Item Name] = ?, [Is Active] = ?, [Principal] = ?,
-                        [Brand] = ?, [UOM] = ?, [Purchase Weight] = ?, 
-                        [Transportation Cost] = ?
+                    SET [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ?
                     WHERE [Gate ID] = ? AND [Item ID] = ?
-                """, (item_name, is_active, principal, brand, uom, 
-                      purchase_weight, transportation_cost, gate_id, item_code))
+                """, (item_name, principal, brand, transportation_cost, gate_id, item_code))
                 updates_made += 1
             else:
                 cursor.execute("""
                     INSERT INTO Item_Pricing 
-                    ([Gate ID], [Item ID], [Item Name], [Is Active], [Principal],
-                     [Brand], [UOM], [Purchase Weight], [Transportation Cost])
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (gate_id, item_code, item_name, is_active, principal, 
-                      brand, uom, purchase_weight, transportation_cost))
+                    ([Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost])
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (gate_id, item_code, item_name, principal, brand, transportation_cost))
                 inserts_made += 1
         
         items_to_delete = existing_items - updated_items
@@ -384,9 +372,10 @@ def get_item_pricing(gate_id: int):
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
+        # UPDATED: Removed [Is Active], [UOM], [Purchase Weight]
         query = """
-            SELECT [Pricing ID], [Item ID], [Item Name], [Is Active], [Principal], 
-                   [Brand], [UOM], [Purchase Weight], [Transportation Cost]
+            SELECT [Pricing ID], [Item ID], [Item Name], [Principal], 
+                   [Brand], [Transportation Cost]
             FROM Item_Pricing 
             WHERE [Gate ID] = ?
         """
@@ -399,12 +388,11 @@ def get_item_pricing(gate_id: int):
                 "pricing_id": row[0],
                 "item_code": row[1],
                 "item_name": row[2],
-                "is_active": row[3],
-                "principal": row[4],
-                "brand": row[5],
-                "uom": row[6],
-                "purchase_weight": row[7],
-                "transportation_cost": row[8]
+                # Removed is_active (index 3 previously)
+                "principal": row[3],
+                "brand": row[4],
+                # Removed uom, purchase_weight
+                "transportation_cost": row[5]
             })
         
         conn.close()
@@ -422,30 +410,30 @@ def save_item_pricing(item_data: ItemPricingData):
         cursor.execute(query_check, (item_data.gate_id, item_data.original_item_code or item_data.item_code))
         existing = cursor.fetchone()
 
+        # UPDATED: Removed Is Active, UOM, Purchase Weight columns from UPDATE/INSERT
         if existing:
             update_query = """
                 UPDATE Item_Pricing
-                SET [Item ID] = ?, [Item Name] = ?, [Is Active] = ?, [Principal] = ?,
-                    [Brand] = ?, [UOM] = ?, [Purchase Weight] = ?, [Transportation Cost] = ?
+                SET [Item ID] = ?, [Item Name] = ?, [Principal] = ?,
+                    [Brand] = ?, [Transportation Cost] = ?
                 WHERE [Pricing ID] = ?
             """
             cursor.execute(update_query, (
-                item_data.item_code, item_data.item_name, item_data.is_active,
-                item_data.principal, item_data.brand, item_data.uom,
-                item_data.purchase_weight, item_data.transportation_cost,
+                item_data.item_code, item_data.item_name,
+                item_data.principal, item_data.brand,
+                item_data.transportation_cost,
                 existing[0]
             ))
         else:
             insert_query = """
                 INSERT INTO Item_Pricing 
-                ([Gate ID], [Item ID], [Item Name], [Is Active], [Principal],
-                 [Brand], [UOM], [Purchase Weight], [Transportation Cost])
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ([Gate ID], [Item ID], [Item Name], [Principal],
+                 [Brand], [Transportation Cost])
+                VALUES (?, ?, ?, ?, ?, ?)
             """
             cursor.execute(insert_query, (
                 item_data.gate_id, item_data.item_code, item_data.item_name,
-                item_data.is_active, item_data.principal, item_data.brand, 
-                item_data.uom, item_data.purchase_weight, item_data.transportation_cost
+                item_data.principal, item_data.brand, item_data.transportation_cost
             ))
 
         conn.commit()
@@ -563,6 +551,7 @@ def calculate_with_gate(
         gate_price = float(gate_row[3] or 0)
         
         # 3. Get Item Pricing
+        # UPDATED query to fetch only ID and Cost (Weight/Active were removed from table)
         cursor_log.execute("""
             SELECT [Item ID], [Transportation Cost] 
             FROM Item_Pricing 
@@ -572,7 +561,6 @@ def calculate_with_gate(
         conn_log.close()
         
         item_pricing = {}
-        # We don't determine calc type from items anymore, but we still need the map for overrides
         for row in pricing_rows:
             i_code = row[0]
             t_cost = str(row[1]).strip()
@@ -586,7 +574,7 @@ def calculate_with_gate(
                 except:
                     item_pricing[i_code] = {'type': 'unknown', 'value': None}
 
-        # CHANGED: Determine type based on gate_price
+        # Determine type based on gate_price
         if gate_price > 0:
             calc_type = "gate_pricing"
         else:
@@ -611,10 +599,9 @@ def calculate_with_gate(
                 }
                 
                 p_info = item_pricing.get(item_data['code'], {})
-                p_type = p_info.get('type', 'ton') # Default to ton if not specified in Item_Pricing
+                p_type = p_info.get('type', 'ton') 
                 p_val = p_info.get('value', 0.0)
                 
-                # Even in Gate Pricing, if an item has a specific numeric override, use it
                 if p_type == 'direct':
                     estimated_total_price += (item_data['quantity'] * p_val)
                     item_data['standard_unit_price'] = p_val

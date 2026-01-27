@@ -43,7 +43,7 @@ def generate_sql():
     
     # Create Table Definitions (DDL)
     sql_statements.append("CREATE TABLE Gate ([Gate ID] INTEGER PRIMARY KEY, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [Gate Price] DECIMAL(18,2));")
-    sql_statements.append("CREATE TABLE Item_Pricing ([Pricing ID] INTEGER PRIMARY KEY, [Gate ID] INT, [Item ID] VARCHAR(50), [Item Name] VARCHAR(255), [Is Active] VARCHAR(50), [Principal] VARCHAR(255), [Brand] VARCHAR(255), [UOM] VARCHAR(50), [Purchase Weight] FLOAT, [Transportation Cost] VARCHAR(50));")
+    sql_statements.append("CREATE TABLE Item_Pricing ([Pricing ID] INTEGER PRIMARY KEY, [Gate ID] INT, [Item ID] VARCHAR(50), [Item Name] VARCHAR(255), [Principal] VARCHAR(255), [Brand] VARCHAR(255), [Transportation Cost] VARCHAR(50));")
     sql_statements.append("")
 
     pricing_id_counter = 1
@@ -83,14 +83,11 @@ def generate_sql():
                         
                         val_item_id = clean_sql_string(item_row.get('Item Code'))
                         val_item_name = clean_sql_string(item_row.get('Item Name'))
-                        val_is_active = clean_sql_string(item_row.get('Is Active'))
                         val_principal = clean_sql_string(item_row.get('Principal'))
                         val_brand = clean_sql_string(item_row.get('Brand'))
-                        val_uom = clean_sql_string(item_row.get('UOM'))
-                        val_purchase_weight = clean_sql_number(item_row.get('Purchase Weight'))
                         val_trans_cost = clean_sql_string(item_row.get('Transportation Cost'))
                         
-                        sql_statements.append(f"INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Is Active], [Principal], [Brand], [UOM], [Purchase Weight], [Transportation Cost]) VALUES ({val_pricing_id}, {val_gate_fk}, {val_item_id}, {val_item_name}, {val_is_active}, {val_principal}, {val_brand}, {val_uom}, {val_purchase_weight}, {val_trans_cost});")
+                        sql_statements.append(f"INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES ({val_pricing_id}, {val_gate_fk}, {val_item_id}, {val_item_name}, {val_principal}, {val_brand}, {val_trans_cost});")
                         
                         pricing_id_counter += 1
                 except Exception as e:

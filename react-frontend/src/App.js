@@ -527,10 +527,8 @@ const PricingApp = () => {
     const [formData, setFormData] = useState(item || {
       item_code: '',
       item_name: '',
-      is_active: 'Active',
       principal: '',
       brand: '',
-      purchase_weight: '',
       transportation_cost: 'Ton'
     });
 
@@ -557,17 +555,6 @@ const PricingApp = () => {
                 onChange={(e) => setFormData({...formData, item_name: e.target.value})}
                 className="w-full p-2 border rounded"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold mb-1">Status</label>
-              <select
-                value={formData.is_active}
-                onChange={(e) => setFormData({...formData, is_active: e.target.value})}
-                className="w-full p-2 border rounded"
-              >
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
             </div>
             <div>
               <label className="block text-sm font-semibold mb-1">Transportation Cost</label>
@@ -818,7 +805,6 @@ const PricingApp = () => {
                     <tr>
                       <th className="border p-2 text-left">Item Code</th>
                       <th className="border p-2 text-left">Item Name</th>
-                      <th className="border p-2 text-left">Status</th>
                       <th className="border p-2 text-left">Transport Cost</th>
                       <th className="border p-2 text-left">Actions</th>
                     </tr>
@@ -828,7 +814,6 @@ const PricingApp = () => {
                       <tr key={index}>
                         <td className="border p-2">{item.item_code}</td>
                         <td className="border p-2">{item.item_name}</td>
-                        <td className="border p-2">{item.is_active}</td>
                         <td className="border p-2">{item.transportation_cost}</td>
                         <td className="border p-2">
                           <div className="flex gap-2">
