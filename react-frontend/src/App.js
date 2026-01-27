@@ -40,6 +40,7 @@ const PricingApp = () => {
   const [originalItemCode, setOriginalItemCode] = useState(null);
 
   const [manualTotalPrice, setManualTotalPrice] = useState('');
+  const [additionalCharges, setAdditionalCharges] = useState('');
   const [estimatedTotalPrice, setEstimatedTotalPrice] = useState(null);
 
   const showNotification = (message, type = 'success') => {
@@ -189,6 +190,7 @@ const PricingApp = () => {
     setCalculatedTotalPrice(null);
     setEstimatedTotalPrice(null);
     setManualTotalPrice('');
+    setAdditionalCharges('');
     
     if (!pickId) {
       setProducts([]);
@@ -266,6 +268,11 @@ const PricingApp = () => {
       if (manualTotalPrice) {
         url += `&manual_total_price=${manualTotalPrice}`;
       }
+      // --- Add this block ---
+      if (additionalCharges) {
+        url += `&additional_charges=${additionalCharges}`;
+      }
+      // ---------------------
 
       const response = await fetch(url, {
         method: 'POST',
@@ -988,26 +995,42 @@ const PricingApp = () => {
               </div>
               <div className="bg-white rounded-lg border p-6 mb-6">
                 <h2 className="text-xl font-bold mb-4">Pricing Options</h2>
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Target Total Price (Optional)</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Target Transport Price (Optional)</label>
                     <input
                       type="number"
                       value={manualTotalPrice}
                       onChange={(e) => setManualTotalPrice(e.target.value)}
-                      placeholder="Enter total amount..."
+                      placeholder="Enter base transport amount..."
                       className="w-full p-3 border rounded-lg"
                     />
+                    <p className="text-xs text-gray-500 mt-1">Overrides calculated item prices.</p>
                   </div>
-                   {estimatedTotalPrice !== null && manualTotalPrice && (
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col justify-center">
-                      <span className="text-sm text-gray-600">Standard Estimated Total:</span>
+                  
+                  {/* --- New Field Start --- */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Additional Charges (Optional)</label>
+                    <input
+                      type="number"
+                      value={additionalCharges}
+                      onChange={(e) => setAdditionalCharges(e.target.value)}
+                      placeholder="e.g. Labor, Toll fees..."
+                      className="w-full p-3 border rounded-lg"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Added to the final total.</p>
+                  </div>
+                  {/* --- New Field End --- */}
+
+                  {estimatedTotalPrice !== null && (manualTotalPrice || additionalCharges) && (
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col justify-center col-span-1 md:col-span-2">
+                      <span className="text-sm text-gray-600">Standard Estimated Total (Inc. Extras):</span>
                       <span className="text-xl font-bold text-gray-700">
                         {estimatedTotalPrice.toLocaleString()} MMK
                       </span>
                     </div>
                   )}
-                 </div>
+                </div>
               </div>
                <button
                     onClick={calculatePrices}
@@ -1045,11 +1068,30 @@ const PricingApp = () => {
                       </tbody>
                   </table>
                    {calculatedTotalPrice !== null && (
-                    <div className="mt-4 p-4 bg-blue-50 rounded-lg flex justify-between items-center">
-                      <span className="text-lg font-bold">Total Price:</span>
-                      <span className="text-2xl font-bold text-blue-600">
-                        {calculatedTotalPrice.toFixed(2)} MMK
-                      </span>
+                    <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                      <div className="flex flex-col gap-2 items-end">
+                        {/* Show breakdown if additional charges exist */}
+                        {additionalCharges && (
+                          <>
+                            <div className="flex justify-between w-full md:w-1/3 text-gray-600">
+                              <span>Subtotal (Transport):</span>
+                              <span>{(calculatedTotalPrice - (parseFloat(additionalCharges) || 0)).toFixed(2)} MMK</span>
+                            </div>
+                            <div className="flex justify-between w-full md:w-1/3 text-gray-600">
+                              <span>Additional Charges:</span>
+                              <span>{parseFloat(additionalCharges).toFixed(2)} MMK</span>
+                            </div>
+                            <div className="w-full md:w-1/3 border-b border-gray-300 my-1"></div>
+                          </>
+                        )}
+                        
+                        <div className="flex justify-between w-full md:w-1/3 items-center">
+                          <span className="text-lg font-bold">Total Price:</span>
+                          <span className="text-2xl font-bold text-blue-600">
+                            {calculatedTotalPrice.toFixed(2)} MMK
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

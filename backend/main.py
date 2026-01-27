@@ -551,9 +551,17 @@ def get_branches():
     return get_all_gates()
 
 @app.post("/calculate-with-gate")
-def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Optional[float] = None):
+def calculate_with_gate(
+    pick_id: str, 
+    gate_name: str, 
+    manual_total_price: Optional[float] = None,
+    additional_charges: Optional[float] = 0.0  # <--- 1. Add new parameter
+):
     """Calculate prices: Joins SQL Server (Pick Data) and SQLite (Gate Data)"""
     try:
+        # Ensure additional_charges is float (handle None)
+        add_charges = float(additional_charges) if additional_charges is not None else 0.0
+
         # 1. Get Pick Data from DWBI
         try:
             conn_dwbi = get_dwbi_connection()
@@ -711,12 +719,17 @@ def calculate_with_gate(pick_id: str, gate_name: str, manual_total_price: Option
 
         calculated_products.sort(key=lambda x: x['name'])
         
+        # 2. Add additional charges to the final totals
+        total_price += add_charges
+        estimated_total_price += add_charges
+        
         return {
             "calculation_type": calc_type,
             "gate_name": gate_name,
             "from_loc": from_loc,
             "to_loc": to_loc,
             "gate_price": gate_price,
+            "additional_charges": add_charges, # <--- 3. Return this in response
             "calculated_products": calculated_products,
             "total_price": total_price,
             "estimated_total_price": estimated_total_price
