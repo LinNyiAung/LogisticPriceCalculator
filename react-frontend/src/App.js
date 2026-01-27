@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -43,6 +43,12 @@ const PricingApp = () => {
   const [manualTotalPrice, setManualTotalPrice] = useState('');
   const [additionalCharges, setAdditionalCharges] = useState('');
   const [estimatedTotalPrice, setEstimatedTotalPrice] = useState(null);
+
+  // NEW: History State
+  const [historyData, setHistoryData] = useState([]);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [currentHistoryId, setCurrentHistoryId] = useState(null); // Tracks loaded history item
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
@@ -115,7 +121,107 @@ const PricingApp = () => {
     }
   };
 
+  // NEW: Load History
+  const loadHistory = async () => {
+    try {
+      const response = await fetch(`${API_URL}/history`);
+      if (response.ok) {
+        const data = await response.json();
+        setHistoryData(data.history);
+      }
+    } catch (error) {
+      showNotification(`Error loading history: ${error.message}`, 'error');
+    }
+  };
+
   // --- Handlers ---
+
+  const handleSaveCalculation = async (isUpdate = false) => {
+    if (!saveName.trim()) {
+      showNotification('Please enter a name for this calculation', 'error');
+      return;
+    }
+
+    try {
+      const payload = {
+        id: isUpdate ? currentHistoryId : null,
+        name: saveName,
+        gate_name: selectedGate,
+        from_loc: selectedFrom,
+        to_loc: selectedTo,
+        pick_ids: selectedPickIds,
+        manual_total_price: manualTotalPrice ? parseFloat(manualTotalPrice) : null,
+        additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0,
+        final_total_price: calculatedTotalPrice
+      };
+
+      const response = await fetch(`${API_URL}/history/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        showNotification(isUpdate ? 'Calculation updated successfully' : 'New calculation saved successfully', 'success');
+        setShowSaveModal(false);
+        // If saved as new, stop tracking the old ID
+        if (!isUpdate) {
+             setSaveName('');
+             setCurrentHistoryId(null);
+        }
+        loadHistory();
+      } else {
+        showNotification('Failed to save calculation', 'error');
+      }
+    } catch (error) {
+      showNotification(`Error: ${error.message}`, 'error');
+    }
+  };
+
+  const loadSavedCalculation = async (record) => {
+    try {
+      setCurrentPage('calculator');
+      
+      // Track that we are editing this record
+      setCurrentHistoryId(record.id);
+      setSaveName(record.name);
+
+      setSelectedPickIds(record.pick_ids);
+      await fetchAggregatedProducts(record.pick_ids);
+      
+      setSelectedFrom(record.from_loc);
+      await loadToLocations(record.from_loc);
+      
+      setSelectedTo(record.to_loc);
+      setSelectedGate(record.gate_name);
+      
+      setManualTotalPrice(record.manual_total_price || '');
+      setAdditionalCharges(record.additional_charges || '');
+      
+      setCalculatedProducts([]);
+      setCalculatedTotalPrice(null);
+      setEstimatedTotalPrice(null);
+
+      showNotification(`Loaded "${record.name}". Ready to edit.`, 'info');
+      
+    } catch (error) {
+      showNotification(`Error loading record: ${error.message}`, 'error');
+    }
+  };
+
+  const deleteHistory = async (id) => {
+    if(!window.confirm("Are you sure you want to delete this saved calculation?")) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/history/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        showNotification('Record deleted', 'success');
+        loadHistory();
+      }
+    } catch (error) {
+      showNotification('Error deleting record', 'error');
+    }
+  };
 
   const handleExportExcel = async () => {
     if (!selectedGateForPricing) {
@@ -218,7 +324,8 @@ const PricingApp = () => {
     const newSelection = [...selectedPickIds, pickId];
     setSelectedPickIds(newSelection);
     
-    // Reset subsequent selections
+    // Reset subsequent selections but DO NOT clear currentHistoryId
+    // User might want to update the existing record with a new pick ID
     setSelectedFrom('');
     setSelectedTo('');
     setSelectedGate('');
@@ -450,6 +557,13 @@ const PricingApp = () => {
     }
   }, [selectedGateForPricing]);
 
+  // Load history when tab is clicked
+  useEffect(() => {
+    if (currentPage === 'history') {
+      loadHistory();
+    }
+  }, [currentPage]);
+
   // --- Components ---
 
   const GateModal = ({ gate, onSave, onClose }) => {
@@ -586,6 +700,64 @@ const PricingApp = () => {
     );
   };
 
+  // UPDATED: Save Modal to show Update vs New
+  const SaveModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <h2 className="text-2xl font-bold mb-4">
+            {currentHistoryId ? 'Update Calculation' : 'Save Calculation'}
+        </h2>
+        
+        <div className="mb-4">
+          <label className="block text-sm font-semibold mb-1">Name / Reference</label>
+          <input
+            type="text"
+            value={saveName}
+            onChange={(e) => setSaveName(e.target.value)}
+            placeholder="e.g., Urgent Shipment Batch A"
+            className="w-full p-2 border rounded"
+            autoFocus
+          />
+        </div>
+
+        <div className="flex flex-col gap-3 mt-6">
+          {currentHistoryId ? (
+            // If editing an existing record, show two options
+            <div className="flex gap-2">
+                <button
+                    onClick={() => handleSaveCalculation(true)} // isUpdate = true
+                    className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+                >
+                    Update Existing
+                </button>
+                <button
+                    onClick={() => handleSaveCalculation(false)} // isUpdate = false
+                    className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700"
+                >
+                    Save as New
+                </button>
+            </div>
+          ) : (
+            // If new, just show Save
+            <button
+                onClick={() => handleSaveCalculation(false)}
+                className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+            >
+                Save
+            </button>
+          )}
+          
+          <button
+            onClick={() => setShowSaveModal(false)}
+            className="w-full bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400 mt-2"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   const ConfirmDialog = ({ message, onConfirm, onCancel }) => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -629,7 +801,7 @@ const PricingApp = () => {
             }`}
           >
             <Database size={20} />
-            Transport Cost by Gate
+            Gates
           </button>
           <button
             onClick={() => setCurrentPage('items')}
@@ -638,12 +810,93 @@ const PricingApp = () => {
             }`}
           >
             <FileText size={20} />
-            Transport Cost by Item
+            Items
+          </button>
+          <button
+            onClick={() => setCurrentPage('history')}
+            className={`flex items-center gap-2 px-4 py-2 rounded transition ${
+              currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            <History size={20} />
+            History
           </button>
         </div>
       </div>
     </div>
   );
+
+  if (currentPage === 'history') {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-6xl mx-auto">
+          {notification && (
+            <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${
+              notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+            } text-white z-50`}>
+              {notification.message}
+            </div>
+          )}
+          {renderNavigation()}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Calculation History</h1>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="border p-3 text-left">Date</th>
+                    <th className="border p-3 text-left">Name</th>
+                    <th className="border p-3 text-left">Route</th>
+                    <th className="border p-3 text-left">Pick IDs</th>
+                    <th className="border p-3 text-right">Total (MMK)</th>
+                    <th className="border p-3 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyData.length === 0 ? (
+                    <tr><td colSpan="6" className="text-center p-4 text-gray-500">No saved calculations found.</td></tr>
+                  ) : (
+                    historyData.map((record) => (
+                      <tr key={record.id} className="hover:bg-gray-50">
+                        <td className="border p-3 text-sm text-gray-600">{record.created_at}</td>
+                        <td className="border p-3 font-semibold">{record.name}</td>
+                        <td className="border p-3">
+                          {record.gate_name} <br/>
+                          <span className="text-xs text-gray-500">{record.from_loc} &rarr; {record.to_loc}</span>
+                        </td>
+                        <td className="border p-3 text-sm">
+                          {record.pick_ids.length} ID(s): {record.pick_ids.join(', ')}
+                        </td>
+                        <td className="border p-3 text-right font-bold text-blue-600">
+                          {record.final_total_price?.toLocaleString()}
+                        </td>
+                        <td className="border p-3 text-center">
+                          <div className="flex justify-center gap-2">
+                            <button
+                              onClick={() => loadSavedCalculation(record)}
+                              className="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm font-semibold"
+                            >
+                              Load
+                            </button>
+                            <button
+                              onClick={() => deleteHistory(record.id)}
+                              className="p-1 text-red-500 hover:bg-red-50 rounded"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (currentPage === 'gates') {
     return (
@@ -1072,14 +1325,30 @@ const PricingApp = () => {
                   )}
                 </div>
               </div>
-               <button
+
+               {/* Button Group: Calculate + Save */}
+               <div className="flex gap-4 mb-6">
+                  <button
                     onClick={calculatePrices}
                     disabled={isLoading}
-                    className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 mb-6"
+                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"
                   >
                     <Calculator size={20} />
                     {isLoading ? 'Calculating...' : 'Calculate Prices'}
                   </button>
+                  
+                  {/* Save Button - Only shows if results exist */}
+                  {calculatedTotalPrice !== null && (
+                    <button
+                      onClick={() => setShowSaveModal(true)}
+                      className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                    >
+                      <Save size={20} />
+                      Save
+                    </button>
+                  )}
+              </div>
+
               </>
             )}
              {calculatedProducts.length > 0 && (
@@ -1137,6 +1406,17 @@ const PricingApp = () => {
                 </div>
              )}
         </div>
+        {/* Save Modal Component Rendered Here */}
+        {showSaveModal && <SaveModal />}
+        
+        {/* Confirm Dialog Rendered Here */}
+        {confirmDialog && (
+            <ConfirmDialog
+              message={confirmDialog.message}
+              onConfirm={confirmDialog.onConfirm}
+              onCancel={confirmDialog.onCancel}
+            />
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
 import logging
 import pyodbc
 import sqlite3
+import json
+import datetime
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -63,7 +65,6 @@ def startup_db():
             )
         """)
         
-        # REMOVED: [Is Active], [UOM], [Purchase Weight]
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Item_Pricing (
                 [Pricing ID] INTEGER PRIMARY KEY,
@@ -74,6 +75,22 @@ def startup_db():
                 [Brand] TEXT,
                 [Transportation Cost] TEXT,
                 FOREIGN KEY([Gate ID]) REFERENCES Gate([Gate ID])
+            )
+        """)
+
+        # Calculation History Table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Calculation_History (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [created_at] TEXT,
+                [name] TEXT,
+                [gate_name] TEXT,
+                [from_loc] TEXT,
+                [to_loc] TEXT,
+                [pick_ids] TEXT, -- Stored as JSON string
+                [manual_total_price] REAL,
+                [additional_charges] REAL,
+                [final_total_price] REAL
             )
         """)
         
@@ -93,7 +110,6 @@ class GateData(BaseModel):
     price: Optional[float] = None
     original_gate_name: Optional[str] = None
 
-# UPDATED: Removed is_active, uom, purchase_weight
 class ItemPricingData(BaseModel):
     pricing_id: Optional[int] = None
     gate_id: int
@@ -103,6 +119,18 @@ class ItemPricingData(BaseModel):
     brand: Optional[str] = ""
     transportation_cost: str
     original_item_code: Optional[str] = None
+
+# UPDATED: Added 'id' for updates
+class CalculationSaveRequest(BaseModel):
+    id: Optional[int] = None
+    name: str
+    gate_name: str
+    from_loc: str
+    to_loc: str
+    pick_ids: List[str]
+    manual_total_price: Optional[float] = None
+    additional_charges: Optional[float] = 0.0
+    final_total_price: float
 
 # --- Helper Functions ---
 
@@ -134,6 +162,106 @@ def determine_calculation_type_sql(gate_id):
         logger.error(f"Error determining calc type: {str(e)}")
         return "unknown"
 
+# --- Calculation History Endpoints ---
+
+@app.post("/history/save")
+def save_calculation(data: CalculationSaveRequest):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        pick_ids_json = json.dumps(data.pick_ids)
+        created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # UPDATED LOGIC: Update if ID is present, else Insert
+        if data.id:
+            # Check existence
+            cursor.execute("SELECT id FROM Calculation_History WHERE id = ?", (data.id,))
+            if not cursor.fetchone():
+                conn.close()
+                raise HTTPException(status_code=404, detail="Record to update not found")
+
+            cursor.execute("""
+                UPDATE Calculation_History 
+                SET created_at = ?, name = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
+                    pick_ids = ?, manual_total_price = ?, additional_charges = ?, final_total_price = ?
+                WHERE id = ?
+            """, (
+                created_at, data.name, data.gate_name, data.from_loc, data.to_loc,
+                pick_ids_json, data.manual_total_price, data.additional_charges, 
+                data.final_total_price, data.id
+            ))
+            message = "Calculation updated successfully"
+        else:
+            cursor.execute("""
+                INSERT INTO Calculation_History 
+                ([created_at], [name], [gate_name], [from_loc], [to_loc], 
+                 [pick_ids], [manual_total_price], [additional_charges], [final_total_price])
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                created_at, data.name, data.gate_name, data.from_loc, data.to_loc,
+                pick_ids_json, data.manual_total_price, data.additional_charges, data.final_total_price
+            ))
+            message = "Calculation saved successfully"
+        
+        conn.commit()
+        conn.close()
+        return {"message": message}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error saving history: {str(e)}")
+
+@app.get("/history")
+def get_history():
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM Calculation_History ORDER BY id DESC")
+        rows = cursor.fetchall()
+        
+        history = []
+        for row in rows:
+            history.append({
+                "id": row[0],
+                "created_at": row[1],
+                "name": row[2],
+                "gate_name": row[3],
+                "from_loc": row[4],
+                "to_loc": row[5],
+                "pick_ids": json.loads(row[6]), # Convert JSON string back to list
+                "manual_total_price": row[7],
+                "additional_charges": row[8],
+                "final_total_price": row[9]
+            })
+            
+        conn.close()
+        return {"history": history}
+    except Exception as e:
+        logger.error(f"Error loading history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error loading history: {str(e)}")
+
+@app.delete("/history/{record_id}")
+def delete_history_item(record_id: int):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM Calculation_History WHERE id = ?", (record_id,))
+        if cursor.rowcount == 0:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Record not found")
+            
+        conn.commit()
+        conn.close()
+        return {"message": "Record deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting record: {str(e)}")
+
 # --- Excel Export/Import Endpoints ---
 
 @app.get("/admin/item-pricing/export/{gate_id}")
@@ -153,7 +281,6 @@ def export_item_pricing_excel(gate_id: int):
         from_loc = gate_row[1] or ""
         to_loc = gate_row[2] or ""
         
-        # UPDATED: Removed [Is Active], [UOM], [Purchase Weight]
         query = """
             SELECT [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]
             FROM Item_Pricing 
@@ -171,7 +298,6 @@ def export_item_pricing_excel(gate_id: int):
         ws['A1'] = f"Gate: {gate_name} ({from_loc} -> {to_loc})"
         ws['A1'].font = Font(bold=True, size=14)
         
-        # UPDATED Headers
         headers = ['Item Code', 'Item Name', 'Principal', 'Brand', 'Transportation Cost']
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
         header_font = Font(bold=True, color='FFFFFF')
@@ -237,7 +363,6 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...)):
             if not row[0]:
                 continue
             
-            # UPDATED: Adjusted indices based on new columns
             item_code = str(row[0]).strip()
             item_name = str(row[1]) if row[1] else ""
             principal = str(row[2]) if row[2] else ""
@@ -372,7 +497,6 @@ def get_item_pricing(gate_id: int):
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # UPDATED: Removed [Is Active], [UOM], [Purchase Weight]
         query = """
             SELECT [Pricing ID], [Item ID], [Item Name], [Principal], 
                    [Brand], [Transportation Cost]
@@ -388,10 +512,8 @@ def get_item_pricing(gate_id: int):
                 "pricing_id": row[0],
                 "item_code": row[1],
                 "item_name": row[2],
-                # Removed is_active (index 3 previously)
                 "principal": row[3],
                 "brand": row[4],
-                # Removed uom, purchase_weight
                 "transportation_cost": row[5]
             })
         
@@ -410,7 +532,6 @@ def save_item_pricing(item_data: ItemPricingData):
         cursor.execute(query_check, (item_data.gate_id, item_data.original_item_code or item_data.item_code))
         existing = cursor.fetchone()
 
-        # UPDATED: Removed Is Active, UOM, Purchase Weight columns from UPDATE/INSERT
         if existing:
             update_query = """
                 UPDATE Item_Pricing
