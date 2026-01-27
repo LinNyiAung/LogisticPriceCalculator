@@ -1,13 +1,14 @@
-//
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
 const PricingApp = () => {
   const [currentPage, setCurrentPage] = useState('calculator');
   const [pickIds, setPickIds] = useState([]);
-  const [selectedPickId, setSelectedPickId] = useState('');
+  
+  // CHANGED: Array instead of single string
+  const [selectedPickIds, setSelectedPickIds] = useState([]);
   
   // New Location/Gate State
   const [fromLocations, setFromLocations] = useState([]);
@@ -179,8 +180,44 @@ const PricingApp = () => {
     }
   };
 
-  const handlePickIdChange = async (pickId) => {
-    setSelectedPickId(pickId);
+  // NEW: Fetch Aggregated Products
+  const fetchAggregatedProducts = async (ids) => {
+    if (ids.length === 0) {
+      setProducts([]);
+      setTotalWeight(0);
+      return;
+    }
+
+    try {
+      // Build query string like ?pick_ids=1&pick_ids=2...
+      const queryString = ids.map(id => `pick_ids=${encodeURIComponent(id)}`).join('&');
+      const response = await fetch(`${API_URL}/products-by-ids?${queryString}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setProducts(data.products);
+        setTotalWeight(data.total_weight || 0);
+      } else {
+        showNotification('Failed to load products', 'error');
+      }
+    } catch (error) {
+      showNotification(`Error: ${error.message}`, 'error');
+    }
+  };
+
+  // NEW: Handle Adding Pick IDs
+  const handleAddPickId = (pickId) => {
+    if (!pickId) return;
+    
+    // Don't add if already exists
+    if (selectedPickIds.includes(pickId)) {
+      showNotification('Pick ID already selected', 'info');
+      return;
+    }
+
+    const newSelection = [...selectedPickIds, pickId];
+    setSelectedPickIds(newSelection);
+    
     // Reset subsequent selections
     setSelectedFrom('');
     setSelectedTo('');
@@ -191,31 +228,21 @@ const PricingApp = () => {
     setEstimatedTotalPrice(null);
     setManualTotalPrice('');
     setAdditionalCharges('');
-    
-    if (!pickId) {
-      setProducts([]);
-      setTotalWeight(0);
-      return;
-    }
 
-    try {
-      const response = await fetch(`${API_URL}/products/${pickId}`);
-      if (response.ok) {
-        const data = await response.json();
-        const productList = data.products.map(p => ({
-          code: p.item_code,
-          name: p.description,
-          quantity: p.quantity,
-          weight: p.item_weight
-        }));
-        setProducts(productList);
-        setTotalWeight(data.total_weight || 0);
-      } else {
-        showNotification('Failed to load products', 'error');
-      }
-    } catch (error) {
-      showNotification(`Error: ${error.message}`, 'error');
-    }
+    fetchAggregatedProducts(newSelection);
+  };
+
+  // NEW: Handle Removing Pick IDs
+  const handleRemovePickId = (pickId) => {
+    const newSelection = selectedPickIds.filter(id => id !== pickId);
+    setSelectedPickIds(newSelection);
+    
+    // Reset calculations
+    setCalculatedProducts([]);
+    setCalculatedTotalPrice(null);
+    setEstimatedTotalPrice(null);
+    
+    fetchAggregatedProducts(newSelection);
   };
 
   const handleFromChange = (val) => {
@@ -257,22 +284,27 @@ const PricingApp = () => {
   };
 
   const calculatePrices = async () => {
-    if (!selectedPickId || !selectedGate) {
-      showNotification('Please select Pick ID, From, To, and Gate', 'error');
+    if (selectedPickIds.length === 0 || !selectedGate) {
+      showNotification('Please select Pick ID(s), From, To, and Gate', 'error');
       return;
     }
 
     setIsLoading(true);
     try {
-      let url = `${API_URL}/calculate-with-gate?pick_id=${selectedPickId}&gate_name=${selectedGate}`;
+      // Create query string for multiple pick_ids
+      let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(selectedGate)}`;
+      
+      // Append each pick_id
+      selectedPickIds.forEach(id => {
+        url += `&pick_ids=${encodeURIComponent(id)}`;
+      });
+
       if (manualTotalPrice) {
         url += `&manual_total_price=${manualTotalPrice}`;
       }
-      // --- Add this block ---
       if (additionalCharges) {
         url += `&additional_charges=${additionalCharges}`;
       }
-      // ---------------------
 
       const response = await fetch(url, {
         method: 'POST',
@@ -862,18 +894,43 @@ const PricingApp = () => {
         {renderNavigation()}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h1 className="text-3xl font-bold text-gray-800 mb-6">Logistic Pricing Calculator</h1>
+          
+          {/* UPDATED: Multiple Pick ID Selection */}
           <div className="bg-white rounded-lg border p-6 mb-6">
-            <h2 className="text-xl font-bold mb-4">Select Pick ID</h2>
-            <select
-              value={selectedPickId}
-              onChange={(e) => handlePickIdChange(e.target.value)}
-              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">-- Select a Pick ID --</option>
-              {pickIds.map((pickId) => (
-                <option key={pickId} value={pickId}>{pickId}</option>
+            <h2 className="text-xl font-bold mb-4">Select Pick IDs</h2>
+            
+            <div className="mb-4">
+               <select
+                onChange={(e) => handleAddPickId(e.target.value)}
+                value="" // Always reset so same value can be re-selected if needed (though filtered out)
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">-- Add a Pick ID --</option>
+                {pickIds
+                  .filter(id => !selectedPickIds.includes(id)) // Filter out already selected
+                  .map((pickId) => (
+                    <option key={pickId} value={pickId}>{pickId}</option>
+                  ))}
+              </select>
+            </div>
+
+            {/* Tags for selected IDs */}
+            <div className="flex flex-wrap gap-2">
+              {selectedPickIds.length === 0 && (
+                <p className="text-gray-500 text-sm italic">No Pick IDs selected</p>
+              )}
+              {selectedPickIds.map(id => (
+                <div key={id} className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full border border-blue-200">
+                  <span className="font-semibold">{id}</span>
+                  <button 
+                    onClick={() => handleRemovePickId(id)}
+                    className="hover:text-red-600 transition"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               ))}
-            </select>
+            </div>
           </div>
           
           {products.length > 0 && (
@@ -962,7 +1019,7 @@ const PricingApp = () => {
           {products.length > 0 && (
             <>
               <div className="bg-white rounded-lg border p-6 mb-6">
-                <h2 className="text-xl font-bold mb-4">Products</h2>
+                <h2 className="text-xl font-bold mb-4">Products (Aggregated)</h2>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse border">
                     <thead className="bg-gray-100">
@@ -1008,7 +1065,6 @@ const PricingApp = () => {
                     <p className="text-xs text-gray-500 mt-1">Overrides calculated item prices.</p>
                   </div>
                   
-                  {/* --- New Field Start --- */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Additional Charges (Optional)</label>
                     <input
@@ -1020,7 +1076,6 @@ const PricingApp = () => {
                     />
                     <p className="text-xs text-gray-500 mt-1">Added to the final total.</p>
                   </div>
-                  {/* --- New Field End --- */}
 
                   {estimatedTotalPrice !== null && (manualTotalPrice || additionalCharges) && (
                     <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col justify-center col-span-1 md:col-span-2">

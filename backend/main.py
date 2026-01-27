@@ -1,4 +1,3 @@
-#
 import logging
 import pyodbc
 import sqlite3
@@ -54,8 +53,6 @@ def startup_db():
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # Updated Gate Table Schema: Removed Branch, Added [From] and [To]
-        # Note: 'From' is a SQL keyword, so brackets [] are crucial
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Gate (
                 [Gate ID] INTEGER PRIMARY KEY,
@@ -114,7 +111,6 @@ class ItemPricingData(BaseModel):
 # --- Helper Functions ---
 
 def determine_calculation_type_sql(gate_id):
-    """Determine calculation type based on SQLite data for a specific Gate ID"""
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -154,12 +150,10 @@ def determine_calculation_type_sql(gate_id):
 
 @app.get("/admin/item-pricing/export/{gate_id}")
 def export_item_pricing_excel(gate_id: int):
-    """Export item pricing data to Excel"""
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # Get gate info with From/To
         cursor.execute("SELECT [Gate Name], [From], [To] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
         gate_row = cursor.fetchone()
         
@@ -171,7 +165,6 @@ def export_item_pricing_excel(gate_id: int):
         from_loc = gate_row[1] or ""
         to_loc = gate_row[2] or ""
         
-        # Get item pricing data
         query = """
             SELECT [Item ID], [Item Name], [Is Active], [Principal], 
                    [Brand], [UOM], [Purchase Weight], [Transportation Cost]
@@ -183,16 +176,13 @@ def export_item_pricing_excel(gate_id: int):
         rows = cursor.fetchall()
         conn.close()
         
-        # Create Excel workbook
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Item Pricing"
         
-        # Add header with gate info
         ws['A1'] = f"Gate: {gate_name} ({from_loc} -> {to_loc})"
         ws['A1'].font = Font(bold=True, size=14)
         
-        # Add column headers
         headers = ['Item Code', 'Item Name', 'Status', 'Principal', 'Brand', 
                    'UOM', 'Purchase Weight', 'Transportation Cost']
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
@@ -204,12 +194,10 @@ def export_item_pricing_excel(gate_id: int):
             cell.fill = header_fill
             cell.font = header_font
         
-        # Add data rows
         for row_num, row_data in enumerate(rows, 4):
             for col_num, value in enumerate(row_data, 1):
                 ws.cell(row=row_num, column=col_num, value=value)
         
-        # Adjust column widths
         for col in ws.columns:
             max_length = 0
             col_letter = col[0].column_letter
@@ -222,7 +210,6 @@ def export_item_pricing_excel(gate_id: int):
             adjusted_width = min(max_length + 2, 50)
             ws.column_dimensions[col_letter].width = adjusted_width
         
-        # Save to bytes
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
@@ -243,27 +230,22 @@ def export_item_pricing_excel(gate_id: int):
 
 @app.post("/admin/item-pricing/import/{gate_id}")
 async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...)):
-    """Import item pricing data from Excel"""
     try:
-        # Read Excel file
         contents = await file.read()
         wb = openpyxl.load_workbook(io.BytesIO(contents))
         ws = wb.active
         
-        # Get existing items to track changes
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
         cursor.execute("SELECT [Item ID] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
         existing_items = {row[0] for row in cursor.fetchall()}
         
-        # Parse Excel data (starting from row 4, skipping header rows)
         updated_items = set()
         updates_made = 0
         inserts_made = 0
         
         for row in ws.iter_rows(min_row=4, values_only=True):
-            # Skip empty rows
             if not row[0]:
                 continue
             
@@ -279,7 +261,6 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...)):
             updated_items.add(item_code)
             
             if item_code in existing_items:
-                # Update existing item
                 cursor.execute("""
                     UPDATE Item_Pricing
                     SET [Item Name] = ?, [Is Active] = ?, [Principal] = ?,
@@ -290,7 +271,6 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...)):
                       purchase_weight, transportation_cost, gate_id, item_code))
                 updates_made += 1
             else:
-                # Insert new item
                 cursor.execute("""
                     INSERT INTO Item_Pricing 
                     ([Gate ID], [Item ID], [Item Name], [Is Active], [Principal],
@@ -300,7 +280,6 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...)):
                       brand, uom, purchase_weight, transportation_cost))
                 inserts_made += 1
         
-        # Delete items that were in DB but not in Excel
         items_to_delete = existing_items - updated_items
         deletes_made = 0
         for item_code in items_to_delete:
@@ -328,7 +307,6 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...)):
 
 @app.get("/admin/gates")
 def get_all_gates():
-    """Get all gates from SQLite Gate table"""
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -358,7 +336,6 @@ def get_all_gates():
 
 @app.post("/admin/gates")
 def save_gate(gate_data: GateData):
-    """Add or update a gate in SQLite"""
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -386,7 +363,6 @@ def save_gate(gate_data: GateData):
 
 @app.delete("/admin/gates/{gate_id}")
 def delete_gate(gate_id: int):
-    """Delete a gate and its associated pricing from SQLite"""
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -411,7 +387,6 @@ def delete_gate(gate_id: int):
 
 @app.get("/admin/item-pricing/{gate_id}")
 def get_item_pricing(gate_id: int):
-    """Get all items for a specific Gate ID from SQLite"""
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -446,7 +421,6 @@ def get_item_pricing(gate_id: int):
 
 @app.post("/admin/item-pricing")
 def save_item_pricing(item_data: ItemPricingData):
-    """Add or update an item pricing record in SQLite"""
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -490,7 +464,6 @@ def save_item_pricing(item_data: ItemPricingData):
 
 @app.delete("/admin/item-pricing/{gate_id}/{item_code}")
 def delete_item_pricing(gate_id: int, item_code: str):
-    """Delete an item pricing record from SQLite"""
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -511,11 +484,9 @@ def delete_item_pricing(gate_id: int, item_code: str):
 
 @app.get("/locations/from")
 def get_from_locations():
-    """Get unique 'From' locations"""
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        # [From] is a keyword, must be bracketed
         cursor.execute("SELECT DISTINCT [From] FROM Gate WHERE [From] IS NOT NULL ORDER BY [From]")
         rows = cursor.fetchall()
         locations = [row[0] for row in rows if row[0]]
@@ -527,7 +498,6 @@ def get_from_locations():
 
 @app.get("/locations/to")
 def get_to_locations(from_loc: Optional[str] = None):
-    """Get unique 'To' locations, optionally filtered by 'From'"""
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -545,40 +515,43 @@ def get_to_locations(from_loc: Optional[str] = None):
         logger.error(f"Error loading to locations: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error loading to locations: {str(e)}")
 
-@app.get("/branches")
-def get_branches():
-    """Get list of gates (Alias for admin/gates - Keeping for backward compatibility if needed)"""
-    return get_all_gates()
-
 @app.post("/calculate-with-gate")
 def calculate_with_gate(
-    pick_id: str, 
     gate_name: str, 
+    pick_ids: List[str] = Query(...), # Changed to accept multiple IDs
     manual_total_price: Optional[float] = None,
-    additional_charges: Optional[float] = 0.0  # <--- 1. Add new parameter
+    additional_charges: Optional[float] = 0.0
 ):
-    """Calculate prices: Joins SQL Server (Pick Data) and SQLite (Gate Data)"""
+    """Calculate prices for multiple Pick IDs"""
     try:
-        # Ensure additional_charges is float (handle None)
         add_charges = float(additional_charges) if additional_charges is not None else 0.0
 
-        # 1. Get Pick Data from DWBI
+        if not pick_ids:
+            raise HTTPException(status_code=400, detail="No Pick IDs provided")
+
+        # 1. Get Pick Data from DWBI for ALL IDs
         try:
             conn_dwbi = get_dwbi_connection()
             cursor_dwbi = conn_dwbi.cursor()
-            cursor_dwbi.execute("""
+            
+            # Prepare query for multiple IDs
+            placeholders = ','.join('?' * len(pick_ids))
+            query = f"""
                 SELECT ItemCode, Dscription, Quantity, UomCode, ItemWeight
-                FROM PG_PickDetail WHERE ID = ? ORDER BY ItemCode
-            """, (pick_id,))
+                FROM PG_PickDetail 
+                WHERE ID IN ({placeholders}) 
+                ORDER BY ItemCode
+            """
+            cursor_dwbi.execute(query, pick_ids)
             pick_rows = cursor_dwbi.fetchall()
             conn_dwbi.close()
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error fetching pick details from DWBI: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error fetching pick details: {str(e)}")
         
         if not pick_rows:
-            raise HTTPException(status_code=404, detail="No products found for this Pick ID")
+            raise HTTPException(status_code=404, detail="No products found for the selected Pick IDs")
         
-        # 2. Get Gate Data from SQLite
+        # 2. Get Gate Data
         try:
             conn_log = get_logistic_connection()
             cursor_log = conn_log.cursor()
@@ -719,7 +692,6 @@ def calculate_with_gate(
 
         calculated_products.sort(key=lambda x: x['name'])
         
-        # 2. Add additional charges to the final totals
         total_price += add_charges
         estimated_total_price += add_charges
         
@@ -729,7 +701,7 @@ def calculate_with_gate(
             "from_loc": from_loc,
             "to_loc": to_loc,
             "gate_price": gate_price,
-            "additional_charges": add_charges, # <--- 3. Return this in response
+            "additional_charges": add_charges,
             "calculated_products": calculated_products,
             "total_price": total_price,
             "estimated_total_price": estimated_total_price
@@ -745,7 +717,6 @@ def calculate_with_gate(
 
 @app.get("/pick-ids")
 def get_pick_ids():
-    """Get unique Pick IDs from SQL Server"""
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
@@ -757,14 +728,57 @@ def get_pick_ids():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
+# NEW: Aggregated endpoint for multiple IDs
+@app.get("/products-by-ids")
+def get_products_by_pick_ids(pick_ids: List[str] = Query(...)):
+    """Get aggregated products for multiple Pick IDs"""
+    try:
+        if not pick_ids:
+            return {"products": [], "total_weight": 0}
+
+        conn = get_dwbi_connection()
+        cursor = conn.cursor()
+        
+        placeholders = ','.join('?' * len(pick_ids))
+        query = f"""
+            SELECT ItemCode, Dscription, Quantity, UomCode, ItemWeight
+            FROM PG_PickDetail 
+            WHERE ID IN ({placeholders}) 
+            ORDER BY ItemCode
+        """
+        
+        cursor.execute(query, pick_ids)
+        rows = cursor.fetchall()
+        
+        products = []
+        total_weight = 0.0
+        
+        for row in rows:
+            weight = float(row[4]) if row[4] else 0.0
+            total_weight += weight
+            products.append({
+                "code": row[0] or "",
+                "name": row[1] or "",
+                "quantity": float(row[2]) if row[2] else 0.0,
+                "uom": row[3] or "",
+                "weight": weight
+            })
+        
+        conn.close()
+        return {"products": products, "total_weight": round(total_weight, 2)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+# Keep single ID version for backward compatibility if needed, 
+# but the frontend will use the multi-version.
 @app.get("/products/{pick_id}")
 def get_products_by_pick_id(pick_id: str):
-    """Get products from SQL Server"""
+    """Get products from SQL Server (Single ID)"""
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT ItemCode, Dscription, Quantity, UomCode, ItemWeight, CardName, PickDate, VANCode, Status
+            SELECT ItemCode, Dscription, Quantity, UomCode, ItemWeight
             FROM PG_PickDetail WHERE ID = ? ORDER BY ItemCode
         """, (pick_id,))
         rows = cursor.fetchall()
@@ -775,12 +789,6 @@ def get_products_by_pick_id(pick_id: str):
         
         products = []
         total_weight = 0.0
-        pick_info = {
-            "card_name": rows[0][5] or "",
-            "pick_date": rows[0][6].strftime("%Y-%m-%d") if rows[0][6] else "",
-            "van_code": rows[0][7] or "",
-            "status": rows[0][8] or ""
-        }
         
         for row in rows:
             weight = float(row[4]) if row[4] else 0.0
@@ -794,7 +802,7 @@ def get_products_by_pick_id(pick_id: str):
             })
         
         conn.close()
-        return {"products": products, "total_weight": round(total_weight, 2), "pick_info": pick_info}
+        return {"products": products, "total_weight": round(total_weight, 2)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
