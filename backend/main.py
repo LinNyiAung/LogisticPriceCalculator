@@ -111,36 +111,29 @@ class ItemPricingData(BaseModel):
 # --- Helper Functions ---
 
 def determine_calculation_type_sql(gate_id):
+    """
+    Determines calculation type based on Gate Price.
+    If Gate Price exists and > 0 -> gate_pricing
+    Else -> direct_pricing
+    """
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
-        rows = cursor.fetchall()
+        
+        # CHANGED: Query Gate table instead of Item_Pricing
+        cursor.execute("SELECT [Gate Price] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
+        row = cursor.fetchone()
         conn.close()
 
-        if not rows:
-            return "unknown"
-
-        has_ton = False
-        has_number = False
-
-        for row in rows:
-            cost = str(row[0]).strip().lower()
-            if cost == 'ton':
-                has_ton = True
-            else:
-                try:
-                    float(cost)
-                    has_number = True
-                except ValueError:
-                    pass
+        if row and row[0] is not None:
+            try:
+                price = float(row[0])
+                if price > 0:
+                    return "gate_pricing"
+            except ValueError:
+                pass
         
-        if has_number and not has_ton:
-            return "direct_pricing"
-        elif has_ton:
-            return "gate_pricing"
-        else:
-            return "unknown"
+        return "direct_pricing"
 
     except Exception as e:
         logger.error(f"Error determining calc type: {str(e)}")
@@ -518,7 +511,7 @@ def get_to_locations(from_loc: Optional[str] = None):
 @app.post("/calculate-with-gate")
 def calculate_with_gate(
     gate_name: str, 
-    pick_ids: List[str] = Query(...), # Changed to accept multiple IDs
+    pick_ids: List[str] = Query(...), 
     manual_total_price: Optional[float] = None,
     additional_charges: Optional[float] = 0.0
 ):
@@ -579,29 +572,25 @@ def calculate_with_gate(
         conn_log.close()
         
         item_pricing = {}
-        has_ton = False
-        has_number = False
-        
+        # We don't determine calc type from items anymore, but we still need the map for overrides
         for row in pricing_rows:
             i_code = row[0]
             t_cost = str(row[1]).strip()
             
             if t_cost.lower() == 'ton':
                 item_pricing[i_code] = {'type': 'ton', 'value': None}
-                has_ton = True
             else:
                 try:
                     val = float(t_cost)
                     item_pricing[i_code] = {'type': 'direct', 'value': val}
-                    has_number = True
                 except:
                     item_pricing[i_code] = {'type': 'unknown', 'value': None}
 
-        calc_type = "unknown"
-        if has_number and not has_ton:
-            calc_type = "direct_pricing"
-        elif has_ton:
+        # CHANGED: Determine type based on gate_price
+        if gate_price > 0:
             calc_type = "gate_pricing"
+        else:
+            calc_type = "direct_pricing"
 
         calculated_products = []
         total_price = 0.0
@@ -622,9 +611,10 @@ def calculate_with_gate(
                 }
                 
                 p_info = item_pricing.get(item_data['code'], {})
-                p_type = p_info.get('type', 'ton')
+                p_type = p_info.get('type', 'ton') # Default to ton if not specified in Item_Pricing
                 p_val = p_info.get('value', 0.0)
                 
+                # Even in Gate Pricing, if an item has a specific numeric override, use it
                 if p_type == 'direct':
                     estimated_total_price += (item_data['quantity'] * p_val)
                     item_data['standard_unit_price'] = p_val
