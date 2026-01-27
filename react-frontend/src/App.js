@@ -204,7 +204,6 @@ const PricingApp = () => {
           code: p.item_code,
           name: p.description,
           quantity: p.quantity,
-          uom: p.uom,
           weight: p.item_weight
         }));
         setProducts(productList);
@@ -492,7 +491,6 @@ const PricingApp = () => {
       is_active: 'Active',
       principal: '',
       brand: '',
-      uom: '',
       purchase_weight: '',
       transportation_cost: 'Ton'
     });
@@ -540,16 +538,6 @@ const PricingApp = () => {
                 onChange={(e) => setFormData({...formData, transportation_cost: e.target.value})}
                 className="w-full p-2 border rounded"
                 placeholder="Ton or numeric value"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold mb-1">Purchase Weight</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.purchase_weight}
-                onChange={(e) => setFormData({...formData, purchase_weight: e.target.value})}
-                className="w-full p-2 border rounded"
               />
             </div>
           </div>
@@ -792,7 +780,6 @@ const PricingApp = () => {
                       <th className="border p-2 text-left">Item Code</th>
                       <th className="border p-2 text-left">Item Name</th>
                       <th className="border p-2 text-left">Status</th>
-                      <th className="border p-2 text-left">Weight</th>
                       <th className="border p-2 text-left">Transport Cost</th>
                       <th className="border p-2 text-left">Actions</th>
                     </tr>
@@ -803,7 +790,6 @@ const PricingApp = () => {
                         <td className="border p-2">{item.item_code}</td>
                         <td className="border p-2">{item.item_name}</td>
                         <td className="border p-2">{item.is_active}</td>
-                        <td className="border p-2">{item.purchase_weight}</td>
                         <td className="border p-2">{item.transportation_cost}</td>
                         <td className="border p-2">
                           <div className="flex gap-2">
@@ -977,7 +963,6 @@ const PricingApp = () => {
                         <th className="border p-2 text-left">Item Code</th>
                         <th className="border p-2 text-left">Description</th>
                         <th className="border p-2 text-left">Quantity</th>
-                        <th className="border p-2 text-left">UoM</th>
                         <th className="border p-2 text-left">Weight</th>
                       </tr>
                     </thead>
@@ -987,7 +972,6 @@ const PricingApp = () => {
                           <td className="border p-2">{product.code}</td>
                           <td className="border p-2">{product.name}</td>
                           <td className="border p-2">{product.quantity}</td>
-                          <td className="border p-2">{product.uom}</td>
                           <td className="border p-2">{product.weight}</td>
                         </tr>
                       ))}
