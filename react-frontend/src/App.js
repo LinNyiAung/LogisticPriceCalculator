@@ -912,7 +912,7 @@ const PricingApp = () => {
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-6">
-              <h1 className="text-3xl font-bold text-gray-800">Transport Cost by Gate</h1>
+              <h1 className="text-3xl font-bold text-gray-800">Transportation Cost by Gate</h1>
               <button
                 onClick={() => setShowAddGateModal(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
@@ -1002,7 +1002,7 @@ const PricingApp = () => {
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-6">
-              <h1 className="text-3xl font-bold text-gray-800">Transport Cost by Item</h1>
+              <h1 className="text-3xl font-bold text-gray-800">Transportation Cost by Item</h1>
               <div className="flex gap-2">
                 {selectedGateForPricing && (
                   <>
