@@ -1274,10 +1274,10 @@ const PricingApp = () => {
                 </div>
               </div>
               <div className="bg-white rounded-lg border p-6 mb-6">
-                <h2 className="text-xl font-bold mb-4">Pricing Options</h2>
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Target Transport Price (Optional)</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Total Cost</label>
                     <input
                       type="number"
                       value={manualTotalPrice}
