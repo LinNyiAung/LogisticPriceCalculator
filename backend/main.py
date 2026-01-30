@@ -120,7 +120,6 @@ class ItemPricingData(BaseModel):
     transportation_cost: str
     original_item_code: Optional[str] = None
 
-# UPDATED: Added 'id' for updates
 class CalculationSaveRequest(BaseModel):
     id: Optional[int] = None
     name: str
@@ -173,7 +172,6 @@ def save_calculation(data: CalculationSaveRequest):
         pick_ids_json = json.dumps(data.pick_ids)
         created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # UPDATED LOGIC: Update if ID is present, else Insert
         if data.id:
             # Check existence
             cursor.execute("SELECT id FROM Calculation_History WHERE id = ?", (data.id,))
@@ -231,7 +229,7 @@ def get_history():
                 "gate_name": row[3],
                 "from_loc": row[4],
                 "to_loc": row[5],
-                "pick_ids": json.loads(row[6]), # Convert JSON string back to list
+                "pick_ids": json.loads(row[6]),
                 "manual_total_price": row[7],
                 "additional_charges": row[8],
                 "final_total_price": row[9]
@@ -672,7 +670,6 @@ def calculate_with_gate(
         gate_price = float(gate_row[3] or 0)
         
         # 3. Get Item Pricing
-        # UPDATED query to fetch only ID and Cost (Weight/Active were removed from table)
         cursor_log.execute("""
             SELECT [Item ID], [Transportation Cost] 
             FROM Item_Pricing 
@@ -788,7 +785,8 @@ def calculate_with_gate(
                     "price": price
                 })
 
-        calculated_products.sort(key=lambda x: x['name'])
+        # UPDATED: Sorted by code for consistency with products-by-ids
+        calculated_products.sort(key=lambda x: x['code'])
         
         total_price += add_charges
         estimated_total_price += add_charges
@@ -826,7 +824,6 @@ def get_pick_ids():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-# NEW: Aggregated endpoint for multiple IDs
 @app.get("/products-by-ids")
 def get_products_by_pick_ids(pick_ids: List[str] = Query(...)):
     """Get aggregated products for multiple Pick IDs"""
@@ -867,8 +864,6 @@ def get_products_by_pick_ids(pick_ids: List[str] = Query(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-# Keep single ID version for backward compatibility if needed, 
-# but the frontend will use the multi-version.
 @app.get("/products/{pick_id}")
 def get_products_by_pick_id(pick_id: str):
     """Get products from SQL Server (Single ID)"""

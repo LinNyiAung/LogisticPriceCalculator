@@ -7,10 +7,8 @@ const PricingApp = () => {
   const [currentPage, setCurrentPage] = useState('calculator');
   const [pickIds, setPickIds] = useState([]);
   
-  // CHANGED: Array instead of single string
   const [selectedPickIds, setSelectedPickIds] = useState([]);
   
-  // New Location/Gate State
   const [fromLocations, setFromLocations] = useState([]);
   const [toLocations, setToLocations] = useState([]);
   const [selectedFrom, setSelectedFrom] = useState('');
@@ -27,7 +25,6 @@ const PricingApp = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState(null);
 
-  // Data management states
   const [gateData, setGateData] = useState([]);
   const [selectedGateForPricing, setSelectedGateForPricing] = useState('');
   const [itemPricingData, setItemPricingData] = useState([]);
@@ -44,11 +41,10 @@ const PricingApp = () => {
   const [additionalCharges, setAdditionalCharges] = useState('');
   const [estimatedTotalPrice, setEstimatedTotalPrice] = useState(null);
 
-  // NEW: History State
   const [historyData, setHistoryData] = useState([]);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveName, setSaveName] = useState('');
-  const [currentHistoryId, setCurrentHistoryId] = useState(null); // Tracks loaded history item
+  const [currentHistoryId, setCurrentHistoryId] = useState(null);
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
@@ -121,7 +117,6 @@ const PricingApp = () => {
     }
   };
 
-  // NEW: Load History
   const loadHistory = async () => {
     try {
       const response = await fetch(`${API_URL}/history`);
@@ -133,8 +128,6 @@ const PricingApp = () => {
       showNotification(`Error loading history: ${error.message}`, 'error');
     }
   };
-
-  // --- Handlers ---
 
   const handleSaveCalculation = async (isUpdate = false) => {
     if (!saveName.trim()) {
@@ -164,7 +157,6 @@ const PricingApp = () => {
       if (response.ok) {
         showNotification(isUpdate ? 'Calculation updated successfully' : 'New calculation saved successfully', 'success');
         setShowSaveModal(false);
-        // If saved as new, stop tracking the old ID
         if (!isUpdate) {
              setSaveName('');
              setCurrentHistoryId(null);
@@ -182,7 +174,6 @@ const PricingApp = () => {
     try {
       setCurrentPage('calculator');
       
-      // Track that we are editing this record
       setCurrentHistoryId(record.id);
       setSaveName(record.name);
 
@@ -286,7 +277,6 @@ const PricingApp = () => {
     }
   };
 
-  // NEW: Fetch Aggregated Products
   const fetchAggregatedProducts = async (ids) => {
     if (ids.length === 0) {
       setProducts([]);
@@ -295,7 +285,6 @@ const PricingApp = () => {
     }
 
     try {
-      // Build query string like ?pick_ids=1&pick_ids=2...
       const queryString = ids.map(id => `pick_ids=${encodeURIComponent(id)}`).join('&');
       const response = await fetch(`${API_URL}/products-by-ids?${queryString}`);
       
@@ -311,11 +300,9 @@ const PricingApp = () => {
     }
   };
 
-  // NEW: Handle Adding Pick IDs
   const handleAddPickId = (pickId) => {
     if (!pickId) return;
     
-    // Don't add if already exists
     if (selectedPickIds.includes(pickId)) {
       showNotification('Pick ID already selected', 'info');
       return;
@@ -324,8 +311,6 @@ const PricingApp = () => {
     const newSelection = [...selectedPickIds, pickId];
     setSelectedPickIds(newSelection);
     
-    // Reset subsequent selections but DO NOT clear currentHistoryId
-    // User might want to update the existing record with a new pick ID
     setSelectedFrom('');
     setSelectedTo('');
     setSelectedGate('');
@@ -339,12 +324,10 @@ const PricingApp = () => {
     fetchAggregatedProducts(newSelection);
   };
 
-  // NEW: Handle Removing Pick IDs
   const handleRemovePickId = (pickId) => {
     const newSelection = selectedPickIds.filter(id => id !== pickId);
     setSelectedPickIds(newSelection);
     
-    // Reset calculations
     setCalculatedProducts([]);
     setCalculatedTotalPrice(null);
     setEstimatedTotalPrice(null);
@@ -398,10 +381,8 @@ const PricingApp = () => {
 
     setIsLoading(true);
     try {
-      // Create query string for multiple pick_ids
       let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(selectedGate)}`;
       
-      // Append each pick_id
       selectedPickIds.forEach(id => {
         url += `&pick_ids=${encodeURIComponent(id)}`;
       });
@@ -435,8 +416,6 @@ const PricingApp = () => {
     }
   };
 
-  // --- CRUD Operations ---
-
   const saveGate = async (gateData) => {
     try {
       const payload = {
@@ -452,7 +431,7 @@ const PricingApp = () => {
       if (response.ok) {
         showNotification('Gate saved successfully', 'success');
         await loadGates();
-        await loadFromLocations(); // Refresh locations list
+        await loadFromLocations();
         setShowAddGateModal(false);
         setEditingGate(null);
         setOriginalGateName(null);
@@ -557,14 +536,11 @@ const PricingApp = () => {
     }
   }, [selectedGateForPricing]);
 
-  // Load history when tab is clicked
   useEffect(() => {
     if (currentPage === 'history') {
       loadHistory();
     }
   }, [currentPage]);
-
-  // --- Components ---
 
   const GateModal = ({ gate, onSave, onClose }) => {
     const [formData, setFormData] = useState(gate || {
@@ -700,7 +676,6 @@ const PricingApp = () => {
     );
   };
 
-  // UPDATED: Save Modal to show Update vs New
   const SaveModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -722,23 +697,21 @@ const PricingApp = () => {
 
         <div className="flex flex-col gap-3 mt-6">
           {currentHistoryId ? (
-            // If editing an existing record, show two options
             <div className="flex gap-2">
                 <button
-                    onClick={() => handleSaveCalculation(true)} // isUpdate = true
+                    onClick={() => handleSaveCalculation(true)} 
                     className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
                 >
                     Update Existing
                 </button>
                 <button
-                    onClick={() => handleSaveCalculation(false)} // isUpdate = false
+                    onClick={() => handleSaveCalculation(false)}
                     className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700"
                 >
                     Save as New
                 </button>
             </div>
           ) : (
-            // If new, just show Save
             <button
                 onClick={() => handleSaveCalculation(false)}
                 className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
@@ -1118,7 +1091,12 @@ const PricingApp = () => {
     );
   }
 
-  // Calculator View
+  // --- Calculator View ---
+
+  // Determine if we are showing calculated results or just raw products
+  const hasCalculated = calculatedProducts.length > 0;
+  const tableData = hasCalculated ? calculatedProducts : products;
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto">
@@ -1133,26 +1111,24 @@ const PricingApp = () => {
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h1 className="text-3xl font-bold text-gray-800 mb-6">Logistic Pricing Calculator</h1>
           
-          {/* UPDATED: Multiple Pick ID Selection */}
           <div className="bg-white rounded-lg border p-6 mb-6">
             <h2 className="text-xl font-bold mb-4">Select Pick IDs</h2>
             
             <div className="mb-4">
                <select
                 onChange={(e) => handleAddPickId(e.target.value)}
-                value="" // Always reset so same value can be re-selected if needed (though filtered out)
+                value=""
                 className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">-- Add a Pick ID --</option>
                 {pickIds
-                  .filter(id => !selectedPickIds.includes(id)) // Filter out already selected
+                  .filter(id => !selectedPickIds.includes(id)) 
                   .map((pickId) => (
                     <option key={pickId} value={pickId}>{pickId}</option>
                   ))}
               </select>
             </div>
 
-            {/* Tags for selected IDs */}
             <div className="flex flex-wrap gap-2">
               {selectedPickIds.length === 0 && (
                 <p className="text-gray-500 text-sm italic">No Pick IDs selected</p>
@@ -1173,7 +1149,6 @@ const PricingApp = () => {
           
           {products.length > 0 && (
             <>
-              {/* Select From */}
               <div className="bg-white rounded-lg border p-6 mb-6">
                 <h2 className="text-xl font-bold mb-4">Select From</h2>
                 <select
@@ -1190,7 +1165,6 @@ const PricingApp = () => {
                 </select>
               </div>
 
-              {/* Select To (Only if From is selected) */}
               {selectedFrom && (
                 <div className="bg-white rounded-lg border p-6 mb-6">
                   <h2 className="text-xl font-bold mb-4">Select To</h2>
@@ -1209,7 +1183,6 @@ const PricingApp = () => {
                 </div>
               )}
 
-              {/* Select Gate (Only if To is selected) */}
               {selectedTo && (
                 <div className="bg-white rounded-lg border p-6 mb-6">
                   <h2 className="text-xl font-bold mb-4">Select Gate</h2>
@@ -1234,7 +1207,6 @@ const PricingApp = () => {
             </>
           )}
 
-          {/* Rest of the Calculator (Unchanged in logic, just re-rendered) */}
           {selectedGate && (
               <div className="bg-blue-50 rounded-lg border-2 border-blue-300 p-6 mb-6">
               <div className="flex items-center justify-between">
@@ -1256,8 +1228,11 @@ const PricingApp = () => {
 
           {products.length > 0 && (
             <>
+              {/* Unified Product Table */}
               <div className="bg-white rounded-lg border p-6 mb-6">
-                <h2 className="text-xl font-bold mb-4">Products (Aggregated)</h2>
+                <h2 className="text-xl font-bold mb-4">
+                    {hasCalculated ? "Calculated Results" : "Product Details"}
+                </h2>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse border">
                     <thead className="bg-gray-100">
@@ -1266,15 +1241,25 @@ const PricingApp = () => {
                         <th className="border p-2 text-left">Description</th>
                         <th className="border p-2 text-left">Quantity</th>
                         <th className="border p-2 text-left">Weight</th>
+                        {/* Conditionally render Price Header */}
+                        {hasCalculated && (
+                            <th className="border p-2 text-left">Price (MMK)</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
-                      {products.map((product, index) => (
+                      {tableData.map((product, index) => (
                         <tr key={index}>
                           <td className="border p-2">{product.code}</td>
                           <td className="border p-2">{product.name}</td>
                           <td className="border p-2">{product.quantity}</td>
-                          <td className="border p-2">{product.weight}</td>
+                          <td className="border p-2">{product.weight.toFixed(2)}</td>
+                          {/* Conditionally render Price Cell */}
+                          {hasCalculated && (
+                            <td className="border p-2 font-semibold">
+                                {product.price !== undefined ? product.price.toFixed(2) : '-'}
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -1326,7 +1311,6 @@ const PricingApp = () => {
                 </div>
               </div>
 
-               {/* Button Group: Calculate + Save */}
                <div className="flex gap-4 mb-6">
                   <button
                     onClick={calculatePrices}
@@ -1337,7 +1321,6 @@ const PricingApp = () => {
                     {isLoading ? 'Calculating...' : 'Calculate Prices'}
                   </button>
                   
-                  {/* Save Button - Only shows if results exist */}
                   {calculatedTotalPrice !== null && (
                     <button
                       onClick={() => setShowSaveModal(true)}
@@ -1351,35 +1334,12 @@ const PricingApp = () => {
 
               </>
             )}
-             {calculatedProducts.length > 0 && (
+
+             {calculatedTotalPrice !== null && (
                 <div className="bg-white rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4">Calculated Results</h2>
-                  <table className="w-full border-collapse border">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="border p-3 text-left">Item Code</th>
-                          <th className="border p-3 text-left">Description</th>
-                          <th className="border p-3 text-left">Quantity</th>
-                          <th className="border p-3 text-left">Weight</th>
-                          <th className="border p-3 text-left">Price (MMK)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {calculatedProducts.map((product, index) => (
-                          <tr key={index}>
-                            <td className="border p-3">{product.code}</td>
-                            <td className="border p-3">{product.name}</td>
-                            <td className="border p-3">{product.quantity}</td>
-                            <td className="border p-3">{product.weight.toFixed(2)}</td>
-                            <td className="border p-3 font-semibold">{product.price.toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                  </table>
-                   {calculatedTotalPrice !== null && (
-                    <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                  <h2 className="text-xl font-bold mb-4">Total Summary</h2>
+                   <div className="mt-4 p-4 bg-blue-50 rounded-lg">
                       <div className="flex flex-col gap-2 items-end">
-                        {/* Show breakdown if additional charges exist */}
                         {additionalCharges && (
                           <>
                             <div className="flex justify-between w-full md:w-1/3 text-gray-600">
@@ -1402,14 +1362,11 @@ const PricingApp = () => {
                         </div>
                       </div>
                     </div>
-                  )}
                 </div>
              )}
         </div>
-        {/* Save Modal Component Rendered Here */}
         {showSaveModal && <SaveModal />}
         
-        {/* Confirm Dialog Rendered Here */}
         {confirmDialog && (
             <ConfirmDialog
               message={confirmDialog.message}
