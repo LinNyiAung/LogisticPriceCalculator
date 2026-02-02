@@ -21,7 +21,9 @@ const PricingApp = () => {
   const [totalWeight, setTotalWeight] = useState(0);
   const [calculationType, setCalculationType] = useState('');
   const [calculatedProducts, setCalculatedProducts] = useState([]);
-  const [calculatedTotalPrice, setCalculatedTotalPrice] = useState(null);
+  
+  // Renamed state variables
+  const [calculatedTotalCost, setCalculatedTotalCost] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState(null);
 
@@ -37,9 +39,10 @@ const PricingApp = () => {
   const [originalGateName, setOriginalGateName] = useState(null);
   const [originalItemCode, setOriginalItemCode] = useState(null);
 
-  const [manualTotalPrice, setManualTotalPrice] = useState('');
+  // Renamed manual inputs
+  const [manualTotalCost, setManualTotalCost] = useState('');
   const [additionalCharges, setAdditionalCharges] = useState('');
-  const [estimatedTotalPrice, setEstimatedTotalPrice] = useState(null);
+  const [estimatedTotalCost, setEstimatedTotalCost] = useState(null);
 
   const [historyData, setHistoryData] = useState([]);
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -50,7 +53,6 @@ const PricingApp = () => {
   const getErrorMessage = (error) => {
     if (!error?.detail) return 'An unknown error occurred';
     if (Array.isArray(error.detail)) {
-        // Handle FastAPI validation error array
         return error.detail.map(e => `${e.loc.slice(-1)}: ${e.msg}`).join(', ');
     }
     if (typeof error.detail === 'object') {
@@ -156,9 +158,9 @@ const PricingApp = () => {
         from_loc: selectedFrom,
         to_loc: selectedTo,
         pick_ids: selectedPickIds,
-        manual_total_price: manualTotalPrice ? parseFloat(manualTotalPrice) : null,
+        manual_total_cost: manualTotalCost ? parseFloat(manualTotalCost) : null,
         additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0,
-        final_total_price: calculatedTotalPrice
+        final_total_cost: calculatedTotalCost
       };
 
       const response = await fetch(`${API_URL}/history/save`, {
@@ -200,12 +202,12 @@ const PricingApp = () => {
       setSelectedTo(record.to_loc);
       setSelectedGate(record.gate_name);
       
-      setManualTotalPrice(record.manual_total_price || '');
+      setManualTotalCost(record.manual_total_cost || '');
       setAdditionalCharges(record.additional_charges || '');
       
       setCalculatedProducts([]);
-      setCalculatedTotalPrice(null);
-      setEstimatedTotalPrice(null);
+      setCalculatedTotalCost(null);
+      setEstimatedTotalCost(null);
 
       showNotification(`Loaded "${record.name}". Ready to edit.`, 'info');
       
@@ -241,7 +243,7 @@ const PricingApp = () => {
         const a = document.createElement('a');
         a.href = url;
         const contentDisposition = response.headers.get('Content-Disposition');
-        let filename = 'item_pricing.xlsx';
+        let filename = 'item_costing.xlsx';
         if (contentDisposition) {
           const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
           if (filenameMatch) filename = filenameMatch[1];
@@ -330,9 +332,9 @@ const PricingApp = () => {
     setSelectedGate('');
     setCalculationType('');
     setCalculatedProducts([]);
-    setCalculatedTotalPrice(null);
-    setEstimatedTotalPrice(null);
-    setManualTotalPrice('');
+    setCalculatedTotalCost(null);
+    setEstimatedTotalCost(null);
+    setManualTotalCost('');
     setAdditionalCharges('');
 
     fetchAggregatedProducts(newSelection);
@@ -343,8 +345,8 @@ const PricingApp = () => {
     setSelectedPickIds(newSelection);
     
     setCalculatedProducts([]);
-    setCalculatedTotalPrice(null);
-    setEstimatedTotalPrice(null);
+    setCalculatedTotalCost(null);
+    setEstimatedTotalCost(null);
     
     fetchAggregatedProducts(newSelection);
   };
@@ -354,9 +356,9 @@ const PricingApp = () => {
     setSelectedTo('');
     setSelectedGate('');
     setCalculatedProducts([]);
-    setCalculatedTotalPrice(null);
-    setEstimatedTotalPrice(null);
-    setManualTotalPrice('');
+    setCalculatedTotalCost(null);
+    setEstimatedTotalCost(null);
+    setManualTotalCost('');
     
     if (val) {
       loadToLocations(val);
@@ -369,17 +371,17 @@ const PricingApp = () => {
     setSelectedTo(val);
     setSelectedGate('');
     setCalculatedProducts([]);
-    setCalculatedTotalPrice(null);
-    setEstimatedTotalPrice(null);
-    setManualTotalPrice('');
+    setCalculatedTotalCost(null);
+    setEstimatedTotalCost(null);
+    setManualTotalCost('');
   };
 
   const handleGateChange = (gateName) => {
     setSelectedGate(gateName);
     setCalculatedProducts([]);
-    setCalculatedTotalPrice(null);
-    setEstimatedTotalPrice(null);
-    setManualTotalPrice('');
+    setCalculatedTotalCost(null);
+    setEstimatedTotalCost(null);
+    setManualTotalCost('');
     
     const gateInfo = gates.find(g => g.gate_name === gateName);
     if (gateInfo) {
@@ -387,7 +389,7 @@ const PricingApp = () => {
     }
   };
 
-  const calculatePrices = async () => {
+  const calculateCosts = async () => {
     if (selectedPickIds.length === 0 || !selectedGate) {
       showNotification('Please select Pick ID(s), From, To, and Gate', 'error');
       return;
@@ -401,8 +403,8 @@ const PricingApp = () => {
         url += `&pick_ids=${encodeURIComponent(id)}`;
       });
 
-      if (manualTotalPrice) {
-        url += `&manual_total_price=${manualTotalPrice}`;
+      if (manualTotalCost) {
+        url += `&manual_total_cost=${manualTotalCost}`;
       }
       if (additionalCharges) {
         url += `&additional_charges=${additionalCharges}`;
@@ -416,8 +418,8 @@ const PricingApp = () => {
       if (response.ok) {
         const data = await response.json();
         setCalculatedProducts(data.calculated_products);
-        setCalculatedTotalPrice(data.total_price);
-        setEstimatedTotalPrice(data.estimated_total_price);
+        setCalculatedTotalCost(data.total_cost);
+        setEstimatedTotalCost(data.estimated_total_cost);
         showNotification('Calculation completed successfully', 'success');
       } else {
         const error = await response.json();
@@ -432,25 +434,22 @@ const PricingApp = () => {
 
   const saveGate = async (gateData) => {
     // --- VALIDATION START ---
-    // Check if fields have values (handling potential empty strings or nulls)
     const hasUOM = gateData.uom && gateData.uom.trim().length > 0;
     const hasUnit = gateData.unit !== '' && gateData.unit !== null && gateData.unit !== undefined;
-    const hasPrice = gateData.price_per_unit !== '' && gateData.price_per_unit !== null && gateData.price_per_unit !== undefined;
+    // Renamed price_per_unit to cost_per_unit
+    const hasCost = gateData.cost_per_unit !== '' && gateData.cost_per_unit !== null && gateData.cost_per_unit !== undefined;
 
-    // If any one of them is present, ALL must be present.
-    // We check if the "state of presence" is mixed (some true, some false).
-    if ((hasUOM || hasUnit || hasPrice) && !(hasUOM && hasUnit && hasPrice)) {
-      showNotification('Validation Error: UOM, Unit, and Price Per Unit must either ALL be filled or ALL be empty.', 'error');
-      return; // Stop execution
+    if ((hasUOM || hasUnit || hasCost) && !(hasUOM && hasUnit && hasCost)) {
+      showNotification('Validation Error: UOM, Unit, and Cost Per Unit must either ALL be filled or ALL be empty.', 'error');
+      return;
     }
     // --- VALIDATION END ---
 
     try {
-      // Sanitize inputs. Convert empty strings to null for numeric fields.
       const payload = {
         ...gateData,
         unit: gateData.unit === '' ? null : parseInt(gateData.unit),
-        price_per_unit: gateData.price_per_unit === '' ? null : parseFloat(gateData.price_per_unit),
+        cost_per_unit: gateData.cost_per_unit === '' ? null : parseFloat(gateData.cost_per_unit),
         original_gate_name: originalGateName
       };
 
@@ -478,7 +477,7 @@ const PricingApp = () => {
 
   const deleteGate = async (gateId) => {
     setConfirmDialog({
-      message: `Are you sure you want to delete this gate? All associated pricing will also be deleted.`,
+      message: `Are you sure you want to delete this gate? All associated costs will also be deleted.`,
       onConfirm: async () => {
         try {
           const response = await fetch(`${API_URL}/admin/gates/${gateId}`, {
@@ -575,14 +574,13 @@ const PricingApp = () => {
   }, [currentPage]);
 
   const GateModal = ({ gate, onSave, onClose }) => {
-    // FIX: Initialize with empty strings if values are null to prevent React uncontrolled input warnings
     const [formData, setFormData] = useState(gate || {
       gate_name: '',
       from_loc: '',
       to_loc: '',
       uom: '',
       unit: '',
-      price_per_unit: ''
+      cost_per_unit: '' // Renamed from price_per_unit
     });
 
     return (
@@ -642,11 +640,11 @@ const PricingApp = () => {
                 </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold mb-1">Price Per Unit</label>
+              <label className="block text-sm font-semibold mb-1">Cost Per Unit</label>
               <input
                 type="number"
-                value={formData.price_per_unit ?? ''}
-                onChange={(e) => setFormData({...formData, price_per_unit: e.target.value})}
+                value={formData.cost_per_unit ?? ''}
+                onChange={(e) => setFormData({...formData, cost_per_unit: e.target.value})}
                 className="w-full p-2 border rounded"
               />
             </div>
@@ -878,7 +876,7 @@ const PricingApp = () => {
                     <th className="border p-3 text-left">Name</th>
                     <th className="border p-3 text-left">Route</th>
                     <th className="border p-3 text-left">Pick IDs</th>
-                    <th className="border p-3 text-right">Total (MMK)</th>
+                    <th className="border p-3 text-right">Total Cost (MMK)</th>
                     <th className="border p-3 text-center">Actions</th>
                   </tr>
                 </thead>
@@ -898,7 +896,8 @@ const PricingApp = () => {
                           {record.pick_ids.length} ID(s): {record.pick_ids.join(', ')}
                         </td>
                         <td className="border p-3 text-right font-bold text-blue-600">
-                          {record.final_total_price?.toLocaleString()}
+                          {/* Updated field to final_total_cost */}
+                          {record.final_total_cost?.toLocaleString()}
                         </td>
                         <td className="border p-3 text-center">
                           <div className="flex justify-center gap-2">
@@ -960,7 +959,7 @@ const PricingApp = () => {
                     <th className="border p-3 text-left">To</th>
                     <th className="border p-3 text-left">UOM</th>
                     <th className="border p-3 text-left">Unit</th>
-                    <th className="border p-3 text-left">Price Per Unit</th>
+                    <th className="border p-3 text-left">Cost Per Unit</th>
                     <th className="border p-3 text-left">Actions</th>
                   </tr>
                 </thead>
@@ -972,7 +971,7 @@ const PricingApp = () => {
                       <td className="border p-3">{gate.to_loc}</td>
                       <td className="border p-3">{gate.uom || '-'}</td>
                       <td className="border p-3">{gate.unit || '-'}</td>
-                      <td className="border p-3">{gate.price_per_unit || '-'}</td>
+                      <td className="border p-3">{gate.cost_per_unit || '-'}</td>
                       <td className="border p-3">
                         <div className="flex gap-2">
                           <button
@@ -1169,7 +1168,7 @@ const PricingApp = () => {
         )}
         {renderNavigation()}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6">Logistic Pricing Calculator</h1>
+          <h1 className="text-3xl font-bold text-gray-800 mb-6">Logistic Cost Calculator</h1>
           
           <div className="bg-white rounded-lg border p-6 mb-6">
             <h2 className="text-xl font-bold mb-4">Select Pick IDs</h2>
@@ -1301,9 +1300,9 @@ const PricingApp = () => {
                         <th className="border p-2 text-left">Description</th>
                         <th className="border p-2 text-left">Quantity</th>
                         <th className="border p-2 text-left">Weight</th>
-                        {/* Conditionally render Price Header */}
+                        {/* Conditionally render Cost Header */}
                         {hasCalculated && (
-                            <th className="border p-2 text-left">Price (MMK)</th>
+                            <th className="border p-2 text-left">Cost (MMK)</th>
                         )}
                       </tr>
                     </thead>
@@ -1314,10 +1313,11 @@ const PricingApp = () => {
                           <td className="border p-2">{product.name}</td>
                           <td className="border p-2">{product.quantity}</td>
                           <td className="border p-2">{product.weight.toFixed(2)}</td>
-                          {/* Conditionally render Price Cell */}
+                          {/* Conditionally render Cost Cell */}
                           {hasCalculated && (
                             <td className="border p-2 font-semibold">
-                                {product.price !== undefined ? product.price.toFixed(2) : '-'}
+                                {/* Changed prop from price to total_cost */}
+                                {product.total_cost !== undefined ? product.total_cost.toFixed(2) : '-'}
                             </td>
                           )}
                         </tr>
@@ -1337,15 +1337,15 @@ const PricingApp = () => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Total Cost</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Total Cost (Manual Override)</label>
                     <input
                       type="number"
-                      value={manualTotalPrice}
-                      onChange={(e) => setManualTotalPrice(e.target.value)}
+                      value={manualTotalCost}
+                      onChange={(e) => setManualTotalCost(e.target.value)}
                       placeholder="Enter base transport amount..."
                       className="w-full p-3 border rounded-lg"
                     />
-                    <p className="text-xs text-gray-500 mt-1">Overrides calculated item prices.</p>
+                    <p className="text-xs text-gray-500 mt-1">Overrides calculated item costs.</p>
                   </div>
                   
                   <div>
@@ -1360,11 +1360,11 @@ const PricingApp = () => {
                     <p className="text-xs text-gray-500 mt-1">Added to the final total.</p>
                   </div>
 
-                  {estimatedTotalPrice !== null && (manualTotalPrice || additionalCharges) && (
+                  {estimatedTotalCost !== null && (manualTotalCost || additionalCharges) && (
                     <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col justify-center col-span-1 md:col-span-2">
-                      <span className="text-sm text-gray-600">Standard Estimated Total (Inc. Extras):</span>
+                      <span className="text-sm text-gray-600">Standard Estimated Total Cost (Inc. Extras):</span>
                       <span className="text-xl font-bold text-gray-700">
-                        {estimatedTotalPrice.toLocaleString()} MMK
+                        {estimatedTotalCost.toLocaleString()} MMK
                       </span>
                     </div>
                   )}
@@ -1373,15 +1373,15 @@ const PricingApp = () => {
 
                <div className="flex gap-4 mb-6">
                   <button
-                    onClick={calculatePrices}
+                    onClick={calculateCosts}
                     disabled={isLoading}
                     className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"
                   >
                     <Calculator size={20} />
-                    {isLoading ? 'Calculating...' : 'Calculate Prices'}
+                    {isLoading ? 'Calculating...' : 'Calculate Costs'}
                   </button>
                   
-                  {calculatedTotalPrice !== null && (
+                  {calculatedTotalCost !== null && (
                     <button
                       onClick={() => setShowSaveModal(true)}
                       className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
@@ -1395,7 +1395,7 @@ const PricingApp = () => {
               </>
             )}
 
-             {calculatedTotalPrice !== null && (
+             {calculatedTotalCost !== null && (
                 <div className="bg-white rounded-lg border p-6">
                   <h2 className="text-xl font-bold mb-4">Total Summary</h2>
                    <div className="mt-4 p-4 bg-blue-50 rounded-lg">
@@ -1404,7 +1404,7 @@ const PricingApp = () => {
                           <>
                             <div className="flex justify-between w-full md:w-1/3 text-gray-600">
                               <span>Subtotal (Transport):</span>
-                              <span>{(calculatedTotalPrice - (parseFloat(additionalCharges) || 0)).toFixed(2)} MMK</span>
+                              <span>{(calculatedTotalCost - (parseFloat(additionalCharges) || 0)).toFixed(2)} MMK</span>
                             </div>
                             <div className="flex justify-between w-full md:w-1/3 text-gray-600">
                               <span>Additional Charges:</span>
@@ -1415,9 +1415,9 @@ const PricingApp = () => {
                         )}
                         
                         <div className="flex justify-between w-full md:w-1/3 items-center">
-                          <span className="text-lg font-bold">Total Price:</span>
+                          <span className="text-lg font-bold">Total Cost:</span>
                           <span className="text-2xl font-bold text-blue-600">
-                            {calculatedTotalPrice.toFixed(2)} MMK
+                            {calculatedTotalCost.toFixed(2)} MMK
                           </span>
                         </div>
                       </div>

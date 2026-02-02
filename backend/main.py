@@ -55,7 +55,7 @@ def startup_db():
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # UPDATED: Added UOM, Unit and renamed Gate Price to Price Per Unit
+        # Gate table uses "Cost Per Unit"
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Gate (
                 [Gate ID] INTEGER PRIMARY KEY,
@@ -64,7 +64,7 @@ def startup_db():
                 [To] TEXT,
                 [UOM] TEXT,
                 [Unit] INTEGER,
-                [Price Per Unit] REAL
+                [Cost Per Unit] REAL
             )
         """)
         
@@ -81,7 +81,7 @@ def startup_db():
             )
         """)
 
-        # Calculation History Table
+        # Calculation History Table - Renamed price columns to cost
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Calculation_History (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,9 +91,9 @@ def startup_db():
                 [from_loc] TEXT,
                 [to_loc] TEXT,
                 [pick_ids] TEXT, -- Stored as JSON string
-                [manual_total_price] REAL,
+                [manual_total_cost] REAL,
                 [additional_charges] REAL,
-                [final_total_price] REAL
+                [final_total_cost] REAL
             )
         """)
         
@@ -110,9 +110,9 @@ class GateData(BaseModel):
     gate_name: str
     from_loc: str  
     to_loc: str
-    uom: Optional[str] = None       # NEW
-    unit: Optional[int] = None      # NEW
-    price_per_unit: Optional[float] = None # RENAMED from price
+    uom: Optional[str] = None       
+    unit: Optional[int] = None      
+    cost_per_unit: Optional[float] = None 
     original_gate_name: Optional[str] = None
 
 class ItemPricingData(BaseModel):
@@ -125,6 +125,7 @@ class ItemPricingData(BaseModel):
     transportation_cost: str
     original_item_code: Optional[str] = None
 
+# Updated Model with Cost fields
 class CalculationSaveRequest(BaseModel):
     id: Optional[int] = None
     name: str
@@ -132,24 +133,23 @@ class CalculationSaveRequest(BaseModel):
     from_loc: str
     to_loc: str
     pick_ids: List[str]
-    manual_total_price: Optional[float] = None
+    manual_total_cost: Optional[float] = None
     additional_charges: Optional[float] = 0.0
-    final_total_price: float
+    final_total_cost: float
 
 # --- Helper Functions ---
 
 def determine_calculation_type_sql(gate_id):
     """
-    Determines calculation type based on Price Per Unit.
-    If Price Per Unit exists and > 0 -> gate_pricing
+    Determines calculation type based on Cost Per Unit.
+    If Cost Per Unit exists and > 0 -> gate_pricing
     Else -> direct_pricing
     """
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # UPDATED: Checking [Price Per Unit]
-        cursor.execute("SELECT [Price Per Unit] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
+        cursor.execute("SELECT [Cost Per Unit] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
         row = cursor.fetchone()
         conn.close()
 
@@ -185,26 +185,28 @@ def save_calculation(data: CalculationSaveRequest):
                 conn.close()
                 raise HTTPException(status_code=404, detail="Record to update not found")
 
+            # Updated query with cost columns
             cursor.execute("""
                 UPDATE Calculation_History 
                 SET created_at = ?, name = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
-                    pick_ids = ?, manual_total_price = ?, additional_charges = ?, final_total_price = ?
+                    pick_ids = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?
                 WHERE id = ?
             """, (
                 created_at, data.name, data.gate_name, data.from_loc, data.to_loc,
-                pick_ids_json, data.manual_total_price, data.additional_charges, 
-                data.final_total_price, data.id
+                pick_ids_json, data.manual_total_cost, data.additional_charges, 
+                data.final_total_cost, data.id
             ))
             message = "Calculation updated successfully"
         else:
+            # Updated query with cost columns
             cursor.execute("""
                 INSERT INTO Calculation_History 
                 ([created_at], [name], [gate_name], [from_loc], [to_loc], 
-                 [pick_ids], [manual_total_price], [additional_charges], [final_total_price])
+                 [pick_ids], [manual_total_cost], [additional_charges], [final_total_cost])
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 created_at, data.name, data.gate_name, data.from_loc, data.to_loc,
-                pick_ids_json, data.manual_total_price, data.additional_charges, data.final_total_price
+                pick_ids_json, data.manual_total_cost, data.additional_charges, data.final_total_cost
             ))
             message = "Calculation saved successfully"
         
@@ -236,9 +238,10 @@ def get_history():
                 "from_loc": row[4],
                 "to_loc": row[5],
                 "pick_ids": json.loads(row[6]),
-                "manual_total_price": row[7],
+                # Map DB columns to new keys
+                "manual_total_cost": row[7],
                 "additional_charges": row[8],
-                "final_total_price": row[9]
+                "final_total_cost": row[9]
             })
             
         conn.close()
@@ -421,8 +424,7 @@ def get_all_gates():
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # UPDATED: Select UOM, Unit, Price Per Unit
-        cursor.execute("SELECT [Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Price Per Unit] FROM Gate")
+        cursor.execute("SELECT [Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost Per Unit] FROM Gate")
         rows = cursor.fetchall()
         
         gates = []
@@ -435,9 +437,9 @@ def get_all_gates():
                 "gate_name": row[1],
                 "from_loc": row[2], 
                 "to_loc": row[3],
-                "uom": row[4],         # NEW
-                "unit": row[5],        # NEW
-                "price_per_unit": float(row[6]) if row[6] is not None else None, # RENAMED
+                "uom": row[4],         
+                "unit": row[5],        
+                "cost_per_unit": float(row[6]) if row[6] is not None else None, 
                 "calculation_type": calc_type
             })
         
@@ -454,21 +456,19 @@ def save_gate(gate_data: GateData):
         cursor = conn.cursor()
 
         if gate_data.original_gate_name:
-            # UPDATED: Update UOM, Unit, Price Per Unit
             cursor.execute("""
                 UPDATE Gate 
-                SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Price Per Unit] = ?
+                SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Cost Per Unit] = ?
                 WHERE [Gate Name] = ?
             """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, 
-                  gate_data.uom, gate_data.unit, gate_data.price_per_unit, 
+                  gate_data.uom, gate_data.unit, gate_data.cost_per_unit, 
                   gate_data.original_gate_name))
         else:
-            # UPDATED: Insert UOM, Unit, Price Per Unit
             cursor.execute("""
-                INSERT INTO Gate ([Gate Name], [From], [To], [UOM], [Unit], [Price Per Unit])
+                INSERT INTO Gate ([Gate Name], [From], [To], [UOM], [Unit], [Cost Per Unit])
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, 
-                  gate_data.uom, gate_data.unit, gate_data.price_per_unit))
+                  gate_data.uom, gate_data.unit, gate_data.cost_per_unit))
         
         conn.commit()
         conn.close()
@@ -632,10 +632,10 @@ def get_to_locations(from_loc: Optional[str] = None):
 def calculate_with_gate(
     gate_name: str, 
     pick_ids: List[str] = Query(...), 
-    manual_total_price: Optional[float] = None,
+    manual_total_cost: Optional[float] = None, # Renamed
     additional_charges: Optional[float] = 0.0
 ):
-    """Calculate prices for multiple Pick IDs"""
+    """Calculate costs for multiple Pick IDs"""
     try:
         add_charges = float(additional_charges) if additional_charges is not None else 0.0
 
@@ -668,8 +668,7 @@ def calculate_with_gate(
         try:
             conn_log = get_logistic_connection()
             cursor_log = conn_log.cursor()
-            # UPDATED: Select [Price Per Unit]
-            cursor_log.execute("SELECT [Gate ID], [From], [To], [Price Per Unit] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
+            cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost Per Unit] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
             gate_row = cursor_log.fetchone()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching gate config: {str(e)}")
@@ -681,8 +680,7 @@ def calculate_with_gate(
         gate_id = gate_row[0]
         from_loc = gate_row[1]
         to_loc = gate_row[2]
-        # UPDATED: Use price_per_unit variable (replaces gate_price in logic)
-        price_per_unit = float(gate_row[3] or 0)
+        cost_per_unit = float(gate_row[3] or 0)
         
         # 3. Get Item Pricing
         cursor_log.execute("""
@@ -707,15 +705,14 @@ def calculate_with_gate(
                 except:
                     item_pricing[i_code] = {'type': 'unknown', 'value': None}
 
-        # Determine type based on price_per_unit
-        if price_per_unit > 0:
+        if cost_per_unit > 0:
             calc_type = "gate_pricing"
         else:
             calc_type = "direct_pricing"
 
         calculated_products = []
-        total_price = 0.0
-        estimated_total_price = 0.0
+        total_cost = 0.0
+        estimated_total_cost = 0.0
 
         if calc_type == "gate_pricing":
             ton_items = []
@@ -736,44 +733,43 @@ def calculate_with_gate(
                 p_val = p_info.get('value', 0.0)
                 
                 if p_type == 'direct':
-                    estimated_total_price += (item_data['quantity'] * p_val)
-                    item_data['standard_unit_price'] = p_val
+                    estimated_total_cost += (item_data['quantity'] * p_val)
+                    item_data['standard_unit_cost'] = p_val
                     direct_items.append(item_data)
                 else:
-                    # UPDATED LOGIC: Use price_per_unit instead of gate_price
-                    cost = item_data['weight'] * price_per_unit
-                    estimated_total_price += cost
+                    cost = item_data['weight'] * cost_per_unit
+                    estimated_total_cost += cost
                     ton_cost_total += cost
-                    item_data['price'] = cost
+                    item_data['total_cost'] = cost
                     ton_items.append(item_data)
 
-            direct_unit_price = 0.0
-            if manual_total_price is not None:
-                remainder = manual_total_price - ton_cost_total
+            direct_unit_cost = 0.0
+            if manual_total_cost is not None:
+                remainder = manual_total_cost - ton_cost_total
                 total_direct_qty = sum(item['quantity'] for item in direct_items)
                 if total_direct_qty > 0:
-                    direct_unit_price = remainder / total_direct_qty
-                total_price = manual_total_price
+                    direct_unit_cost = remainder / total_direct_qty
+                total_cost = manual_total_cost
             else:
-                total_price = estimated_total_price
+                total_cost = estimated_total_cost
 
             for item in ton_items:
                 calculated_products.append({
                     **item,
                     "calculation_type": "weight",
-                    "price_per_one": None,
-                    "price": item['price'] 
+                    "unit_cost": None,
+                    "total_cost": item['total_cost'] 
                 })
             
             for item in direct_items:
-                final_unit_price = direct_unit_price if manual_total_price is not None else item['standard_unit_price']
-                final_item_price = item['quantity'] * final_unit_price
+                final_unit_cost = direct_unit_cost if manual_total_cost is not None else item['standard_unit_cost']
+                final_item_cost = item['quantity'] * final_unit_cost
                 
                 calculated_products.append({
                     **item,
-                    "calculation_type": "direct_split" if manual_total_price else "direct",
-                    "price_per_one": final_unit_price,
-                    "price": final_item_price
+                    "calculation_type": "direct_split" if manual_total_cost else "direct",
+                    "unit_cost": final_unit_cost,
+                    "total_cost": final_item_cost
                 })
 
         elif calc_type == "direct_pricing":
@@ -784,11 +780,11 @@ def calculate_with_gate(
                 quantity = float(row[2]) if row[2] else 0.0
                 weight = float(row[4]) if row[4] else 0.0
                 
-                price_per_one = pricing_info.get('value', 0.0) or 0.0
-                price = quantity * price_per_one
+                unit_cost = pricing_info.get('value', 0.0) or 0.0
+                cost = quantity * unit_cost
                 
-                total_price += price
-                estimated_total_price += price
+                total_cost += cost
+                estimated_total_cost += cost
                 
                 calculated_products.append({
                     "code": item_code,
@@ -797,26 +793,25 @@ def calculate_with_gate(
                     "uom": row[3] if row[3] else "",
                     "weight": weight,
                     "calculation_type": "direct",
-                    "price_per_one": price_per_one,
-                    "price": price
+                    "unit_cost": unit_cost,
+                    "total_cost": cost
                 })
 
-        # UPDATED: Sorted by code for consistency with products-by-ids
         calculated_products.sort(key=lambda x: x['code'])
         
-        total_price += add_charges
-        estimated_total_price += add_charges
+        total_cost += add_charges
+        estimated_total_cost += add_charges
         
         return {
             "calculation_type": calc_type,
             "gate_name": gate_name,
             "from_loc": from_loc,
             "to_loc": to_loc,
-            "price_per_unit": price_per_unit, # Updated
+            "cost_per_unit": cost_per_unit, 
             "additional_charges": add_charges,
             "calculated_products": calculated_products,
-            "total_price": total_price,
-            "estimated_total_price": estimated_total_price
+            "total_cost": total_cost,
+            "estimated_total_cost": estimated_total_cost
         }
 
     except HTTPException:
