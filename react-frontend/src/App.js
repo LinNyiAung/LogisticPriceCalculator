@@ -22,7 +22,6 @@ const PricingApp = () => {
   const [calculationType, setCalculationType] = useState('');
   const [calculatedProducts, setCalculatedProducts] = useState([]);
   
-  // Renamed state variables
   const [calculatedTotalCost, setCalculatedTotalCost] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -39,14 +38,12 @@ const PricingApp = () => {
   const [originalGateName, setOriginalGateName] = useState(null);
   const [originalItemCode, setOriginalItemCode] = useState(null);
 
-  // Renamed manual inputs
   const [manualTotalCost, setManualTotalCost] = useState('');
   const [additionalCharges, setAdditionalCharges] = useState('');
   const [estimatedTotalCost, setEstimatedTotalCost] = useState(null);
 
   const [historyData, setHistoryData] = useState([]);
   const [showSaveModal, setShowSaveModal] = useState(false);
-  const [saveName, setSaveName] = useState('');
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
 
   // --- Helper: Safe Error Extraction ---
@@ -145,15 +142,9 @@ const PricingApp = () => {
   };
 
   const handleSaveCalculation = async (isUpdate = false) => {
-    if (!saveName.trim()) {
-      showNotification('Please enter a name for this calculation', 'error');
-      return;
-    }
-
     try {
       const payload = {
         id: isUpdate ? currentHistoryId : null,
-        name: saveName,
         gate_name: selectedGate,
         from_loc: selectedFrom,
         to_loc: selectedTo,
@@ -173,7 +164,6 @@ const PricingApp = () => {
         showNotification(isUpdate ? 'Calculation updated successfully' : 'New calculation saved successfully', 'success');
         setShowSaveModal(false);
         if (!isUpdate) {
-             setSaveName('');
              setCurrentHistoryId(null);
         }
         loadHistory();
@@ -186,12 +176,21 @@ const PricingApp = () => {
     }
   };
 
+  const handleSaveButtonClick = () => {
+    if (currentHistoryId) {
+        // If we are editing an existing record, show modal to ask for Update vs New
+        setShowSaveModal(true);
+    } else {
+        // If it's a new record, save immediately without popup
+        handleSaveCalculation(false);
+    }
+  };
+
   const loadSavedCalculation = async (record) => {
     try {
       setCurrentPage('calculator');
       
       setCurrentHistoryId(record.id);
-      setSaveName(record.name);
 
       setSelectedPickIds(record.pick_ids);
       await fetchAggregatedProducts(record.pick_ids);
@@ -205,11 +204,15 @@ const PricingApp = () => {
       setManualTotalCost(record.manual_total_cost || '');
       setAdditionalCharges(record.additional_charges || '');
       
-      setCalculatedProducts([]);
-      setCalculatedTotalCost(null);
-      setEstimatedTotalCost(null);
+      // Reset calculated items list since we don't store line items
+      setCalculatedProducts([]); 
+      
+      // --- FIX: Restore the final total cost from the record ---
+      setCalculatedTotalCost(record.final_total_cost);
+      
+      setEstimatedTotalCost(null); // Not stored in DB
 
-      showNotification(`Loaded "${record.name}". Ready to edit.`, 'info');
+      showNotification(`Loaded calculation record. Ready to edit.`, 'info');
       
     } catch (error) {
       showNotification(`Error loading record: ${error.message}`, 'error');
@@ -433,17 +436,14 @@ const PricingApp = () => {
   };
 
   const saveGate = async (gateData) => {
-    // --- VALIDATION START ---
     const hasUOM = gateData.uom && gateData.uom.trim().length > 0;
     const hasUnit = gateData.unit !== '' && gateData.unit !== null && gateData.unit !== undefined;
-    // Renamed price_per_unit to cost_per_unit
     const hasCost = gateData.cost_per_unit !== '' && gateData.cost_per_unit !== null && gateData.cost_per_unit !== undefined;
 
     if ((hasUOM || hasUnit || hasCost) && !(hasUOM && hasUnit && hasCost)) {
       showNotification('Validation Error: UOM, Unit, and Cost Per Unit must either ALL be filled or ALL be empty.', 'error');
       return;
     }
-    // --- VALIDATION END ---
 
     try {
       const payload = {
@@ -580,7 +580,7 @@ const PricingApp = () => {
       to_loc: '',
       uom: '',
       unit: '',
-      cost_per_unit: '' // Renamed from price_per_unit
+      cost_per_unit: ''
     });
 
     return (
@@ -735,23 +735,13 @@ const PricingApp = () => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
         <h2 className="text-2xl font-bold mb-4">
-            {currentHistoryId ? 'Update Calculation' : 'Save Calculation'}
+            Update Calculation
         </h2>
-        
-        <div className="mb-4">
-          <label className="block text-sm font-semibold mb-1">Name / Reference</label>
-          <input
-            type="text"
-            value={saveName}
-            onChange={(e) => setSaveName(e.target.value)}
-            placeholder="e.g., Urgent Shipment Batch A"
-            className="w-full p-2 border rounded"
-            autoFocus
-          />
-        </div>
+        <p className="mb-6 text-gray-600">
+            You are editing an existing record. Do you want to update the existing record or save it as a new one?
+        </p>
 
         <div className="flex flex-col gap-3 mt-6">
-          {currentHistoryId ? (
             <div className="flex gap-2">
                 <button
                     onClick={() => handleSaveCalculation(true)} 
@@ -766,14 +756,6 @@ const PricingApp = () => {
                     Save as New
                 </button>
             </div>
-          ) : (
-            <button
-                onClick={() => handleSaveCalculation(false)}
-                className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-            >
-                Save
-            </button>
-          )}
           
           <button
             onClick={() => setShowSaveModal(false)}
@@ -873,7 +855,6 @@ const PricingApp = () => {
                 <thead className="bg-gray-100">
                   <tr>
                     <th className="border p-3 text-left">Date</th>
-                    <th className="border p-3 text-left">Name</th>
                     <th className="border p-3 text-left">Route</th>
                     <th className="border p-3 text-left">Pick IDs</th>
                     <th className="border p-3 text-right">Total Cost (MMK)</th>
@@ -882,21 +863,19 @@ const PricingApp = () => {
                 </thead>
                 <tbody>
                   {historyData.length === 0 ? (
-                    <tr><td colSpan="6" className="text-center p-4 text-gray-500">No saved calculations found.</td></tr>
+                    <tr><td colSpan="5" className="text-center p-4 text-gray-500">No saved calculations found.</td></tr>
                   ) : (
                     historyData.map((record) => (
                       <tr key={record.id} className="hover:bg-gray-50">
                         <td className="border p-3 text-sm text-gray-600">{record.created_at}</td>
-                        <td className="border p-3 font-semibold">{record.name}</td>
                         <td className="border p-3">
-                          {record.gate_name} <br/>
+                          <span className="font-bold text-gray-700">{record.gate_name}</span> <br/>
                           <span className="text-xs text-gray-500">{record.from_loc} &rarr; {record.to_loc}</span>
                         </td>
                         <td className="border p-3 text-sm">
                           {record.pick_ids.length} ID(s): {record.pick_ids.join(', ')}
                         </td>
                         <td className="border p-3 text-right font-bold text-blue-600">
-                          {/* Updated field to final_total_cost */}
                           {record.final_total_cost?.toLocaleString()}
                         </td>
                         <td className="border p-3 text-center">
@@ -1287,7 +1266,6 @@ const PricingApp = () => {
 
           {products.length > 0 && (
             <>
-              {/* Unified Product Table */}
               <div className="bg-white rounded-lg border p-6 mb-6">
                 <h2 className="text-xl font-bold mb-4">
                     {hasCalculated ? "Calculated Results" : "Product Details"}
@@ -1300,7 +1278,6 @@ const PricingApp = () => {
                         <th className="border p-2 text-left">Description</th>
                         <th className="border p-2 text-left">Quantity</th>
                         <th className="border p-2 text-left">Weight</th>
-                        {/* Conditionally render Cost Header */}
                         {hasCalculated && (
                             <th className="border p-2 text-left">Cost (MMK)</th>
                         )}
@@ -1313,10 +1290,8 @@ const PricingApp = () => {
                           <td className="border p-2">{product.name}</td>
                           <td className="border p-2">{product.quantity}</td>
                           <td className="border p-2">{product.weight.toFixed(2)}</td>
-                          {/* Conditionally render Cost Cell */}
                           {hasCalculated && (
                             <td className="border p-2 font-semibold">
-                                {/* Changed prop from price to total_cost */}
                                 {product.total_cost !== undefined ? product.total_cost.toFixed(2) : '-'}
                             </td>
                           )}
@@ -1383,7 +1358,7 @@ const PricingApp = () => {
                   
                   {calculatedTotalCost !== null && (
                     <button
-                      onClick={() => setShowSaveModal(true)}
+                      onClick={handleSaveButtonClick}
                       className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
                     >
                       <Save size={20} />

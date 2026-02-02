@@ -81,12 +81,11 @@ def startup_db():
             )
         """)
 
-        # Calculation History Table - Renamed price columns to cost
+        # Calculation History Table - REMOVED 'name' column
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Calculation_History (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [created_at] TEXT,
-                [name] TEXT,
                 [gate_name] TEXT,
                 [from_loc] TEXT,
                 [to_loc] TEXT,
@@ -125,10 +124,9 @@ class ItemPricingData(BaseModel):
     transportation_cost: str
     original_item_code: Optional[str] = None
 
-# Updated Model with Cost fields
+# Updated Model - Removed name
 class CalculationSaveRequest(BaseModel):
     id: Optional[int] = None
-    name: str
     gate_name: str
     from_loc: str
     to_loc: str
@@ -185,27 +183,27 @@ def save_calculation(data: CalculationSaveRequest):
                 conn.close()
                 raise HTTPException(status_code=404, detail="Record to update not found")
 
-            # Updated query with cost columns
+            # Updated query - Removed name
             cursor.execute("""
                 UPDATE Calculation_History 
-                SET created_at = ?, name = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
+                SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
                     pick_ids = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?
                 WHERE id = ?
             """, (
-                created_at, data.name, data.gate_name, data.from_loc, data.to_loc,
+                created_at, data.gate_name, data.from_loc, data.to_loc,
                 pick_ids_json, data.manual_total_cost, data.additional_charges, 
                 data.final_total_cost, data.id
             ))
             message = "Calculation updated successfully"
         else:
-            # Updated query with cost columns
+            # Updated query - Removed name
             cursor.execute("""
                 INSERT INTO Calculation_History 
-                ([created_at], [name], [gate_name], [from_loc], [to_loc], 
+                ([created_at], [gate_name], [from_loc], [to_loc], 
                  [pick_ids], [manual_total_cost], [additional_charges], [final_total_cost])
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                created_at, data.name, data.gate_name, data.from_loc, data.to_loc,
+                created_at, data.gate_name, data.from_loc, data.to_loc,
                 pick_ids_json, data.manual_total_cost, data.additional_charges, data.final_total_cost
             ))
             message = "Calculation saved successfully"
@@ -233,15 +231,13 @@ def get_history():
             history.append({
                 "id": row[0],
                 "created_at": row[1],
-                "name": row[2],
-                "gate_name": row[3],
-                "from_loc": row[4],
-                "to_loc": row[5],
-                "pick_ids": json.loads(row[6]),
-                # Map DB columns to new keys
-                "manual_total_cost": row[7],
-                "additional_charges": row[8],
-                "final_total_cost": row[9]
+                "gate_name": row[2],
+                "from_loc": row[3],
+                "to_loc": row[4],
+                "pick_ids": json.loads(row[5]),
+                "manual_total_cost": row[6],
+                "additional_charges": row[7],
+                "final_total_cost": row[8]
             })
             
         conn.close()
@@ -632,7 +628,7 @@ def get_to_locations(from_loc: Optional[str] = None):
 def calculate_with_gate(
     gate_name: str, 
     pick_ids: List[str] = Query(...), 
-    manual_total_cost: Optional[float] = None, # Renamed
+    manual_total_cost: Optional[float] = None, 
     additional_charges: Optional[float] = 0.0
 ):
     """Calculate costs for multiple Pick IDs"""
