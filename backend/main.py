@@ -55,13 +55,16 @@ def startup_db():
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
+        # UPDATED: Added UOM, Unit and renamed Gate Price to Price Per Unit
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Gate (
                 [Gate ID] INTEGER PRIMARY KEY,
                 [Gate Name] TEXT,
                 [From] TEXT,
                 [To] TEXT,
-                [Gate Price] REAL
+                [UOM] TEXT,
+                [Unit] INTEGER,
+                [Price Per Unit] REAL
             )
         """)
         
@@ -106,8 +109,10 @@ class GateData(BaseModel):
     gate_id: Optional[int] = None
     gate_name: str
     from_loc: str  
-    to_loc: str    
-    price: Optional[float] = None
+    to_loc: str
+    uom: Optional[str] = None       # NEW
+    unit: Optional[int] = None      # NEW
+    price_per_unit: Optional[float] = None # RENAMED from price
     original_gate_name: Optional[str] = None
 
 class ItemPricingData(BaseModel):
@@ -135,15 +140,16 @@ class CalculationSaveRequest(BaseModel):
 
 def determine_calculation_type_sql(gate_id):
     """
-    Determines calculation type based on Gate Price.
-    If Gate Price exists and > 0 -> gate_pricing
+    Determines calculation type based on Price Per Unit.
+    If Price Per Unit exists and > 0 -> gate_pricing
     Else -> direct_pricing
     """
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT [Gate Price] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
+        # UPDATED: Checking [Price Per Unit]
+        cursor.execute("SELECT [Price Per Unit] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
         row = cursor.fetchone()
         conn.close()
 
@@ -415,7 +421,8 @@ def get_all_gates():
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT [Gate ID], [Gate Name], [From], [To], [Gate Price] FROM Gate")
+        # UPDATED: Select UOM, Unit, Price Per Unit
+        cursor.execute("SELECT [Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Price Per Unit] FROM Gate")
         rows = cursor.fetchall()
         
         gates = []
@@ -427,8 +434,10 @@ def get_all_gates():
                 "gate_id": gate_id,
                 "gate_name": row[1],
                 "from_loc": row[2], 
-                "to_loc": row[3],   
-                "price": float(row[4]) if row[4] is not None else None,
+                "to_loc": row[3],
+                "uom": row[4],         # NEW
+                "unit": row[5],        # NEW
+                "price_per_unit": float(row[6]) if row[6] is not None else None, # RENAMED
                 "calculation_type": calc_type
             })
         
@@ -445,17 +454,21 @@ def save_gate(gate_data: GateData):
         cursor = conn.cursor()
 
         if gate_data.original_gate_name:
+            # UPDATED: Update UOM, Unit, Price Per Unit
             cursor.execute("""
                 UPDATE Gate 
-                SET [Gate Name] = ?, [From] = ?, [To] = ?, [Gate Price] = ?
+                SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Price Per Unit] = ?
                 WHERE [Gate Name] = ?
             """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, 
-                  gate_data.price, gate_data.original_gate_name))
+                  gate_data.uom, gate_data.unit, gate_data.price_per_unit, 
+                  gate_data.original_gate_name))
         else:
+            # UPDATED: Insert UOM, Unit, Price Per Unit
             cursor.execute("""
-                INSERT INTO Gate ([Gate Name], [From], [To], [Gate Price])
-                VALUES (?, ?, ?, ?)
-            """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.price))
+                INSERT INTO Gate ([Gate Name], [From], [To], [UOM], [Unit], [Price Per Unit])
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, 
+                  gate_data.uom, gate_data.unit, gate_data.price_per_unit))
         
         conn.commit()
         conn.close()
@@ -655,7 +668,8 @@ def calculate_with_gate(
         try:
             conn_log = get_logistic_connection()
             cursor_log = conn_log.cursor()
-            cursor_log.execute("SELECT [Gate ID], [From], [To], [Gate Price] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
+            # UPDATED: Select [Price Per Unit]
+            cursor_log.execute("SELECT [Gate ID], [From], [To], [Price Per Unit] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
             gate_row = cursor_log.fetchone()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching gate config: {str(e)}")
@@ -667,7 +681,8 @@ def calculate_with_gate(
         gate_id = gate_row[0]
         from_loc = gate_row[1]
         to_loc = gate_row[2]
-        gate_price = float(gate_row[3] or 0)
+        # UPDATED: Use price_per_unit variable (replaces gate_price in logic)
+        price_per_unit = float(gate_row[3] or 0)
         
         # 3. Get Item Pricing
         cursor_log.execute("""
@@ -692,8 +707,8 @@ def calculate_with_gate(
                 except:
                     item_pricing[i_code] = {'type': 'unknown', 'value': None}
 
-        # Determine type based on gate_price
-        if gate_price > 0:
+        # Determine type based on price_per_unit
+        if price_per_unit > 0:
             calc_type = "gate_pricing"
         else:
             calc_type = "direct_pricing"
@@ -725,7 +740,8 @@ def calculate_with_gate(
                     item_data['standard_unit_price'] = p_val
                     direct_items.append(item_data)
                 else:
-                    cost = item_data['weight'] * gate_price
+                    # UPDATED LOGIC: Use price_per_unit instead of gate_price
+                    cost = item_data['weight'] * price_per_unit
                     estimated_total_price += cost
                     ton_cost_total += cost
                     item_data['price'] = cost
@@ -796,7 +812,7 @@ def calculate_with_gate(
             "gate_name": gate_name,
             "from_loc": from_loc,
             "to_loc": to_loc,
-            "gate_price": gate_price,
+            "price_per_unit": price_per_unit, # Updated
             "additional_charges": add_charges,
             "calculated_products": calculated_products,
             "total_price": total_price,

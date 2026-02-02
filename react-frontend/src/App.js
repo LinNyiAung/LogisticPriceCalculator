@@ -46,6 +46,19 @@ const PricingApp = () => {
   const [saveName, setSaveName] = useState('');
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
 
+  // --- Helper: Safe Error Extraction ---
+  const getErrorMessage = (error) => {
+    if (!error?.detail) return 'An unknown error occurred';
+    if (Array.isArray(error.detail)) {
+        // Handle FastAPI validation error array
+        return error.detail.map(e => `${e.loc.slice(-1)}: ${e.msg}`).join(', ');
+    }
+    if (typeof error.detail === 'object') {
+        return JSON.stringify(error.detail);
+    }
+    return String(error.detail);
+  };
+
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
@@ -163,7 +176,8 @@ const PricingApp = () => {
         }
         loadHistory();
       } else {
-        showNotification('Failed to save calculation', 'error');
+        const error = await response.json();
+        showNotification(getErrorMessage(error), 'error');
       }
     } catch (error) {
       showNotification(`Error: ${error.message}`, 'error');
@@ -240,7 +254,7 @@ const PricingApp = () => {
         showNotification('Excel file downloaded successfully', 'success');
       } else {
         const error = await response.json();
-        showNotification(error.detail || 'Failed to export Excel', 'error');
+        showNotification(getErrorMessage(error), 'error');
       }
     } catch (error) {
       showNotification(`Error: ${error.message}`, 'error');
@@ -268,7 +282,7 @@ const PricingApp = () => {
         await loadItemPricing(selectedGateForPricing);
       } else {
         const error = await response.json();
-        showNotification(error.detail || 'Failed to import Excel', 'error');
+        showNotification(getErrorMessage(error), 'error');
       }
     } catch (error) {
       showNotification(`Error: ${error.message}`, 'error');
@@ -407,7 +421,7 @@ const PricingApp = () => {
         showNotification('Calculation completed successfully', 'success');
       } else {
         const error = await response.json();
-        showNotification(error.detail || 'Failed to calculate prices', 'error');
+        showNotification(getErrorMessage(error), 'error');
       }
     } catch (error) {
       showNotification(`Error: ${error.message}`, 'error');
@@ -417,11 +431,29 @@ const PricingApp = () => {
   };
 
   const saveGate = async (gateData) => {
+    // --- VALIDATION START ---
+    // Check if fields have values (handling potential empty strings or nulls)
+    const hasUOM = gateData.uom && gateData.uom.trim().length > 0;
+    const hasUnit = gateData.unit !== '' && gateData.unit !== null && gateData.unit !== undefined;
+    const hasPrice = gateData.price_per_unit !== '' && gateData.price_per_unit !== null && gateData.price_per_unit !== undefined;
+
+    // If any one of them is present, ALL must be present.
+    // We check if the "state of presence" is mixed (some true, some false).
+    if ((hasUOM || hasUnit || hasPrice) && !(hasUOM && hasUnit && hasPrice)) {
+      showNotification('Validation Error: UOM, Unit, and Price Per Unit must either ALL be filled or ALL be empty.', 'error');
+      return; // Stop execution
+    }
+    // --- VALIDATION END ---
+
     try {
+      // Sanitize inputs. Convert empty strings to null for numeric fields.
       const payload = {
         ...gateData,
+        unit: gateData.unit === '' ? null : parseInt(gateData.unit),
+        price_per_unit: gateData.price_per_unit === '' ? null : parseFloat(gateData.price_per_unit),
         original_gate_name: originalGateName
       };
+
       const response = await fetch(`${API_URL}/admin/gates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -437,7 +469,7 @@ const PricingApp = () => {
         setOriginalGateName(null);
       } else {
         const error = await response.json();
-        showNotification(error.detail || 'Failed to save gate', 'error');
+        showNotification(getErrorMessage(error), 'error');
       }
     } catch (error) {
       showNotification(`Error: ${error.message}`, 'error');
@@ -458,7 +490,7 @@ const PricingApp = () => {
             await loadFromLocations();
           } else {
             const error = await response.json();
-            showNotification(error.detail || 'Failed to delete gate', 'error');
+            showNotification(getErrorMessage(error), 'error');
           }
         } catch (error) {
           showNotification(`Error: ${error.message}`, 'error');
@@ -490,7 +522,7 @@ const PricingApp = () => {
         setOriginalItemCode(null);
       } else {
         const error = await response.json();
-        showNotification(error.detail || 'Failed to save item', 'error');
+        showNotification(getErrorMessage(error), 'error');
       }
     } catch (error) {
       showNotification(`Error: ${error.message}`, 'error');
@@ -511,7 +543,7 @@ const PricingApp = () => {
             await loadItemPricing(selectedGateForPricing);
           } else {
             const error = await response.json();
-            showNotification(error.detail || 'Failed to delete item', 'error');
+            showNotification(getErrorMessage(error), 'error');
           }
         } catch (error) {
           showNotification(`Error: ${error.message}`, 'error');
@@ -543,11 +575,14 @@ const PricingApp = () => {
   }, [currentPage]);
 
   const GateModal = ({ gate, onSave, onClose }) => {
+    // FIX: Initialize with empty strings if values are null to prevent React uncontrolled input warnings
     const [formData, setFormData] = useState(gate || {
       gate_name: '',
       from_loc: '',
       to_loc: '',
-      price: ''
+      uom: '',
+      unit: '',
+      price_per_unit: ''
     });
 
     return (
@@ -559,7 +594,7 @@ const PricingApp = () => {
               <label className="block text-sm font-semibold mb-1">Gate Name</label>
               <input
                 type="text"
-                value={formData.gate_name}
+                value={formData.gate_name ?? ''}
                 onChange={(e) => setFormData({...formData, gate_name: e.target.value})}
                 className="w-full p-2 border rounded"
               />
@@ -568,7 +603,7 @@ const PricingApp = () => {
               <label className="block text-sm font-semibold mb-1">From</label>
               <input
                 type="text"
-                value={formData.from_loc}
+                value={formData.from_loc ?? ''}
                 onChange={(e) => setFormData({...formData, from_loc: e.target.value})}
                 className="w-full p-2 border rounded"
                 placeholder="e.g. YGN"
@@ -578,18 +613,40 @@ const PricingApp = () => {
               <label className="block text-sm font-semibold mb-1">To</label>
               <input
                 type="text"
-                value={formData.to_loc}
+                value={formData.to_loc ?? ''}
                 onChange={(e) => setFormData({...formData, to_loc: e.target.value})}
                 className="w-full p-2 border rounded"
                 placeholder="e.g. MDY"
               />
             </div>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-1">UOM</label>
+                  <input
+                    type="text"
+                    value={formData.uom ?? ''}
+                    onChange={(e) => setFormData({...formData, uom: e.target.value})}
+                    className="w-full p-2 border rounded"
+                    placeholder="e.g. Kg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-1">Unit</label>
+                  <input
+                    type="number"
+                    value={formData.unit ?? ''}
+                    onChange={(e) => setFormData({...formData, unit: e.target.value})}
+                    className="w-full p-2 border rounded"
+                    placeholder="1"
+                  />
+                </div>
+            </div>
             <div>
-              <label className="block text-sm font-semibold mb-1">Price (MMK/ton)</label>
+              <label className="block text-sm font-semibold mb-1">Price Per Unit</label>
               <input
                 type="number"
-                value={formData.price}
-                onChange={(e) => setFormData({...formData, price: e.target.value})}
+                value={formData.price_per_unit ?? ''}
+                onChange={(e) => setFormData({...formData, price_per_unit: e.target.value})}
                 className="w-full p-2 border rounded"
               />
             </div>
@@ -631,7 +688,7 @@ const PricingApp = () => {
               <label className="block text-sm font-semibold mb-1">Item Code</label>
               <input
                 type="text"
-                value={formData.item_code}
+                value={formData.item_code ?? ''}
                 onChange={(e) => setFormData({...formData, item_code: e.target.value})}
                 className="w-full p-2 border rounded"
                 disabled={!!item}
@@ -641,7 +698,7 @@ const PricingApp = () => {
               <label className="block text-sm font-semibold mb-1">Item Name</label>
               <input
                 type="text"
-                value={formData.item_name}
+                value={formData.item_name ?? ''}
                 onChange={(e) => setFormData({...formData, item_name: e.target.value})}
                 className="w-full p-2 border rounded"
               />
@@ -650,7 +707,7 @@ const PricingApp = () => {
               <label className="block text-sm font-semibold mb-1">Transportation Cost</label>
               <input
                 type="text"
-                value={formData.transportation_cost}
+                value={formData.transportation_cost ?? ''}
                 onChange={(e) => setFormData({...formData, transportation_cost: e.target.value})}
                 className="w-full p-2 border rounded"
                 placeholder="Ton or numeric value"
@@ -901,7 +958,9 @@ const PricingApp = () => {
                     <th className="border p-3 text-left">Gate Name</th>
                     <th className="border p-3 text-left">From</th>
                     <th className="border p-3 text-left">To</th>
-                    <th className="border p-3 text-left">Price (MMK/ton)</th>
+                    <th className="border p-3 text-left">UOM</th>
+                    <th className="border p-3 text-left">Unit</th>
+                    <th className="border p-3 text-left">Price Per Unit</th>
                     <th className="border p-3 text-left">Actions</th>
                   </tr>
                 </thead>
@@ -911,7 +970,9 @@ const PricingApp = () => {
                       <td className="border p-3">{gate.gate_name}</td>
                       <td className="border p-3">{gate.from_loc}</td>
                       <td className="border p-3">{gate.to_loc}</td>
-                      <td className="border p-3">{gate.price || '-'}</td>
+                      <td className="border p-3">{gate.uom || '-'}</td>
+                      <td className="border p-3">{gate.unit || '-'}</td>
+                      <td className="border p-3">{gate.price_per_unit || '-'}</td>
                       <td className="border p-3">
                         <div className="flex gap-2">
                           <button
@@ -1093,7 +1154,6 @@ const PricingApp = () => {
 
   // --- Calculator View ---
 
-  // Determine if we are showing calculated results or just raw products
   const hasCalculated = calculatedProducts.length > 0;
   const tableData = hasCalculated ? calculatedProducts : products;
 

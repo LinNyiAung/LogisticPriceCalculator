@@ -42,7 +42,8 @@ def generate_sql():
     sql_statements = []
     
     # Create Table Definitions (DDL)
-    sql_statements.append("CREATE TABLE Gate ([Gate ID] INTEGER PRIMARY KEY, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [Gate Price] DECIMAL(18,2));")
+    # UPDATED: Changed [Gate Price] to [Price Per Unit]
+    sql_statements.append("CREATE TABLE Gate ([Gate ID] INTEGER PRIMARY KEY, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [UOM] VARCHAR(50), [Unit] INTEGER, [Price Per Unit] DECIMAL(18,2));")
     sql_statements.append("CREATE TABLE Item_Pricing ([Pricing ID] INTEGER PRIMARY KEY, [Gate ID] INT, [Item ID] VARCHAR(50), [Item Name] VARCHAR(255), [Principal] VARCHAR(255), [Brand] VARCHAR(255), [Transportation Cost] VARCHAR(50));")
     sql_statements.append("")
 
@@ -56,8 +57,10 @@ def generate_sql():
         gate_name = row['Gate Name']
         from_location = row['From']
         to_location = row['To']
-        gate_price = row['Price']
+        gate_price = row['Price Per Unit']
         file_name = row['File Name']
+        uom = row['UOM']
+        unit = row['Unit']
         
         # Prepare values for SQL
         val_gate_id = str(gate_id)
@@ -65,9 +68,12 @@ def generate_sql():
         val_from = clean_sql_string(from_location)
         val_to = clean_sql_string(to_location)
         val_gate_price = clean_sql_number(gate_price)
+        val_uom = clean_sql_string(uom)
+        val_unit = clean_sql_number(unit)
         
         # INSERT statement for Gate table
-        sql_statements.append(f"INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [Gate Price]) VALUES ({val_gate_id}, {val_gate_name}, {val_from}, {val_to}, {val_gate_price});")
+        # UPDATED: Changed [Gate Price] to [Price Per Unit]
+        sql_statements.append(f"INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Price Per Unit]) VALUES ({val_gate_id}, {val_gate_name}, {val_from}, {val_to}, {val_uom}, {val_unit}, {val_gate_price});")
         
         # 3. Process the corresponding Item Master file if it exists
         if pd.notna(file_name):
