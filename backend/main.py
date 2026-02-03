@@ -81,7 +81,7 @@ def startup_db():
             )
         """)
 
-        # Calculation History Table - REMOVED 'name' column
+        # Calculation History Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Calculation_History (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,7 +124,6 @@ class ItemPricingData(BaseModel):
     transportation_cost: str
     original_item_code: Optional[str] = None
 
-# Updated Model - Removed name
 class CalculationSaveRequest(BaseModel):
     id: Optional[int] = None
     gate_name: str
@@ -183,7 +182,6 @@ def save_calculation(data: CalculationSaveRequest):
                 conn.close()
                 raise HTTPException(status_code=404, detail="Record to update not found")
 
-            # Updated query - Removed name
             cursor.execute("""
                 UPDATE Calculation_History 
                 SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
@@ -196,7 +194,6 @@ def save_calculation(data: CalculationSaveRequest):
             ))
             message = "Calculation updated successfully"
         else:
-            # Updated query - Removed name
             cursor.execute("""
                 INSERT INTO Calculation_History 
                 ([created_at], [gate_name], [from_loc], [to_loc], 
@@ -631,24 +628,26 @@ def calculate_with_gate(
     manual_total_cost: Optional[float] = None, 
     additional_charges: Optional[float] = 0.0
 ):
-    """Calculate costs for multiple Pick IDs"""
+    """Calculate costs for multiple Pick IDs, aggregating same Items"""
     try:
         add_charges = float(additional_charges) if additional_charges is not None else 0.0
 
         if not pick_ids:
             raise HTTPException(status_code=400, detail="No Pick IDs provided")
 
-        # 1. Get Pick Data from DWBI for ALL IDs
+        # 1. Get Pick Data from DWBI for ALL IDs (Combined & Summed)
         try:
             conn_dwbi = get_dwbi_connection()
             cursor_dwbi = conn_dwbi.cursor()
             
-            # Prepare query for multiple IDs
             placeholders = ','.join('?' * len(pick_ids))
+            
+            # UPDATED QUERY: Group By ItemCode
             query = f"""
-                SELECT ItemCode, Dscription, Quantity, UomCode, ItemWeight
+                SELECT ItemCode, MAX(Dscription), SUM(Quantity), MAX(UomCode), SUM(ItemWeight)
                 FROM PG_PickDetail 
                 WHERE ID IN ({placeholders}) 
+                GROUP BY ItemCode
                 ORDER BY ItemCode
             """
             cursor_dwbi.execute(query, pick_ids)
@@ -842,10 +841,13 @@ def get_products_by_pick_ids(pick_ids: List[str] = Query(...)):
         cursor = conn.cursor()
         
         placeholders = ','.join('?' * len(pick_ids))
+        
+        # UPDATED QUERY: Group By ItemCode
         query = f"""
-            SELECT ItemCode, Dscription, Quantity, UomCode, ItemWeight
+            SELECT ItemCode, MAX(Dscription), SUM(Quantity), MAX(UomCode), SUM(ItemWeight)
             FROM PG_PickDetail 
             WHERE ID IN ({placeholders}) 
+            GROUP BY ItemCode
             ORDER BY ItemCode
         """
         
@@ -877,9 +879,14 @@ def get_products_by_pick_id(pick_id: str):
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
+        
+        # UPDATED QUERY: Group By ItemCode
         cursor.execute("""
-            SELECT ItemCode, Dscription, Quantity, UomCode, ItemWeight
-            FROM PG_PickDetail WHERE ID = ? ORDER BY ItemCode
+            SELECT ItemCode, MAX(Dscription), SUM(Quantity), MAX(UomCode), SUM(ItemWeight)
+            FROM PG_PickDetail 
+            WHERE ID = ? 
+            GROUP BY ItemCode
+            ORDER BY ItemCode
         """, (pick_id,))
         rows = cursor.fetchall()
         
