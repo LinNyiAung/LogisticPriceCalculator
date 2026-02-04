@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -207,7 +207,7 @@ const PricingApp = () => {
       // Reset calculated items list since we don't store line items
       setCalculatedProducts([]); 
       
-      // --- FIX: Restore the final total cost from the record ---
+      // Restore the final total cost from the record
       setCalculatedTotalCost(record.final_total_cost);
       
       setEstimatedTotalCost(null); // Not stored in DB
@@ -216,6 +216,41 @@ const PricingApp = () => {
       
     } catch (error) {
       showNotification(`Error loading record: ${error.message}`, 'error');
+    }
+  };
+
+  const handleDownloadHistoryExcel = async (record) => {
+    try {
+      showNotification('Generating Excel file...', 'info');
+      const response = await fetch(`${API_URL}/history/${record.id}/download`);
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // Extract filename from header
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = `Calculation_${record.id}.xlsx`;
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+          if (filenameMatch) filename = filenameMatch[1];
+        }
+        
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        showNotification('History Excel file downloaded successfully', 'success');
+      } else {
+        const error = await response.json();
+        showNotification(getErrorMessage(error), 'error');
+      }
+    } catch (error) {
+      showNotification(`Error downloading file: ${error.message}`, 'error');
     }
   };
 
@@ -881,6 +916,13 @@ const PricingApp = () => {
                         <td className="border p-3 text-center">
                           <div className="flex justify-center gap-2">
                             <button
+                              onClick={() => handleDownloadHistoryExcel(record)}
+                              className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1"
+                              title="Download Excel"
+                            >
+                                <FileDown size={16} />
+                            </button>
+                            <button
                               onClick={() => loadSavedCalculation(record)}
                               className="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm font-semibold"
                             >
@@ -905,6 +947,8 @@ const PricingApp = () => {
       </div>
     );
   }
+
+  // ... (Remainder of the file remains same, 'gates' and 'items' and 'calculator' views are standard)
 
   if (currentPage === 'gates') {
     return (

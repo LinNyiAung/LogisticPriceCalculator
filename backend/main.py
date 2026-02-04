@@ -11,7 +11,7 @@ from typing import List, Optional
 import os
 import io
 import openpyxl
-from openpyxl.styles import Font, PatternFill
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 app = FastAPI()
 
@@ -164,6 +164,188 @@ def determine_calculation_type_sql(gate_id):
         logger.error(f"Error determining calc type: {str(e)}")
         return "unknown"
 
+def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, additional_charges=0.0):
+    """
+    Core Logic to calculate costs. Used by both the API endpoint and the Excel export.
+    """
+    add_charges = float(additional_charges) if additional_charges is not None else 0.0
+
+    # 1. Get Pick Data from DWBI
+    try:
+        conn_dwbi = get_dwbi_connection()
+        cursor_dwbi = conn_dwbi.cursor()
+        
+        placeholders = ','.join('?' * len(pick_ids))
+        query = f"""
+            SELECT ItemCode, MAX(Dscription), SUM(Quantity), MAX(UomCode), SUM(ItemWeight)
+            FROM PG_PickDetail 
+            WHERE ID IN ({placeholders}) 
+            GROUP BY ItemCode
+            ORDER BY ItemCode
+        """
+        cursor_dwbi.execute(query, pick_ids)
+        pick_rows = cursor_dwbi.fetchall()
+        conn_dwbi.close()
+    except Exception as e:
+        raise Exception(f"Error fetching pick details: {str(e)}")
+    
+    if not pick_rows:
+        raise Exception("No products found for the selected Pick IDs")
+    
+    # 2. Get Gate Data
+    try:
+        conn_log = get_logistic_connection()
+        cursor_log = conn_log.cursor()
+        cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost Per Unit] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
+        gate_row = cursor_log.fetchone()
+    except Exception as e:
+        raise Exception(f"Error fetching gate config: {str(e)}")
+    
+    if not gate_row:
+        if 'conn_log' in locals(): conn_log.close()
+        raise Exception(f"Gate {gate_name} not found")
+        
+    gate_id = gate_row[0]
+    from_loc = gate_row[1]
+    to_loc = gate_row[2]
+    cost_per_unit = float(gate_row[3] or 0)
+    
+    # 3. Get Item Pricing
+    cursor_log.execute("""
+        SELECT [Item ID], [Transportation Cost] 
+        FROM Item_Pricing 
+        WHERE [Gate ID] = ?
+    """, (gate_id,))
+    pricing_rows = cursor_log.fetchall()
+    conn_log.close()
+    
+    item_pricing = {}
+    for row in pricing_rows:
+        i_code = row[0]
+        t_cost = str(row[1]).strip()
+        
+        if t_cost.lower() == 'ton':
+            item_pricing[i_code] = {'type': 'ton', 'value': None}
+        else:
+            try:
+                val = float(t_cost)
+                item_pricing[i_code] = {'type': 'direct', 'value': val}
+            except:
+                item_pricing[i_code] = {'type': 'unknown', 'value': None}
+
+    if cost_per_unit > 0:
+        calc_type = "gate_pricing"
+    else:
+        calc_type = "direct_pricing"
+
+    calculated_products = []
+    total_cost = 0.0
+    estimated_total_cost = 0.0
+
+    if calc_type == "gate_pricing":
+        ton_items = []
+        direct_items = []
+        ton_cost_total = 0.0
+        
+        for row in pick_rows:
+            item_data = {
+                "code": row[0] if row[0] else "",
+                "name": row[1] if row[1] else "",
+                "quantity": float(row[2]) if row[2] else 0.0,
+                "uom": row[3] if row[3] else "",
+                "weight": float(row[4]) if row[4] else 0.0,
+            }
+            
+            p_info = item_pricing.get(item_data['code'], {})
+            p_type = p_info.get('type', 'ton') 
+            p_val = p_info.get('value', 0.0)
+            
+            if p_type == 'direct':
+                estimated_total_cost += (item_data['quantity'] * p_val)
+                item_data['standard_unit_cost'] = p_val
+                direct_items.append(item_data)
+            else:
+                cost = item_data['weight'] * cost_per_unit
+                estimated_total_cost += cost
+                ton_cost_total += cost
+                item_data['total_cost'] = cost
+                ton_items.append(item_data)
+
+        direct_unit_cost = 0.0
+        if manual_total_cost is not None:
+            remainder = manual_total_cost - ton_cost_total
+            total_direct_qty = sum(item['quantity'] for item in direct_items)
+            if total_direct_qty > 0:
+                direct_unit_cost = remainder / total_direct_qty
+            total_cost = manual_total_cost
+        else:
+            total_cost = estimated_total_cost
+
+        for item in ton_items:
+            # For ton items, unit cost implies cost per ton (gate rate) effectively, 
+            # but to fit "Price" column in excel (per qty), we calculate avg unit cost
+            avg_unit_cost = item['total_cost'] / item['quantity'] if item['quantity'] > 0 else 0
+            
+            calculated_products.append({
+                **item,
+                "calculation_type": "weight",
+                "unit_cost": avg_unit_cost, 
+                "total_cost": item['total_cost'] 
+            })
+        
+        for item in direct_items:
+            final_unit_cost = direct_unit_cost if manual_total_cost is not None else item['standard_unit_cost']
+            final_item_cost = item['quantity'] * final_unit_cost
+            
+            calculated_products.append({
+                **item,
+                "calculation_type": "direct_split" if manual_total_cost else "direct",
+                "unit_cost": final_unit_cost,
+                "total_cost": final_item_cost
+            })
+
+    elif calc_type == "direct_pricing":
+        for row in pick_rows:
+            item_code = row[0] if row[0] else ""
+            pricing_info = item_pricing.get(item_code, {})
+            
+            quantity = float(row[2]) if row[2] else 0.0
+            weight = float(row[4]) if row[4] else 0.0
+            
+            unit_cost = pricing_info.get('value', 0.0) or 0.0
+            cost = quantity * unit_cost
+            
+            total_cost += cost
+            estimated_total_cost += cost
+            
+            calculated_products.append({
+                "code": item_code,
+                "name": row[1] if row[1] else "",
+                "quantity": quantity,
+                "uom": row[3] if row[3] else "",
+                "weight": weight,
+                "calculation_type": "direct",
+                "unit_cost": unit_cost,
+                "total_cost": cost
+            })
+
+    calculated_products.sort(key=lambda x: x['code'])
+    
+    total_cost += add_charges
+    estimated_total_cost += add_charges
+    
+    return {
+        "calculation_type": calc_type,
+        "gate_name": gate_name,
+        "from_loc": from_loc,
+        "to_loc": to_loc,
+        "cost_per_unit": cost_per_unit, 
+        "additional_charges": add_charges,
+        "calculated_products": calculated_products,
+        "total_cost": total_cost,
+        "estimated_total_cost": estimated_total_cost
+    }
+
 # --- Calculation History Endpoints ---
 
 @app.post("/history/save")
@@ -262,7 +444,134 @@ def delete_history_item(record_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting record: {str(e)}")
 
-# --- Excel Export/Import Endpoints ---
+@app.get("/history/{record_id}/download")
+def download_history_excel(record_id: int):
+    try:
+        # 1. Fetch the history record
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM Calculation_History WHERE id = ?", (record_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="History record not found")
+
+        # Map row to dictionary
+        record = {
+            "id": row[0],
+            "gate_name": row[2],
+            "from_loc": row[3],
+            "to_loc": row[4],
+            "pick_ids": json.loads(row[5]),
+            "manual_total_cost": row[6],
+            "additional_charges": row[7]
+        }
+
+        # 2. Re-calculate cost breakdown using helper
+        # Note: This uses current Gate/Item master data. If master data changed, costs might differ from history total.
+        try:
+            calc_result = _perform_calculation_logic(
+                gate_name=record['gate_name'],
+                pick_ids=record['pick_ids'],
+                manual_total_cost=record['manual_total_cost'],
+                additional_charges=record['additional_charges']
+            )
+        except Exception as e:
+             raise HTTPException(status_code=500, detail=f"Error recalculating data: {str(e)}")
+
+        products = calc_result['calculated_products']
+
+        # 3. Create Excel
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Cost Details"
+
+        # Requested Headers
+        # no, claim date, area, item, quantity, price, total amount, ton, gate, branch
+        headers = [
+            "No", "Claim Date", "Area", "Item", "Quantity", 
+            "Price", "Total Amount", "Ton", "Gate", "Branch"
+        ]
+        
+        # Styles
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        border_style = Side(border_style="thin", color="000000")
+        border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
+
+        # Write Header
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = border
+
+        # Write Data
+        claim_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        
+        for idx, item in enumerate(products, 1):
+            row_num = idx + 1
+            
+            # Map data to columns
+            ws.cell(row=row_num, column=1, value=idx).border = border # No
+            ws.cell(row=row_num, column=2, value=claim_date).border = border # Claim Date
+            ws.cell(row=row_num, column=3, value=record['to_loc']).border = border # Area
+            ws.cell(row=row_num, column=4, value=item['name']).border = border # Item
+            ws.cell(row=row_num, column=5, value=item['quantity']).border = border # Quantity
+            
+            # Price (Unit Cost)
+            price_cell = ws.cell(row=row_num, column=6, value=item['unit_cost']) 
+            price_cell.number_format = '#,##0.00'
+            price_cell.border = border
+
+            # Total Amount
+            amt_cell = ws.cell(row=row_num, column=7, value=item['total_cost'])
+            amt_cell.number_format = '#,##0.00'
+            amt_cell.border = border
+
+            # Ton (Weight)
+            weight_cell = ws.cell(row=row_num, column=8, value=item['weight'])
+            weight_cell.number_format = '#,##0.00'
+            weight_cell.border = border
+
+            ws.cell(row=row_num, column=9, value=record['gate_name']).border = border # Gate
+            ws.cell(row=row_num, column=10, value=record['to_loc']).border = border # Branch
+
+        # Auto-fit columns
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            ws.column_dimensions[col_letter].width = max_length + 2
+
+        # Output
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        filename = f"Calculation_{record_id}_{record['gate_name']}.xlsx"
+        
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating download: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating download: {str(e)}")
+
+# --- Excel Export/Import Endpoints (Admin) ---
 
 @app.get("/admin/item-pricing/export/{gate_id}")
 def export_item_pricing_excel(gate_id: int):
@@ -630,184 +939,16 @@ def calculate_with_gate(
 ):
     """Calculate costs for multiple Pick IDs, aggregating same Items"""
     try:
-        add_charges = float(additional_charges) if additional_charges is not None else 0.0
-
         if not pick_ids:
             raise HTTPException(status_code=400, detail="No Pick IDs provided")
-
-        # 1. Get Pick Data from DWBI for ALL IDs (Combined & Summed)
-        try:
-            conn_dwbi = get_dwbi_connection()
-            cursor_dwbi = conn_dwbi.cursor()
             
-            placeholders = ','.join('?' * len(pick_ids))
-            
-            # UPDATED QUERY: Group By ItemCode
-            query = f"""
-                SELECT ItemCode, MAX(Dscription), SUM(Quantity), MAX(UomCode), SUM(ItemWeight)
-                FROM PG_PickDetail 
-                WHERE ID IN ({placeholders}) 
-                GROUP BY ItemCode
-                ORDER BY ItemCode
-            """
-            cursor_dwbi.execute(query, pick_ids)
-            pick_rows = cursor_dwbi.fetchall()
-            conn_dwbi.close()
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error fetching pick details: {str(e)}")
-        
-        if not pick_rows:
-            raise HTTPException(status_code=404, detail="No products found for the selected Pick IDs")
-        
-        # 2. Get Gate Data
-        try:
-            conn_log = get_logistic_connection()
-            cursor_log = conn_log.cursor()
-            cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost Per Unit] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
-            gate_row = cursor_log.fetchone()
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error fetching gate config: {str(e)}")
-        
-        if not gate_row:
-            if 'conn_log' in locals(): conn_log.close()
-            raise HTTPException(status_code=404, detail=f"Gate {gate_name} not found")
-            
-        gate_id = gate_row[0]
-        from_loc = gate_row[1]
-        to_loc = gate_row[2]
-        cost_per_unit = float(gate_row[3] or 0)
-        
-        # 3. Get Item Pricing
-        cursor_log.execute("""
-            SELECT [Item ID], [Transportation Cost] 
-            FROM Item_Pricing 
-            WHERE [Gate ID] = ?
-        """, (gate_id,))
-        pricing_rows = cursor_log.fetchall()
-        conn_log.close()
-        
-        item_pricing = {}
-        for row in pricing_rows:
-            i_code = row[0]
-            t_cost = str(row[1]).strip()
-            
-            if t_cost.lower() == 'ton':
-                item_pricing[i_code] = {'type': 'ton', 'value': None}
-            else:
-                try:
-                    val = float(t_cost)
-                    item_pricing[i_code] = {'type': 'direct', 'value': val}
-                except:
-                    item_pricing[i_code] = {'type': 'unknown', 'value': None}
-
-        if cost_per_unit > 0:
-            calc_type = "gate_pricing"
-        else:
-            calc_type = "direct_pricing"
-
-        calculated_products = []
-        total_cost = 0.0
-        estimated_total_cost = 0.0
-
-        if calc_type == "gate_pricing":
-            ton_items = []
-            direct_items = []
-            ton_cost_total = 0.0
-            
-            for row in pick_rows:
-                item_data = {
-                    "code": row[0] if row[0] else "",
-                    "name": row[1] if row[1] else "",
-                    "quantity": float(row[2]) if row[2] else 0.0,
-                    "uom": row[3] if row[3] else "",
-                    "weight": float(row[4]) if row[4] else 0.0,
-                }
-                
-                p_info = item_pricing.get(item_data['code'], {})
-                p_type = p_info.get('type', 'ton') 
-                p_val = p_info.get('value', 0.0)
-                
-                if p_type == 'direct':
-                    estimated_total_cost += (item_data['quantity'] * p_val)
-                    item_data['standard_unit_cost'] = p_val
-                    direct_items.append(item_data)
-                else:
-                    cost = item_data['weight'] * cost_per_unit
-                    estimated_total_cost += cost
-                    ton_cost_total += cost
-                    item_data['total_cost'] = cost
-                    ton_items.append(item_data)
-
-            direct_unit_cost = 0.0
-            if manual_total_cost is not None:
-                remainder = manual_total_cost - ton_cost_total
-                total_direct_qty = sum(item['quantity'] for item in direct_items)
-                if total_direct_qty > 0:
-                    direct_unit_cost = remainder / total_direct_qty
-                total_cost = manual_total_cost
-            else:
-                total_cost = estimated_total_cost
-
-            for item in ton_items:
-                calculated_products.append({
-                    **item,
-                    "calculation_type": "weight",
-                    "unit_cost": None,
-                    "total_cost": item['total_cost'] 
-                })
-            
-            for item in direct_items:
-                final_unit_cost = direct_unit_cost if manual_total_cost is not None else item['standard_unit_cost']
-                final_item_cost = item['quantity'] * final_unit_cost
-                
-                calculated_products.append({
-                    **item,
-                    "calculation_type": "direct_split" if manual_total_cost else "direct",
-                    "unit_cost": final_unit_cost,
-                    "total_cost": final_item_cost
-                })
-
-        elif calc_type == "direct_pricing":
-            for row in pick_rows:
-                item_code = row[0] if row[0] else ""
-                pricing_info = item_pricing.get(item_code, {})
-                
-                quantity = float(row[2]) if row[2] else 0.0
-                weight = float(row[4]) if row[4] else 0.0
-                
-                unit_cost = pricing_info.get('value', 0.0) or 0.0
-                cost = quantity * unit_cost
-                
-                total_cost += cost
-                estimated_total_cost += cost
-                
-                calculated_products.append({
-                    "code": item_code,
-                    "name": row[1] if row[1] else "",
-                    "quantity": quantity,
-                    "uom": row[3] if row[3] else "",
-                    "weight": weight,
-                    "calculation_type": "direct",
-                    "unit_cost": unit_cost,
-                    "total_cost": cost
-                })
-
-        calculated_products.sort(key=lambda x: x['code'])
-        
-        total_cost += add_charges
-        estimated_total_cost += add_charges
-        
-        return {
-            "calculation_type": calc_type,
-            "gate_name": gate_name,
-            "from_loc": from_loc,
-            "to_loc": to_loc,
-            "cost_per_unit": cost_per_unit, 
-            "additional_charges": add_charges,
-            "calculated_products": calculated_products,
-            "total_cost": total_cost,
-            "estimated_total_cost": estimated_total_cost
-        }
+        result = _perform_calculation_logic(
+            gate_name=gate_name, 
+            pick_ids=pick_ids, 
+            manual_total_cost=manual_total_cost, 
+            additional_charges=additional_charges
+        )
+        return result
 
     except HTTPException:
         raise
@@ -842,7 +983,6 @@ def get_products_by_pick_ids(pick_ids: List[str] = Query(...)):
         
         placeholders = ','.join('?' * len(pick_ids))
         
-        # UPDATED QUERY: Group By ItemCode
         query = f"""
             SELECT ItemCode, MAX(Dscription), SUM(Quantity), MAX(UomCode), SUM(ItemWeight)
             FROM PG_PickDetail 
@@ -880,7 +1020,6 @@ def get_products_by_pick_id(pick_id: str):
         conn = get_dwbi_connection()
         cursor = conn.cursor()
         
-        # UPDATED QUERY: Group By ItemCode
         cursor.execute("""
             SELECT ItemCode, MAX(Dscription), SUM(Quantity), MAX(UomCode), SUM(ItemWeight)
             FROM PG_PickDetail 
