@@ -3,7 +3,7 @@ import pyodbc
 import sqlite3
 import json
 import datetime
-from fastapi import FastAPI, HTTPException, UploadFile, File, Query
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -15,7 +15,6 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-from fastapi import Depends, status
 
 # --- Auth Configuration ---
 SECRET_KEY = "CHANGE_THIS_TO_A_SUPER_SECRET_KEY"  # IMPORTANT: Change this!
@@ -108,8 +107,7 @@ def startup_db():
             )
         """)
         
-        
-        # --- NEW: User Table ---
+        # --- User Table ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Users (
                 username TEXT PRIMARY KEY,
@@ -118,18 +116,26 @@ def startup_db():
             )
         """)
         
-        # Create default account user if not exists (User: account, Pass: account123)
+        # Create default account user if not exists
         cursor.execute("SELECT * FROM Users WHERE username = 'account'")
         if not cursor.fetchone():
-            # Hash for 'account123'
             default_pw = pwd_context.hash("account123") 
             cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
                           ('account', default_pw, 'account'))
             
-            # Create default logistic user (User: logistic, Pass: log123)
+        # Create default logistic user if not exists
+        cursor.execute("SELECT * FROM Users WHERE username = 'logistic'")
+        if not cursor.fetchone():
             log_pw = pwd_context.hash("log123")
             cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
                           ('logistic', log_pw, 'logistic'))
+            
+        # --- NEW: Create default admin user ---
+        cursor.execute("SELECT * FROM Users WHERE username = 'admin'")
+        if not cursor.fetchone():
+            admin_pw = pwd_context.hash("admin123")
+            cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
+                          ('admin', admin_pw, 'admin'))
         
         conn.commit()
         conn.close()
@@ -168,9 +174,22 @@ class CalculationSaveRequest(BaseModel):
     manual_total_cost: Optional[float] = None
     additional_charges: Optional[float] = 0.0
     final_total_cost: float
-    
-    
-    
+
+# --- User Management Models ---
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    role: str
+
+class UserUpdate(BaseModel):
+    password: Optional[str] = None
+    role: Optional[str] = None
+
+class UserResponse(BaseModel):
+    username: str
+    role: str
+
 # --- Auth Models & Helpers ---
 
 class Token(BaseModel):
@@ -179,9 +198,6 @@ class Token(BaseModel):
     role: str
     username: str
     
-    
-# --- Helper Functions ---
-
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -209,11 +225,18 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         raise credentials_exception
 
 async def get_account_user(current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != "account":
-        raise HTTPException(status_code=403, detail="account privileges required")
+    # Account features are accessible by 'account' OR 'admin'
+    if current_user["role"] not in ["account", "admin"]:
+        raise HTTPException(status_code=403, detail="Privileged access required (Account or Admin)")
     return current_user
 
+async def get_admin_user(current_user: dict = Depends(get_current_user)):
+    # Admin features are ONLY for 'admin'
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin privileges required")
+    return current_user
 
+# --- Helper Functions ---
 
 def determine_calculation_type_sql(gate_id):
     """
@@ -244,9 +267,6 @@ def determine_calculation_type_sql(gate_id):
         return "unknown"
 
 def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, additional_charges=0.0):
-    """
-    Core Logic to calculate costs. Used by both the API endpoint and the Excel export.
-    """
     add_charges = float(additional_charges) if additional_charges is not None else 0.0
 
     # 1. Get Pick Data from DWBI
@@ -361,8 +381,6 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
             total_cost = estimated_total_cost
 
         for item in ton_items:
-            # For ton items, unit cost implies cost per ton (gate rate) effectively, 
-            # but to fit "Price" column in excel (per qty), we calculate avg unit cost
             avg_unit_cost = item['total_cost'] / item['quantity'] if item['quantity'] > 0 else 0
             
             calculated_products.append({
@@ -425,8 +443,7 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
         "estimated_total_cost": estimated_total_cost
     }
 
-# --- Calculation History Endpoints ---
-
+# --- Login & Token ---
 
 @app.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -445,6 +462,96 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     
     access_token = create_access_token(data={"sub": user[0], "role": user[2]})
     return {"access_token": access_token, "token_type": "bearer", "role": user[2], "username": user[0]}
+
+# --- User Management Endpoints (Admin Only) ---
+
+@app.get("/users", response_model=List[UserResponse])
+def get_all_users(user: dict = Depends(get_admin_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT username, role FROM Users ORDER BY username")
+        rows = cursor.fetchall()
+        conn.close()
+        return [{"username": row[0], "role": row[1]} for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
+
+@app.post("/users")
+def create_user(user_data: UserCreate, user: dict = Depends(get_admin_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        # Check if user exists
+        cursor.execute("SELECT username FROM Users WHERE username = ?", (user_data.username,))
+        if cursor.fetchone():
+            conn.close()
+            raise HTTPException(status_code=400, detail="Username already exists")
+        
+        hashed_pw = pwd_context.hash(user_data.password)
+        cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
+                      (user_data.username, hashed_pw, user_data.role))
+        
+        conn.commit()
+        conn.close()
+        return {"message": "User created successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating user: {str(e)}")
+
+@app.put("/users/{username}")
+def update_user(username: str, user_data: UserUpdate, user: dict = Depends(get_admin_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        # Check if user exists
+        cursor.execute("SELECT username FROM Users WHERE username = ?", (username,))
+        if not cursor.fetchone():
+            conn.close()
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        if user_data.password:
+            hashed_pw = pwd_context.hash(user_data.password)
+            cursor.execute("UPDATE Users SET hashed_password = ? WHERE username = ?", (hashed_pw, username))
+            
+        if user_data.role:
+            cursor.execute("UPDATE Users SET role = ? WHERE username = ?", (user_data.role, username))
+            
+        conn.commit()
+        conn.close()
+        return {"message": "User updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating user: {str(e)}")
+
+@app.delete("/users/{username}")
+def delete_user(username: str, user: dict = Depends(get_admin_user)):
+    if username == user["username"]:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+        
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM Users WHERE username = ?", (username,))
+        if cursor.rowcount == 0:
+            conn.close()
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        conn.commit()
+        conn.close()
+        return {"message": "User deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
+
+
+# --- Calculation History Endpoints ---
 
 @app.post("/history/save")
 def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_current_user)):
@@ -567,7 +674,6 @@ def download_history_excel(record_id: int):
         }
 
         # 2. Re-calculate cost breakdown using helper
-        # Note: This uses current Gate/Item master data. If master data changed, costs might differ from history total.
         try:
             calc_result = _perform_calculation_logic(
                 gate_name=record['gate_name'],
@@ -585,20 +691,16 @@ def download_history_excel(record_id: int):
         ws = wb.active
         ws.title = "Cost Details"
 
-        # Requested Headers
-        # no, claim date, area, item, quantity, price, total amount, ton, gate, branch
         headers = [
             "No", "Claim Date", "Area", "Item", "Quantity", 
             "Price", "Total Amount", "Ton", "Gate", "Branch"
         ]
         
-        # Styles
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
         header_font = Font(bold=True, color='FFFFFF')
         border_style = Side(border_style="thin", color="000000")
         border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
 
-        # Write Header
         for col_num, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col_num)
             cell.value = header
@@ -607,38 +709,31 @@ def download_history_excel(record_id: int):
             cell.alignment = Alignment(horizontal='center')
             cell.border = border
 
-        # Write Data
         claim_date = datetime.datetime.now().strftime("%Y-%m-%d")
         
         for idx, item in enumerate(products, 1):
             row_num = idx + 1
+            ws.cell(row=row_num, column=1, value=idx).border = border
+            ws.cell(row=row_num, column=2, value=claim_date).border = border
+            ws.cell(row=row_num, column=3, value=record['to_loc']).border = border
+            ws.cell(row=row_num, column=4, value=item['name']).border = border
+            ws.cell(row=row_num, column=5, value=item['quantity']).border = border
             
-            # Map data to columns
-            ws.cell(row=row_num, column=1, value=idx).border = border # No
-            ws.cell(row=row_num, column=2, value=claim_date).border = border # Claim Date
-            ws.cell(row=row_num, column=3, value=record['to_loc']).border = border # Area
-            ws.cell(row=row_num, column=4, value=item['name']).border = border # Item
-            ws.cell(row=row_num, column=5, value=item['quantity']).border = border # Quantity
-            
-            # Price (Unit Cost)
             price_cell = ws.cell(row=row_num, column=6, value=item['unit_cost']) 
             price_cell.number_format = '#,##0.00'
             price_cell.border = border
 
-            # Total Amount
             amt_cell = ws.cell(row=row_num, column=7, value=item['total_cost'])
             amt_cell.number_format = '#,##0.00'
             amt_cell.border = border
 
-            # Ton (Weight)
             weight_cell = ws.cell(row=row_num, column=8, value=item['weight'])
             weight_cell.number_format = '#,##0.00'
             weight_cell.border = border
 
-            ws.cell(row=row_num, column=9, value=record['gate_name']).border = border # Gate
-            ws.cell(row=row_num, column=10, value=record['to_loc']).border = border # Branch
+            ws.cell(row=row_num, column=9, value=record['gate_name']).border = border
+            ws.cell(row=row_num, column=10, value=record['to_loc']).border = border
 
-        # Auto-fit columns
         for col in ws.columns:
             max_length = 0
             col_letter = col[0].column_letter
@@ -650,7 +745,6 @@ def download_history_excel(record_id: int):
                     pass
             ws.column_dimensions[col_letter].width = max_length + 2
 
-        # Output
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
@@ -669,7 +763,7 @@ def download_history_excel(record_id: int):
         logger.error(f"Error generating download: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating download: {str(e)}")
 
-# --- Excel Export/Import Endpoints (account) ---
+# --- Excel Export/Import Endpoints (account or admin) ---
 
 @app.get("/account/item-pricing/export/{gate_id}")
 def export_item_pricing_excel(gate_id: int):
@@ -1035,7 +1129,6 @@ def calculate_with_gate(
     manual_total_cost: Optional[float] = None, 
     additional_charges: Optional[float] = 0.0
 ):
-    """Calculate costs for multiple Pick IDs, aggregating same Items"""
     try:
         if not pick_ids:
             raise HTTPException(status_code=400, detail="No Pick IDs provided")

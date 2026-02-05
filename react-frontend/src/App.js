@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, Lock } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -67,6 +67,7 @@ const LoginScreen = ({ onLogin }) => {
           </button>
         </form>
         <div className="mt-4 text-xs text-center text-gray-500">
+          <p>Default Admin: admin / admin123</p>
           <p>Default Account: account / account123</p>
           <p>Default Logistic: logistic / log123</p>
         </div>
@@ -124,6 +125,11 @@ const PricingApp = () => {
   const [historyData, setHistoryData] = useState([]);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
+
+  // User Management State
+  const [usersList, setUsersList] = useState([]);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
 
   // --- Auth Helpers ---
 
@@ -196,7 +202,6 @@ const PricingApp = () => {
 
   const loadGates = async () => {
     try {
-      // Assuming GET gates is allowed for logged in users
       const response = await authFetch(`${API_URL}/account/gates`);
       if (response.ok) {
         const data = await response.json();
@@ -260,6 +265,22 @@ const PricingApp = () => {
       showNotification(`Error loading history: ${error.message}`, 'error');
     }
   };
+
+  const loadUsers = async () => {
+    if (userRole !== 'admin') return;
+    try {
+        const response = await authFetch(`${API_URL}/users`);
+        if (response.ok) {
+            const data = await response.json();
+            setUsersList(data);
+        } else {
+             const error = await response.json();
+             showNotification(getErrorMessage(error), 'error');
+        }
+    } catch (error) {
+        showNotification(`Error loading users: ${error.message}`, 'error');
+    }
+  }
 
   // --- Action Functions ---
 
@@ -338,7 +359,6 @@ const PricingApp = () => {
   const handleDownloadHistoryExcel = async (record) => {
     try {
       showNotification('Generating Excel file...', 'info');
-      // Using authFetch to ensure token is passed if backend requires it for this endpoint
       const response = await authFetch(`${API_URL}/history/${record.id}/download`);
       
       if (response.ok) {
@@ -430,7 +450,7 @@ const PricingApp = () => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      // NOTE: FormData automatically sets Content-Type to multipart/form-data, don't set it manually in headers
+      // NOTE: FormData automatically sets Content-Type to multipart/form-data
       const response = await authFetch(`${API_URL}/account/item-pricing/import/${selectedGateForPricing}`, {
         method: 'POST',
         body: formData
@@ -707,14 +727,69 @@ const PricingApp = () => {
     });
   };
 
+  const saveUser = async (userData) => {
+    try {
+        let url = `${API_URL}/users`;
+        let method = 'POST';
+        
+        // If editing, append username to URL and change method to PUT
+        if (editingUser) {
+            url += `/${editingUser.username}`;
+            method = 'PUT';
+        }
+        
+        const response = await authFetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData)
+        });
+
+        if (response.ok) {
+            showNotification(editingUser ? 'User updated successfully' : 'User created successfully', 'success');
+            await loadUsers();
+            setShowUserModal(false);
+            setEditingUser(null);
+        } else {
+            const error = await response.json();
+            showNotification(getErrorMessage(error), 'error');
+        }
+    } catch (error) {
+        showNotification(`Error: ${error.message}`, 'error');
+    }
+  };
+
+  const deleteUser = async (username) => {
+    if (username === userRole.username) return; // Prevent deleting self (though backend checks too)
+    
+    setConfirmDialog({
+        message: `Are you sure you want to delete user "${username}"?`,
+        onConfirm: async () => {
+            try {
+                const response = await authFetch(`${API_URL}/users/${username}`, { method: 'DELETE' });
+                if (response.ok) {
+                    showNotification('User deleted successfully', 'success');
+                    await loadUsers();
+                } else {
+                    const error = await response.json();
+                    showNotification(getErrorMessage(error), 'error');
+                }
+            } catch (error) {
+                showNotification(`Error: ${error.message}`, 'error');
+            }
+            setConfirmDialog(null);
+        },
+        onCancel: () => setConfirmDialog(null)
+    });
+  };
+
+
   useEffect(() => {
-    // Only load initial data if logged in
     if (token) {
         loadPickIds();
         loadGates();
         loadFromLocations();
     }
-  }, [token]); // Add token as dependency
+  }, [token]);
 
   useEffect(() => {
     if (token && selectedGateForPricing) {
@@ -728,7 +803,10 @@ const PricingApp = () => {
     if (token && currentPage === 'history') {
       loadHistory();
     }
-  }, [currentPage, token]);
+    if (token && currentPage === 'users' && userRole === 'admin') {
+        loadUsers();
+    }
+  }, [currentPage, token, userRole]);
 
   // --- Sub-Components ---
 
@@ -890,6 +968,71 @@ const PricingApp = () => {
     );
   };
 
+  const UserModal = ({ user, onSave, onClose }) => {
+    const [formData, setFormData] = useState(user ? { ...user, password: '' } : {
+        username: '',
+        password: '',
+        role: 'logistic' // default role
+    });
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                <h2 className="text-2xl font-bold mb-4">{user ? 'Edit User' : 'Add New User'}</h2>
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-semibold mb-1">Username</label>
+                        <input
+                            type="text"
+                            value={formData.username}
+                            onChange={(e) => setFormData({...formData, username: e.target.value})}
+                            className="w-full p-2 border rounded"
+                            disabled={!!user} // Username cannot be changed
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-semibold mb-1">Password</label>
+                        <input
+                            type="password"
+                            value={formData.password}
+                            onChange={(e) => setFormData({...formData, password: e.target.value})}
+                            className="w-full p-2 border rounded"
+                            placeholder={user ? "Leave blank to keep existing" : "Required"}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-semibold mb-1">Role</label>
+                        <select
+                            value={formData.role}
+                            onChange={(e) => setFormData({...formData, role: e.target.value})}
+                            className="w-full p-2 border rounded"
+                        >
+                            <option value="logistic">Logistic (Read Only)</option>
+                            <option value="account">Account (Manage Gates/Items)</option>
+                            <option value="admin">Admin (Full Access)</option>
+                        </select>
+                    </div>
+                </div>
+                <div className="flex gap-2 mt-6">
+                    <button
+                        onClick={() => onSave(formData)}
+                        className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+                        disabled={!user && !formData.password}
+                    >
+                        Save
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
   const SaveModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -990,6 +1133,17 @@ const PricingApp = () => {
             <History size={20} />
             History
           </button>
+          {userRole === 'admin' && (
+              <button
+                onClick={() => setCurrentPage('users')}
+                className={`flex items-center gap-2 px-4 py-2 rounded transition ${
+                  currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                <Users size={20} />
+                Users
+              </button>
+          )}
         </div>
         
         {/* User Info & Logout */}
@@ -1019,7 +1173,113 @@ const PricingApp = () => {
   }
 
   // --- Views ---
+  
+  // 1. Users View (Admin Only)
+  if (currentPage === 'users' && userRole === 'admin') {
+      return (
+        <div className="min-h-screen bg-gray-50 p-6">
+            <div className="max-w-6xl mx-auto">
+                {notification && (
+                    <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${
+                    notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+                    } text-white z-50`}>
+                    {notification.message}
+                    </div>
+                )}
+                {renderNavigation()}
+                <div className="bg-white rounded-lg shadow-md p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <h1 className="text-3xl font-bold text-gray-800">User Management</h1>
+                        <button
+                            onClick={() => {
+                                setEditingUser(null);
+                                setShowUserModal(true);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                        >
+                            <Plus size={20} />
+                            Add User
+                        </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full border-collapse border">
+                            <thead className="bg-gray-100">
+                                <tr>
+                                    <th className="border p-3 text-left">Username</th>
+                                    <th className="border p-3 text-left">Role</th>
+                                    <th className="border p-3 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {usersList.map((u, index) => (
+                                    <tr key={index} className="hover:bg-gray-50">
+                                        <td className="border p-3 font-semibold text-gray-700">{u.username}</td>
+                                        <td className="border p-3">
+                                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
+                                                u.role === 'admin' ? 'bg-red-100 text-red-700' :
+                                                u.role === 'account' ? 'bg-blue-100 text-blue-700' :
+                                                'bg-gray-100 text-gray-700'
+                                            }`}>
+                                                {u.role}
+                                            </span>
+                                        </td>
+                                        <td className="border p-3 text-center">
+                                            <div className="flex justify-center gap-2">
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingUser(u);
+                                                        setShowUserModal(true);
+                                                    }}
+                                                    className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
+                                                    title="Edit User"
+                                                >
+                                                    <Edit2 size={16} />
+                                                </button>
+                                                {u.username !== username && (
+                                                    <button
+                                                        onClick={() => deleteUser(u.username)}
+                                                        className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"
+                                                        title="Delete User"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                                {u.username === username && (
+                                                    <span className="p-2 text-gray-400 cursor-not-allowed" title="Cannot delete yourself">
+                                                        <Lock size={16} />
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {showUserModal && (
+                <UserModal
+                    user={editingUser}
+                    onSave={saveUser}
+                    onClose={() => {
+                        setShowUserModal(false);
+                        setEditingUser(null);
+                    }}
+                />
+            )}
+            {confirmDialog && (
+                <ConfirmDialog
+                    message={confirmDialog.message}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            )}
+        </div>
+      );
+  }
 
+  // 2. History View
   if (currentPage === 'history') {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -1097,7 +1357,9 @@ const PricingApp = () => {
     );
   }
 
+  // 3. Gates View
   if (currentPage === 'gates') {
+    const canEdit = ['account', 'admin'].includes(userRole);
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
@@ -1112,8 +1374,7 @@ const PricingApp = () => {
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-3xl font-bold text-gray-800">Transportation Cost by Gate</h1>
-              {/* Only 'account' role can add gates */}
-              {userRole === 'account' && (
+              {canEdit && (
                 <button
                   onClick={() => setShowAddGateModal(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
@@ -1146,8 +1407,7 @@ const PricingApp = () => {
                       <td className="border p-3">{gate.unit || '-'}</td>
                       <td className="border p-3">{gate.cost_per_unit || '-'}</td>
                       <td className="border p-3">
-                         {/* Only 'account' role can edit/delete */}
-                        {userRole === 'account' && (
+                        {canEdit && (
                             <div className="flex gap-2">
                             <button
                                 onClick={() => {
@@ -1167,7 +1427,7 @@ const PricingApp = () => {
                             </button>
                             </div>
                         )}
-                        {userRole !== 'account' && <span className="text-gray-400 text-sm">Read Only</span>}
+                        {!canEdit && <span className="text-gray-400 text-sm">Read Only</span>}
                       </td>
                     </tr>
                   ))}
@@ -1198,7 +1458,9 @@ const PricingApp = () => {
     );
   }
 
+  // 4. Items View
   if (currentPage === 'items') {
+    const canEdit = ['account', 'admin'].includes(userRole);
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
@@ -1224,8 +1486,7 @@ const PricingApp = () => {
                       Download Excel
                     </button>
                     
-                    {/* Only 'account' role can Upload and Add Items */}
-                    {userRole === 'account' && (
+                    {canEdit && (
                         <>
                             <label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer">
                             <Upload size={20} />
@@ -1285,8 +1546,7 @@ const PricingApp = () => {
                         <td className="border p-2">{item.item_name}</td>
                         <td className="border p-2">{item.transportation_cost}</td>
                         <td className="border p-2">
-                           {/* Only 'account' role can edit/delete */}
-                          {userRole === 'account' ? (
+                          {canEdit ? (
                             <div className="flex gap-2">
                                 <button
                                 onClick={() => {
@@ -1339,8 +1599,7 @@ const PricingApp = () => {
     );
   }
 
-  // --- Calculator View ---
-
+  // 5. Default: Calculator View
   const hasCalculated = calculatedProducts.length > 0;
   const tableData = hasCalculated ? calculatedProducts : products;
 
