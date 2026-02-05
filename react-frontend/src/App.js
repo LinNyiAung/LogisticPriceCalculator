@@ -1,9 +1,88 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
+// --- Login Component ---
+const LoginScreen = ({ onLogin }) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    
+    const formData = new FormData();
+    formData.append('username', username);
+    formData.append('password', password);
+
+    try {
+      const response = await fetch(`${API_URL}/token`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        onLogin(data);
+      } else {
+        setError('Invalid username or password');
+      }
+    } catch (err) {
+      setError('Login failed. Check server connection.');
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-md w-96">
+        <h1 className="text-2xl font-bold mb-6 text-center text-blue-600">Logistic App Login</h1>
+        {error && <div className="bg-red-100 text-red-700 p-2 rounded mb-4 text-sm text-center">{error}</div>}
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-gray-700 text-sm font-bold mb-2">Username</label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
+              placeholder="Enter username"
+              required
+            />
+          </div>
+          <div className="mb-6">
+            <label className="block text-gray-700 text-sm font-bold mb-2">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
+              placeholder="Enter password"
+              required
+            />
+          </div>
+          <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition font-semibold">
+            Sign In
+          </button>
+        </form>
+        <div className="mt-4 text-xs text-center text-gray-500">
+          <p>Default Account: account / account123</p>
+          <p>Default Logistic: logistic / log123</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Main Application Component ---
 const PricingApp = () => {
+  // Auth State
+  const [token, setToken] = useState(localStorage.getItem('token') || null);
+  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || null);
+  const [username, setUsername] = useState(localStorage.getItem('username') || '');
+
+  // App State
   const [currentPage, setCurrentPage] = useState('calculator');
   const [pickIds, setPickIds] = useState([]);
   
@@ -46,7 +125,45 @@ const PricingApp = () => {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
 
-  // --- Helper: Safe Error Extraction ---
+  // --- Auth Helpers ---
+
+  const handleLogin = (data) => {
+    setToken(data.access_token);
+    setUserRole(data.role);
+    setUsername(data.username);
+    localStorage.setItem('token', data.access_token);
+    localStorage.setItem('userRole', data.role);
+    localStorage.setItem('username', data.username);
+  };
+
+  const handleLogout = () => {
+    setToken(null);
+    setUserRole(null);
+    setUsername('');
+    localStorage.removeItem('token');
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('username');
+    setCurrentPage('calculator');
+  };
+
+  const authFetch = async (url, options = {}) => {
+    const headers = options.headers || {};
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    const updatedOptions = { ...options, headers };
+    
+    const response = await fetch(url, updatedOptions);
+    
+    if (response.status === 401) {
+        handleLogout();
+        throw new Error("Session expired. Please login again.");
+    }
+    return response;
+  };
+
+  // --- General Helpers ---
+
   const getErrorMessage = (error) => {
     if (!error?.detail) return 'An unknown error occurred';
     if (Array.isArray(error.detail)) {
@@ -63,9 +180,11 @@ const PricingApp = () => {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  // --- Data Loading Functions ---
+
   const loadPickIds = async () => {
     try {
-      const response = await fetch(`${API_URL}/pick-ids`);
+      const response = await authFetch(`${API_URL}/pick-ids`);
       if (response.ok) {
         const data = await response.json();
         setPickIds(data.pick_ids);
@@ -77,7 +196,8 @@ const PricingApp = () => {
 
   const loadGates = async () => {
     try {
-      const response = await fetch(`${API_URL}/admin/gates`);
+      // Assuming GET gates is allowed for logged in users
+      const response = await authFetch(`${API_URL}/account/gates`);
       if (response.ok) {
         const data = await response.json();
         setGates(data.gates); 
@@ -90,7 +210,7 @@ const PricingApp = () => {
 
   const loadFromLocations = async () => {
     try {
-      const response = await fetch(`${API_URL}/locations/from`);
+      const response = await authFetch(`${API_URL}/locations/from`);
       if (response.ok) {
         const data = await response.json();
         setFromLocations(data.locations);
@@ -106,7 +226,7 @@ const PricingApp = () => {
       if (fromLoc) {
         url += `?from_loc=${encodeURIComponent(fromLoc)}`;
       }
-      const response = await fetch(url);
+      const response = await authFetch(url);
       if (response.ok) {
         const data = await response.json();
         setToLocations(data.locations);
@@ -119,7 +239,7 @@ const PricingApp = () => {
   const loadItemPricing = async (gateId) => {
     if (!gateId) return;
     try {
-      const response = await fetch(`${API_URL}/admin/item-pricing/${gateId}`);
+      const response = await authFetch(`${API_URL}/account/item-pricing/${gateId}`);
       if (response.ok) {
         const data = await response.json();
         setItemPricingData(data.items);
@@ -131,7 +251,7 @@ const PricingApp = () => {
 
   const loadHistory = async () => {
     try {
-      const response = await fetch(`${API_URL}/history`);
+      const response = await authFetch(`${API_URL}/history`);
       if (response.ok) {
         const data = await response.json();
         setHistoryData(data.history);
@@ -140,6 +260,8 @@ const PricingApp = () => {
       showNotification(`Error loading history: ${error.message}`, 'error');
     }
   };
+
+  // --- Action Functions ---
 
   const handleSaveCalculation = async (isUpdate = false) => {
     try {
@@ -154,7 +276,7 @@ const PricingApp = () => {
         final_total_cost: calculatedTotalCost
       };
 
-      const response = await fetch(`${API_URL}/history/save`, {
+      const response = await authFetch(`${API_URL}/history/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -178,10 +300,8 @@ const PricingApp = () => {
 
   const handleSaveButtonClick = () => {
     if (currentHistoryId) {
-        // If we are editing an existing record, show modal to ask for Update vs New
         setShowSaveModal(true);
     } else {
-        // If it's a new record, save immediately without popup
         handleSaveCalculation(false);
     }
   };
@@ -204,13 +324,9 @@ const PricingApp = () => {
       setManualTotalCost(record.manual_total_cost || '');
       setAdditionalCharges(record.additional_charges || '');
       
-      // Reset calculated items list since we don't store line items
       setCalculatedProducts([]); 
-      
-      // Restore the final total cost from the record
       setCalculatedTotalCost(record.final_total_cost);
-      
-      setEstimatedTotalCost(null); // Not stored in DB
+      setEstimatedTotalCost(null);
 
       showNotification(`Loaded calculation record. Ready to edit.`, 'info');
       
@@ -222,7 +338,8 @@ const PricingApp = () => {
   const handleDownloadHistoryExcel = async (record) => {
     try {
       showNotification('Generating Excel file...', 'info');
-      const response = await fetch(`${API_URL}/history/${record.id}/download`);
+      // Using authFetch to ensure token is passed if backend requires it for this endpoint
+      const response = await authFetch(`${API_URL}/history/${record.id}/download`);
       
       if (response.ok) {
         const blob = await response.blob();
@@ -230,7 +347,6 @@ const PricingApp = () => {
         const a = document.createElement('a');
         a.href = url;
         
-        // Extract filename from header
         const contentDisposition = response.headers.get('Content-Disposition');
         let filename = `Calculation_${record.id}.xlsx`;
         if (contentDisposition) {
@@ -258,13 +374,15 @@ const PricingApp = () => {
     if(!window.confirm("Are you sure you want to delete this saved calculation?")) return;
     
     try {
-      const response = await fetch(`${API_URL}/history/${id}`, { method: 'DELETE' });
+      const response = await authFetch(`${API_URL}/history/${id}`, { method: 'DELETE' });
       if (response.ok) {
         showNotification('Record deleted', 'success');
         loadHistory();
+      } else {
+         showNotification('Error deleting record', 'error');
       }
     } catch (error) {
-      showNotification('Error deleting record', 'error');
+      showNotification(`Error: ${error.message}`, 'error');
     }
   };
 
@@ -274,7 +392,7 @@ const PricingApp = () => {
       return;
     }
     try {
-      const response = await fetch(`${API_URL}/admin/item-pricing/export/${selectedGateForPricing}`);
+      const response = await authFetch(`${API_URL}/account/item-pricing/export/${selectedGateForPricing}`);
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -312,7 +430,8 @@ const PricingApp = () => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const response = await fetch(`${API_URL}/admin/item-pricing/import/${selectedGateForPricing}`, {
+      // NOTE: FormData automatically sets Content-Type to multipart/form-data, don't set it manually in headers
+      const response = await authFetch(`${API_URL}/account/item-pricing/import/${selectedGateForPricing}`, {
         method: 'POST',
         body: formData
       });
@@ -340,7 +459,7 @@ const PricingApp = () => {
 
     try {
       const queryString = ids.map(id => `pick_ids=${encodeURIComponent(id)}`).join('&');
-      const response = await fetch(`${API_URL}/products-by-ids?${queryString}`);
+      const response = await authFetch(`${API_URL}/products-by-ids?${queryString}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -448,7 +567,7 @@ const PricingApp = () => {
         url += `&additional_charges=${additionalCharges}`;
       }
 
-      const response = await fetch(url, {
+      const response = await authFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -488,7 +607,7 @@ const PricingApp = () => {
         original_gate_name: originalGateName
       };
 
-      const response = await fetch(`${API_URL}/admin/gates`, {
+      const response = await authFetch(`${API_URL}/account/gates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -515,7 +634,7 @@ const PricingApp = () => {
       message: `Are you sure you want to delete this gate? All associated costs will also be deleted.`,
       onConfirm: async () => {
         try {
-          const response = await fetch(`${API_URL}/admin/gates/${gateId}`, {
+          const response = await authFetch(`${API_URL}/account/gates/${gateId}`, {
             method: 'DELETE'
           });
           if (response.ok) {
@@ -542,7 +661,7 @@ const PricingApp = () => {
         gate_id: selectedGateForPricing,
         original_item_code: originalItemCode || itemData.item_code
       };
-      const response = await fetch(`${API_URL}/admin/item-pricing`, {
+      const response = await authFetch(`${API_URL}/account/item-pricing`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -569,7 +688,7 @@ const PricingApp = () => {
       onConfirm: async () => {
         try {
           const encodedItemCode = encodeURIComponent(itemCode);
-          const response = await fetch(`${API_URL}/admin/item-pricing/${selectedGateForPricing}/${encodedItemCode}`, {
+          const response = await authFetch(`${API_URL}/account/item-pricing/${selectedGateForPricing}/${encodedItemCode}`, {
             method: 'DELETE'
           });
           if (response.ok) {
@@ -589,24 +708,29 @@ const PricingApp = () => {
   };
 
   useEffect(() => {
-    loadPickIds();
-    loadGates();
-    loadFromLocations();
-  }, []);
+    // Only load initial data if logged in
+    if (token) {
+        loadPickIds();
+        loadGates();
+        loadFromLocations();
+    }
+  }, [token]); // Add token as dependency
 
   useEffect(() => {
-    if (selectedGateForPricing) {
+    if (token && selectedGateForPricing) {
       loadItemPricing(selectedGateForPricing);
     } else {
       setItemPricingData([]);
     }
-  }, [selectedGateForPricing]);
+  }, [selectedGateForPricing, token]);
 
   useEffect(() => {
-    if (currentPage === 'history') {
+    if (token && currentPage === 'history') {
       loadHistory();
     }
-  }, [currentPage]);
+  }, [currentPage, token]);
+
+  // --- Sub-Components ---
 
   const GateModal = ({ gate, onSave, onClose }) => {
     const [formData, setFormData] = useState(gate || {
@@ -828,7 +952,7 @@ const PricingApp = () => {
 
   const renderNavigation = () => (
     <div className="bg-white shadow-md mb-6">
-      <div className="max-w-6xl mx-auto px-6 py-4">
+      <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
         <div className="flex gap-4">
           <button
             onClick={() => setCurrentPage('calculator')}
@@ -867,9 +991,34 @@ const PricingApp = () => {
             History
           </button>
         </div>
+        
+        {/* User Info & Logout */}
+        <div className="flex items-center gap-4">
+            <div className="text-right">
+                <p className="text-xs text-gray-500">Logged in as</p>
+                <div className="flex items-center gap-1">
+                    <User size={14} className="text-blue-600"/>
+                    <p className="font-bold text-sm text-blue-600 capitalize">{username} ({userRole})</p>
+                </div>
+            </div>
+            <button 
+                onClick={handleLogout}
+                className="text-gray-500 hover:text-red-500 transition p-2 hover:bg-red-50 rounded-full"
+                title="Logout"
+            >
+                <LogOut size={20} />
+            </button>
+        </div>
       </div>
     </div>
   );
+
+  // --- Auth Check ---
+  if (!token) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
+
+  // --- Views ---
 
   if (currentPage === 'history') {
     return (
@@ -948,8 +1097,6 @@ const PricingApp = () => {
     );
   }
 
-  // ... (Remainder of the file remains same, 'gates' and 'items' and 'calculator' views are standard)
-
   if (currentPage === 'gates') {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -965,13 +1112,16 @@ const PricingApp = () => {
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-3xl font-bold text-gray-800">Transportation Cost by Gate</h1>
-              <button
-                onClick={() => setShowAddGateModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-              >
-                <Plus size={20} />
-                Add Gate
-              </button>
+              {/* Only 'account' role can add gates */}
+              {userRole === 'account' && (
+                <button
+                  onClick={() => setShowAddGateModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                >
+                  <Plus size={20} />
+                  Add Gate
+                </button>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse border">
@@ -996,24 +1146,28 @@ const PricingApp = () => {
                       <td className="border p-3">{gate.unit || '-'}</td>
                       <td className="border p-3">{gate.cost_per_unit || '-'}</td>
                       <td className="border p-3">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              setOriginalGateName(gate.gate_name);
-                              setEditingGate(gate);
-                              setShowAddGateModal(true);
-                            }}
-                            className="p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => deleteGate(gate.gate_id)}
-                            className="p-2 bg-red-500 text-white rounded hover:bg-red-600"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+                         {/* Only 'account' role can edit/delete */}
+                        {userRole === 'account' && (
+                            <div className="flex gap-2">
+                            <button
+                                onClick={() => {
+                                setOriginalGateName(gate.gate_name);
+                                setEditingGate(gate);
+                                setShowAddGateModal(true);
+                                }}
+                                className="p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                            >
+                                <Edit2 size={16} />
+                            </button>
+                            <button
+                                onClick={() => deleteGate(gate.gate_id)}
+                                className="p-2 bg-red-500 text-white rounded hover:bg-red-600"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                            </div>
+                        )}
+                        {userRole !== 'account' && <span className="text-gray-400 text-sm">Read Only</span>}
                       </td>
                     </tr>
                   ))}
@@ -1069,23 +1223,29 @@ const PricingApp = () => {
                       <Download size={20} />
                       Download Excel
                     </button>
-                    <label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer">
-                      <Upload size={20} />
-                      Upload Excel
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls"
-                        onChange={handleImportExcel}
-                        className="hidden"
-                      />
-                    </label>
-                    <button
-                      onClick={() => setShowAddItemModal(true)}
-                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-                    >
-                      <Plus size={20} />
-                      Add Item
-                    </button>
+                    
+                    {/* Only 'account' role can Upload and Add Items */}
+                    {userRole === 'account' && (
+                        <>
+                            <label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer">
+                            <Upload size={20} />
+                            Upload Excel
+                            <input
+                                type="file"
+                                accept=".xlsx,.xls"
+                                onChange={handleImportExcel}
+                                className="hidden"
+                            />
+                            </label>
+                            <button
+                            onClick={() => setShowAddItemModal(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                            >
+                            <Plus size={20} />
+                            Add Item
+                            </button>
+                        </>
+                    )}
                   </>
                 )}
               </div>
@@ -1125,24 +1285,29 @@ const PricingApp = () => {
                         <td className="border p-2">{item.item_name}</td>
                         <td className="border p-2">{item.transportation_cost}</td>
                         <td className="border p-2">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => {
-                                setOriginalItemCode(item.item_code);
-                                setEditingItem(item);
-                                setShowAddItemModal(true);
-                              }}
-                              className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                            <button
-                              onClick={() => deleteItem(item.item_code)}
-                              className="p-1 bg-red-500 text-white rounded hover:bg-red-600"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
+                           {/* Only 'account' role can edit/delete */}
+                          {userRole === 'account' ? (
+                            <div className="flex gap-2">
+                                <button
+                                onClick={() => {
+                                    setOriginalItemCode(item.item_code);
+                                    setEditingItem(item);
+                                    setShowAddItemModal(true);
+                                }}
+                                className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                >
+                                <Edit2 size={14} />
+                                </button>
+                                <button
+                                onClick={() => deleteItem(item.item_code)}
+                                className="p-1 bg-red-500 text-white rounded hover:bg-red-600"
+                                >
+                                <Trash2 size={14} />
+                                </button>
+                            </div>
+                          ) : (
+                             <span className="text-gray-400 text-xs">Read Only</span>
+                          )}
                         </td>
                       </tr>
                     ))}

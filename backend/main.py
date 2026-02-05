@@ -12,6 +12,18 @@ import os
 import io
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from fastapi import Depends, status
+
+# --- Auth Configuration ---
+SECRET_KEY = "CHANGE_THIS_TO_A_SUPER_SECRET_KEY"  # IMPORTANT: Change this!
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 300 # 5 hours expiration
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 app = FastAPI()
 
@@ -96,6 +108,29 @@ def startup_db():
             )
         """)
         
+        
+        # --- NEW: User Table ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Users (
+                username TEXT PRIMARY KEY,
+                hashed_password TEXT,
+                role TEXT
+            )
+        """)
+        
+        # Create default account user if not exists (User: account, Pass: account123)
+        cursor.execute("SELECT * FROM Users WHERE username = 'account'")
+        if not cursor.fetchone():
+            # Hash for 'account123'
+            default_pw = pwd_context.hash("account123") 
+            cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
+                          ('account', default_pw, 'account'))
+            
+            # Create default logistic user (User: logistic, Pass: log123)
+            log_pw = pwd_context.hash("log123")
+            cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
+                          ('logistic', log_pw, 'logistic'))
+        
         conn.commit()
         conn.close()
         logger.info("Logistic DB initialized successfully")
@@ -133,8 +168,52 @@ class CalculationSaveRequest(BaseModel):
     manual_total_cost: Optional[float] = None
     additional_charges: Optional[float] = 0.0
     final_total_cost: float
+    
+    
+    
+# --- Auth Models & Helpers ---
 
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    role: str
+    username: str
+    
+    
 # --- Helper Functions ---
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.datetime.utcnow() + datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        role: str = payload.get("role")
+        if username is None:
+            raise credentials_exception
+        return {"username": username, "role": role}
+    except JWTError:
+        raise credentials_exception
+
+async def get_account_user(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "account":
+        raise HTTPException(status_code=403, detail="account privileges required")
+    return current_user
+
+
 
 def determine_calculation_type_sql(gate_id):
     """
@@ -348,8 +427,27 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
 
 # --- Calculation History Endpoints ---
 
+
+@app.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    conn = get_logistic_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT username, hashed_password, role FROM Users WHERE username = ?", (form_data.username,))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if not user or not verify_password(form_data.password, user[1]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token = create_access_token(data={"sub": user[0], "role": user[2]})
+    return {"access_token": access_token, "token_type": "bearer", "role": user[2], "username": user[0]}
+
 @app.post("/history/save")
-def save_calculation(data: CalculationSaveRequest):
+def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -397,7 +495,7 @@ def save_calculation(data: CalculationSaveRequest):
         raise HTTPException(status_code=500, detail=f"Error saving history: {str(e)}")
 
 @app.get("/history")
-def get_history():
+def get_history(user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -426,7 +524,7 @@ def get_history():
         raise HTTPException(status_code=500, detail=f"Error loading history: {str(e)}")
 
 @app.delete("/history/{record_id}")
-def delete_history_item(record_id: int):
+def delete_history_item(record_id: int, user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -571,9 +669,9 @@ def download_history_excel(record_id: int):
         logger.error(f"Error generating download: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating download: {str(e)}")
 
-# --- Excel Export/Import Endpoints (Admin) ---
+# --- Excel Export/Import Endpoints (account) ---
 
-@app.get("/admin/item-pricing/export/{gate_id}")
+@app.get("/account/item-pricing/export/{gate_id}")
 def export_item_pricing_excel(gate_id: int):
     try:
         conn = get_logistic_connection()
@@ -651,8 +749,8 @@ def export_item_pricing_excel(gate_id: int):
         logger.error(f"Error exporting Excel: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error exporting: {str(e)}")
 
-@app.post("/admin/item-pricing/import/{gate_id}")
-async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...)):
+@app.post("/account/item-pricing/import/{gate_id}")
+async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), user: dict = Depends(get_account_user)):
     try:
         contents = await file.read()
         wb = openpyxl.load_workbook(io.BytesIO(contents))
@@ -720,8 +818,8 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...)):
 
 # --- Gate Management Endpoints (SQLite) ---
 
-@app.get("/admin/gates")
-def get_all_gates():
+@app.get("/account/gates")
+def get_all_gates(user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -751,8 +849,8 @@ def get_all_gates():
         logger.error(f"Error loading gates: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error loading gates: {str(e)}")
 
-@app.post("/admin/gates")
-def save_gate(gate_data: GateData):
+@app.post("/account/gates")
+def save_gate(gate_data: GateData, user: dict = Depends(get_account_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -780,8 +878,8 @@ def save_gate(gate_data: GateData):
         logger.error(f"Error saving gate: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error saving gate: {str(e)}")
 
-@app.delete("/admin/gates/{gate_id}")
-def delete_gate(gate_id: int):
+@app.delete("/account/gates/{gate_id}")
+def delete_gate(gate_id: int, user: dict = Depends(get_account_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -804,8 +902,8 @@ def delete_gate(gate_id: int):
 
 # --- Item Pricing Management Endpoints (SQLite) ---
 
-@app.get("/admin/item-pricing/{gate_id}")
-def get_item_pricing(gate_id: int):
+@app.get("/account/item-pricing/{gate_id}")
+def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -835,8 +933,8 @@ def get_item_pricing(gate_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading items: {str(e)}")
 
-@app.post("/admin/item-pricing")
-def save_item_pricing(item_data: ItemPricingData):
+@app.post("/account/item-pricing")
+def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_account_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -877,8 +975,8 @@ def save_item_pricing(item_data: ItemPricingData):
         logger.error(f"Error saving item: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error saving item: {str(e)}")
 
-@app.delete("/admin/item-pricing/{gate_id}/{item_code}")
-def delete_item_pricing(gate_id: int, item_code: str):
+@app.delete("/account/item-pricing/{gate_id}/{item_code}")
+def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(get_account_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
