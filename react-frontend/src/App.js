@@ -1360,6 +1360,8 @@ const PricingApp = () => {
   // 3. Gates View
   if (currentPage === 'gates') {
     const canEdit = ['account', 'admin'].includes(userRole);
+    const canDelete = userRole === 'admin'; // Only admin can delete
+
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
@@ -1407,27 +1409,30 @@ const PricingApp = () => {
                       <td className="border p-3">{gate.unit || '-'}</td>
                       <td className="border p-3">{gate.cost_per_unit || '-'}</td>
                       <td className="border p-3">
-                        {canEdit && (
+                        {canEdit ? (
                             <div className="flex gap-2">
-                            <button
-                                onClick={() => {
-                                setOriginalGateName(gate.gate_name);
-                                setEditingGate(gate);
-                                setShowAddGateModal(true);
-                                }}
-                                className="p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                            >
-                                <Edit2 size={16} />
-                            </button>
-                            <button
-                                onClick={() => deleteGate(gate.gate_id)}
-                                className="p-2 bg-red-500 text-white rounded hover:bg-red-600"
-                            >
-                                <Trash2 size={16} />
-                            </button>
+                                <button
+                                    onClick={() => {
+                                    setOriginalGateName(gate.gate_name);
+                                    setEditingGate(gate);
+                                    setShowAddGateModal(true);
+                                    }}
+                                    className="p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                >
+                                    <Edit2 size={16} />
+                                </button>
+                                {canDelete && (
+                                    <button
+                                        onClick={() => deleteGate(gate.gate_id)}
+                                        className="p-2 bg-red-500 text-white rounded hover:bg-red-600"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                )}
                             </div>
+                        ) : (
+                            <span className="text-gray-400 text-sm">Read Only</span>
                         )}
-                        {!canEdit && <span className="text-gray-400 text-sm">Read Only</span>}
                       </td>
                     </tr>
                   ))}
@@ -1461,6 +1466,8 @@ const PricingApp = () => {
   // 4. Items View
   if (currentPage === 'items') {
     const canEdit = ['account', 'admin'].includes(userRole);
+    const canDelete = userRole === 'admin'; // Only admin can delete
+
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
@@ -1549,21 +1556,23 @@ const PricingApp = () => {
                           {canEdit ? (
                             <div className="flex gap-2">
                                 <button
-                                onClick={() => {
-                                    setOriginalItemCode(item.item_code);
-                                    setEditingItem(item);
-                                    setShowAddItemModal(true);
-                                }}
-                                className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                    onClick={() => {
+                                        setOriginalItemCode(item.item_code);
+                                        setEditingItem(item);
+                                        setShowAddItemModal(true);
+                                    }}
+                                    className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"
                                 >
-                                <Edit2 size={14} />
+                                    <Edit2 size={14} />
                                 </button>
-                                <button
-                                onClick={() => deleteItem(item.item_code)}
-                                className="p-1 bg-red-500 text-white rounded hover:bg-red-600"
-                                >
-                                <Trash2 size={14} />
-                                </button>
+                                {canDelete && (
+                                    <button
+                                        onClick={() => deleteItem(item.item_code)}
+                                        className="p-1 bg-red-500 text-white rounded hover:bg-red-600"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                )}
                             </div>
                           ) : (
                              <span className="text-gray-400 text-xs">Read Only</span>
