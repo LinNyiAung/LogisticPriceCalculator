@@ -1,7 +1,7 @@
-CREATE TABLE Gate ([Gate ID] INTEGER PRIMARY KEY, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [UOM] VARCHAR(50), [Unit] INTEGER, [Cost Per Unit] DECIMAL(18,2));
+CREATE TABLE Gate ([Gate ID] INTEGER PRIMARY KEY, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [UOM] VARCHAR(50), [Unit] INTEGER, [Cost] DECIMAL(18,2));
 CREATE TABLE Item_Pricing ([Pricing ID] INTEGER PRIMARY KEY, [Gate ID] INT, [Item ID] VARCHAR(50), [Item Name] VARCHAR(255), [Principal] VARCHAR(255), [Brand] VARCHAR(255), [Transportation Cost] VARCHAR(50));
 
-INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost Per Unit]) VALUES (1, 'Gate 1', 'YGN', 'MDY', 'ton', 1.0, 140000.0);
+INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES (1, 'Gate 1', 'YGN', 'MDY', 'ton', 1.0, 140000.0);
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (1, 1, '6301111001', 'Shaloot Noodle Coconut 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (2, 1, '6301111002', 'Shaloot Noodle Tom Yum 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (3, 1, '6301111003', 'Shaloot Noodle Chicken Sichat 52g (1x30pcs)', 'The Taste Origins', 'Shaloot', 'Ton');
@@ -429,7 +429,7 @@ INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Prin
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (425, 1, '2001111001', '1 Stop E Money', '1 Stop', 'Top-up', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (426, 1, '2101111002', 'Healthy Chef Soybean 1L (1x12)', 'TVO', 'Healthy Chef', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (427, 1, '2101111005', 'Healthy Chef Sunflower 1L (1x12)', 'TVO', 'Healthy Chef', 'Ton');
-INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost Per Unit]) VALUES (2, 'Gate 2', 'YGN', 'TGI', 'ton', 1.0, 200000.0);
+INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES (2, 'Gate 2', 'YGN', 'TGI', 'ton', 1.0, 200000.0);
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (428, 2, '6301111001', 'Shaloot Noodle Coconut 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (429, 2, '6301111002', 'Shaloot Noodle Tom Yum 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (430, 2, '6301111003', 'Shaloot Noodle Chicken Sichat 52g (1x30pcs)', 'The Taste Origins', 'Shaloot', 'Ton');
@@ -857,7 +857,7 @@ INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Prin
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (852, 2, '2001111001', '1 Stop E Money', '1 Stop', 'Top-up', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (853, 2, '2101111002', 'Healthy Chef Soybean 1L (1x12)', 'TVO', 'Healthy Chef', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (854, 2, '2101111005', 'Healthy Chef Sunflower 1L (1x12)', 'TVO', 'Healthy Chef', 'Ton');
-INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost Per Unit]) VALUES (3, 'Gate 3', 'YGN', 'TGU', NULL, NULL, NULL);
+INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES (3, 'Gate 3', 'YGN', 'TGU', NULL, NULL, NULL);
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (855, 3, '6301111001', 'Shaloot Noodle Coconut 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', '2000');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (856, 3, '6301111002', 'Shaloot Noodle Tom Yum 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', '2000');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (857, 3, '6301111003', 'Shaloot Noodle Chicken Sichat 52g (1x30pcs)', 'The Taste Origins', 'Shaloot', '2000');
@@ -1285,7 +1285,7 @@ INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Prin
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (1279, 3, '2001111001', '1 Stop E Money', '1 Stop', 'Top-up', '2000');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (1280, 3, '2101111002', 'Healthy Chef Soybean 1L (1x12)', 'TVO', 'Healthy Chef', '2000');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (1281, 3, '2101111005', 'Healthy Chef Sunflower 1L (1x12)', 'TVO', 'Healthy Chef', '2000');
-INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost Per Unit]) VALUES (4, 'Gate 4', 'YGN', 'MGW', 'ton', 1.0, 168000.0);
+INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES (4, 'Gate 4', 'YGN', 'MGW', 'ton', 1.0, 168000.0);
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (1282, 4, '6301111001', 'Shaloot Noodle Coconut 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (1283, 4, '6301111002', 'Shaloot Noodle Tom Yum 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (1284, 4, '6301111003', 'Shaloot Noodle Chicken Sichat 52g (1x30pcs)', 'The Taste Origins', 'Shaloot', 'Ton');
@@ -1713,7 +1713,7 @@ INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Prin
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (1706, 4, '2001111001', '1 Stop E Money', '1 Stop', 'Top-up', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (1707, 4, '2101111002', 'Healthy Chef Soybean 1L (1x12)', 'TVO', 'Healthy Chef', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (1708, 4, '2101111005', 'Healthy Chef Sunflower 1L (1x12)', 'TVO', 'Healthy Chef', 'Ton');
-INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost Per Unit]) VALUES (5, 'Gate 5', 'YGN', 'PTN', NULL, NULL, NULL);
+INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES (5, 'Gate 5', 'YGN', 'PTN', NULL, NULL, NULL);
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (1709, 5, '6301111001', 'Shaloot Noodle Coconut 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', '850');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (1710, 5, '6301111002', 'Shaloot Noodle Tom Yum 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', '850');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (1711, 5, '6301111003', 'Shaloot Noodle Chicken Sichat 52g (1x30pcs)', 'The Taste Origins', 'Shaloot', '850');
@@ -2141,7 +2141,7 @@ INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Prin
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (2133, 5, '2001111001', '1 Stop E Money', '1 Stop', 'Top-up', '850');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (2134, 5, '2101111002', 'Healthy Chef Soybean 1L (1x12)', 'TVO', 'Healthy Chef', '850');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (2135, 5, '2101111005', 'Healthy Chef Sunflower 1L (1x12)', 'TVO', 'Healthy Chef', '850');
-INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost Per Unit]) VALUES (6, 'Gate 6', 'YGN', 'NPT', 'ton', 1.0, 120000.0);
+INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES (6, 'Gate 6', 'YGN', 'NPT', 'ton', 1.0, 120000.0);
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (2136, 6, '6301111001', 'Shaloot Noodle Coconut 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (2137, 6, '6301111002', 'Shaloot Noodle Tom Yum 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (2138, 6, '6301111003', 'Shaloot Noodle Chicken Sichat 52g (1x30pcs)', 'The Taste Origins', 'Shaloot', 'Ton');
@@ -2569,7 +2569,7 @@ INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Prin
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (2560, 6, '2001111001', '1 Stop E Money', '1 Stop', 'Top-up', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (2561, 6, '2101111002', 'Healthy Chef Soybean 1L (1x12)', 'TVO', 'Healthy Chef', 'Ton');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (2562, 6, '2101111005', 'Healthy Chef Sunflower 1L (1x12)', 'TVO', 'Healthy Chef', 'Ton');
-INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost Per Unit]) VALUES (7, 'Gate 7', 'YGN', 'MLM', NULL, NULL, NULL);
+INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES (7, 'Gate 7', 'YGN', 'MLM', NULL, NULL, NULL);
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (2563, 7, '6301111001', 'Shaloot Noodle Coconut 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', '2000');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (2564, 7, '6301111002', 'Shaloot Noodle Tom Yum 55g (1x30pcs)', 'The Taste Origins', 'Shaloot', '2000');
 INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (2565, 7, '6301111003', 'Shaloot Noodle Chicken Sichat 52g (1x30pcs)', 'The Taste Origins', 'Shaloot', '2000');

@@ -42,8 +42,8 @@ def generate_sql():
     sql_statements = []
     
     # Create Table Definitions (DDL)
-    # UPDATED: Changed [Gate Price] to [Cost Per Unit]
-    sql_statements.append("CREATE TABLE Gate ([Gate ID] INTEGER PRIMARY KEY, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [UOM] VARCHAR(50), [Unit] INTEGER, [Cost Per Unit] DECIMAL(18,2));")
+    # UPDATED: Changed [Gate Price] to [Cost]
+    sql_statements.append("CREATE TABLE Gate ([Gate ID] INTEGER PRIMARY KEY, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [UOM] VARCHAR(50), [Unit] INTEGER, [Cost] DECIMAL(18,2));")
     sql_statements.append("CREATE TABLE Item_Pricing ([Pricing ID] INTEGER PRIMARY KEY, [Gate ID] INT, [Item ID] VARCHAR(50), [Item Name] VARCHAR(255), [Principal] VARCHAR(255), [Brand] VARCHAR(255), [Transportation Cost] VARCHAR(50));")
     sql_statements.append("")
 
@@ -57,7 +57,7 @@ def generate_sql():
         gate_name = row['Gate Name']
         from_location = row['From']
         to_location = row['To']
-        cost_per_unit = row['Cost Per Unit']
+        cost = row['Cost']
         file_name = row['File Name']
         uom = row['UOM']
         unit = row['Unit']
@@ -67,13 +67,13 @@ def generate_sql():
         val_gate_name = clean_sql_string(gate_name)
         val_from = clean_sql_string(from_location)
         val_to = clean_sql_string(to_location)
-        val_cost_per_unit = clean_sql_number(cost_per_unit)
+        val_cost = clean_sql_number(cost)
         val_uom = clean_sql_string(uom)
         val_unit = clean_sql_number(unit)
         
         # INSERT statement for Gate table
-        # UPDATED: Changed [Gate Price] to [Cost Per Unit]
-        sql_statements.append(f"INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost Per Unit]) VALUES ({val_gate_id}, {val_gate_name}, {val_from}, {val_to}, {val_uom}, {val_unit}, {val_cost_per_unit});")
+        # UPDATED: Changed [Gate Price] to [Cost]
+        sql_statements.append(f"INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES ({val_gate_id}, {val_gate_name}, {val_from}, {val_to}, {val_uom}, {val_unit}, {val_cost});")
         
         # 3. Process the corresponding Item Master file if it exists
         if pd.notna(file_name):

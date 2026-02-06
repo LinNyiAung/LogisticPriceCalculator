@@ -66,7 +66,7 @@ def startup_db():
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # Gate table uses "Cost Per Unit"
+        # Gate table uses "Cost"
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Gate (
                 [Gate ID] INTEGER PRIMARY KEY,
@@ -75,7 +75,7 @@ def startup_db():
                 [To] TEXT,
                 [UOM] TEXT,
                 [Unit] INTEGER,
-                [Cost Per Unit] REAL
+                [Cost] REAL
             )
         """)
         
@@ -152,7 +152,7 @@ class GateData(BaseModel):
     to_loc: str
     uom: Optional[str] = None       
     unit: Optional[int] = None      
-    cost_per_unit: Optional[float] = None 
+    cost: Optional[float] = None 
     original_gate_name: Optional[str] = None
 
 class ItemPricingData(BaseModel):
@@ -240,15 +240,15 @@ async def get_admin_user(current_user: dict = Depends(get_current_user)):
 
 def determine_calculation_type_sql(gate_id):
     """
-    Determines calculation type based on Cost Per Unit.
-    If Cost Per Unit exists and > 0 -> gate_pricing
+    Determines calculation type based on Cost.
+    If Cost exists and > 0 -> gate_pricing
     Else -> direct_pricing
     """
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT [Cost Per Unit] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
+        cursor.execute("SELECT [Cost] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
         row = cursor.fetchone()
         conn.close()
 
@@ -295,7 +295,7 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
     try:
         conn_log = get_logistic_connection()
         cursor_log = conn_log.cursor()
-        cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost Per Unit] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
+        cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
         gate_row = cursor_log.fetchone()
     except Exception as e:
         raise Exception(f"Error fetching gate config: {str(e)}")
@@ -307,7 +307,7 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
     gate_id = gate_row[0]
     from_loc = gate_row[1]
     to_loc = gate_row[2]
-    cost_per_unit = float(gate_row[3] or 0)
+    cost = float(gate_row[3] or 0)
     
     # 3. Get Item Pricing
     cursor_log.execute("""
@@ -332,7 +332,7 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
             except:
                 item_pricing[i_code] = {'type': 'unknown', 'value': None}
 
-    if cost_per_unit > 0:
+    if cost > 0:
         calc_type = "gate_pricing"
     else:
         calc_type = "direct_pricing"
@@ -364,7 +364,7 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
                 item_data['standard_unit_cost'] = p_val
                 direct_items.append(item_data)
             else:
-                cost = item_data['weight'] * cost_per_unit
+                cost = item_data['weight'] * cost
                 estimated_total_cost += cost
                 ton_cost_total += cost
                 item_data['total_cost'] = cost
@@ -436,7 +436,7 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
         "gate_name": gate_name,
         "from_loc": from_loc,
         "to_loc": to_loc,
-        "cost_per_unit": cost_per_unit, 
+        "cost": cost, 
         "additional_charges": add_charges,
         "calculated_products": calculated_products,
         "total_cost": total_cost,
@@ -919,7 +919,7 @@ def get_all_gates(user: dict = Depends(get_current_user)):
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT [Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost Per Unit] FROM Gate")
+        cursor.execute("SELECT [Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost] FROM Gate")
         rows = cursor.fetchall()
         
         gates = []
@@ -934,7 +934,7 @@ def get_all_gates(user: dict = Depends(get_current_user)):
                 "to_loc": row[3],
                 "uom": row[4],         
                 "unit": row[5],        
-                "cost_per_unit": float(row[6]) if row[6] is not None else None, 
+                "cost": float(row[6]) if row[6] is not None else None, 
                 "calculation_type": calc_type
             })
         
@@ -953,17 +953,17 @@ def save_gate(gate_data: GateData, user: dict = Depends(get_account_user)):
         if gate_data.original_gate_name:
             cursor.execute("""
                 UPDATE Gate 
-                SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Cost Per Unit] = ?
+                SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Cost] = ?
                 WHERE [Gate Name] = ?
             """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, 
-                  gate_data.uom, gate_data.unit, gate_data.cost_per_unit, 
+                  gate_data.uom, gate_data.unit, gate_data.cost, 
                   gate_data.original_gate_name))
         else:
             cursor.execute("""
-                INSERT INTO Gate ([Gate Name], [From], [To], [UOM], [Unit], [Cost Per Unit])
+                INSERT INTO Gate ([Gate Name], [From], [To], [UOM], [Unit], [Cost])
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, 
-                  gate_data.uom, gate_data.unit, gate_data.cost_per_unit))
+                  gate_data.uom, gate_data.unit, gate_data.cost))
         
         conn.commit()
         conn.close()

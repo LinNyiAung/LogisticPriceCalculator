@@ -614,10 +614,10 @@ const PricingApp = () => {
   const saveGate = async (gateData) => {
     const hasUOM = gateData.uom && gateData.uom.trim().length > 0;
     const hasUnit = gateData.unit !== '' && gateData.unit !== null && gateData.unit !== undefined;
-    const hasCost = gateData.cost_per_unit !== '' && gateData.cost_per_unit !== null && gateData.cost_per_unit !== undefined;
+    const hasCost = gateData.cost !== '' && gateData.cost !== null && gateData.cost !== undefined;
 
     if ((hasUOM || hasUnit || hasCost) && !(hasUOM && hasUnit && hasCost)) {
-      showNotification('Validation Error: UOM, Unit, and Cost Per Unit must either ALL be filled or ALL be empty.', 'error');
+      showNotification('Validation Error: UOM, Unit, and Cost must either ALL be filled or ALL be empty.', 'error');
       return;
     }
 
@@ -625,7 +625,7 @@ const PricingApp = () => {
       const payload = {
         ...gateData,
         unit: gateData.unit === '' ? null : parseInt(gateData.unit),
-        cost_per_unit: gateData.cost_per_unit === '' ? null : parseFloat(gateData.cost_per_unit),
+        cost: gateData.cost === '' ? null : parseFloat(gateData.cost),
         original_gate_name: originalGateName
       };
 
@@ -819,7 +819,7 @@ const PricingApp = () => {
       to_loc: '',
       uom: '',
       unit: '',
-      cost_per_unit: ''
+      cost: ''
     });
 
     return (
@@ -879,11 +879,11 @@ const PricingApp = () => {
                 </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold mb-1">Cost Per Unit</label>
+              <label className="block text-sm font-semibold mb-1">Cost</label>
               <input
                 type="number"
-                value={formData.cost_per_unit ?? ''}
-                onChange={(e) => setFormData({...formData, cost_per_unit: e.target.value})}
+                value={formData.cost ?? ''}
+                onChange={(e) => setFormData({...formData, cost: e.target.value})}
                 className="w-full p-2 border rounded"
               />
             </div>
@@ -1365,7 +1365,7 @@ const PricingApp = () => {
                     <th className="border p-3 text-left">To</th>
                     <th className="border p-3 text-left">UOM</th>
                     <th className="border p-3 text-left">Unit</th>
-                    <th className="border p-3 text-left">Cost Per Unit</th>
+                    <th className="border p-3 text-left">Cost</th>
                     <th className="border p-3 text-left">Actions</th>
                   </tr>
                 </thead>
@@ -1377,7 +1377,7 @@ const PricingApp = () => {
                       <td className="border p-3">{gate.to_loc}</td>
                       <td className="border p-3">{gate.uom || '-'}</td>
                       <td className="border p-3">{gate.unit || '-'}</td>
-                      <td className="border p-3">{gate.cost_per_unit || '-'}</td>
+                      <td className="border p-3">{gate.cost || '-'}</td>
                       <td className="border p-3">
                         {canEdit ? (
                             <div className="flex gap-2">
