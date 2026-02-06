@@ -630,8 +630,9 @@ def get_history(user: dict = Depends(get_current_user)):
         logger.error(f"Error loading history: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error loading history: {str(e)}")
 
+# --- UPDATED: Restrict Deletion to Admin Users Only ---
 @app.delete("/history/{record_id}")
-def delete_history_item(record_id: int, user: dict = Depends(get_current_user)):
+def delete_history_item(record_id: int, user: dict = Depends(get_admin_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -973,7 +974,7 @@ def save_gate(gate_data: GateData, user: dict = Depends(get_account_user)):
         raise HTTPException(status_code=500, detail=f"Error saving gate: {str(e)}")
 
 @app.delete("/account/gates/{gate_id}")
-def delete_gate(gate_id: int, user: dict = Depends(get_admin_user)): # CHANGED to get_admin_user
+def delete_gate(gate_id: int, user: dict = Depends(get_admin_user)): 
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -1070,7 +1071,7 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
         raise HTTPException(status_code=500, detail=f"Error saving item: {str(e)}")
 
 @app.delete("/account/item-pricing/{gate_id}/{item_code}")
-def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(get_admin_user)): # CHANGED to get_admin_user
+def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(get_admin_user)): 
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()

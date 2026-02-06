@@ -1337,12 +1337,15 @@ const PricingApp = () => {
                             >
                               Load
                             </button>
-                            <button
-                              onClick={() => deleteHistory(record.id)}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 size={18} />
-                            </button>
+                            {userRole === 'admin' && (
+                                <button
+                                    onClick={() => deleteHistory(record.id)}
+                                    className="p-1 text-red-500 hover:bg-red-50 rounded"
+                                    title="Delete Record"
+                                >
+                                    <Trash2 size={18} />
+                                </button>
+                            )}
                           </div>
                         </td>
                       </tr>
