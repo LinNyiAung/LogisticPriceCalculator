@@ -1158,7 +1158,7 @@ def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(get_a
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting item: {str(e)}")
 
-# --- NEW: DWBI Item Search Endpoint ---
+# --- NEW: DWBI Item Search & Validation Endpoints ---
 
 @app.get("/dwbi/items/search")
 def search_dwbi_items(q: str = Query(..., min_length=2)):
@@ -1189,6 +1189,31 @@ def search_dwbi_items(q: str = Query(..., min_length=2)):
     except Exception as e:
         logger.error(f"Error searching DWBI items: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error searching items: {str(e)}")
+
+@app.get("/dwbi/items/validate")
+def validate_dwbi_item(code: str = Query(...)):
+    try:
+        conn = get_dwbi_connection()
+        cursor = conn.cursor()
+        query = "SELECT ItemCode, ItemName, ItemGroupName, BrandName FROM _ItemAllinone WHERE ItemCode = ?"
+        cursor.execute(query, (code,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return {
+                "valid": True,
+                "item": {
+                    "item_code": row[0],
+                    "item_name": row[1],
+                    "principal": row[2],
+                    "brand": row[3]
+                }
+            }
+        return {"valid": False}
+    except Exception as e:
+        logger.error(f"Error validating item: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
 
 # --- Calculation & Main Endpoints ---
 

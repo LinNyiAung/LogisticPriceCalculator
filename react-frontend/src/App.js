@@ -943,6 +943,7 @@ const PricingApp = () => {
     // --- Search State ---
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
+    const [isValidating, setIsValidating] = useState(false);
     const [searchTerm, setSearchTerm] = useState(item ? item.item_code : '');
 
     const handleSearch = async (query) => {
@@ -977,6 +978,41 @@ const PricingApp = () => {
         setSearchResults([]); // Clear results
     };
 
+    const handleSaveButton = async () => {
+        if (!searchTerm) {
+            showNotification("Item Code is required", "error");
+            return;
+        }
+        
+        setIsValidating(true);
+        try {
+            // Validate against backend
+            const response = await authFetch(`${API_URL}/dwbi/items/validate?code=${encodeURIComponent(searchTerm)}`);
+            if (response.ok) {
+                const result = await response.json();
+                if (result.valid) {
+                    // Item is valid, update formData with latest details from validation result (optional but safer)
+                    const finalData = {
+                        ...formData,
+                        item_code: result.item.item_code, // Use exact casing from DB
+                        item_name: result.item.item_name,
+                        principal: result.item.principal,
+                        brand: result.item.brand
+                    };
+                    onSave(finalData);
+                } else {
+                    showNotification("Invalid Item Code. Please select a valid item from the list.", "error");
+                }
+            } else {
+                showNotification("Validation check failed.", "error");
+            }
+        } catch (error) {
+            showNotification("Network error during validation", "error");
+        } finally {
+            setIsValidating(false);
+        }
+    };
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-screen overflow-y-auto">
@@ -993,7 +1029,7 @@ const PricingApp = () => {
                     onChange={(e) => handleSearch(e.target.value)}
                     className="w-full p-2 border rounded pr-8"
                     placeholder="Type code or name..."
-                    disabled={!!item} // Disable search on edit to prevent accidental overwrites
+                    // Editing enabled by removing disabled prop
                 />
                 <div className="absolute right-2 top-2 text-gray-400">
                     <Search size={18} />
@@ -1001,7 +1037,7 @@ const PricingApp = () => {
               </div>
               
               {/* Dropdown Results */}
-              {searchResults.length > 0 && !item && (
+              {searchResults.length > 0 && (
                   <div className="absolute z-10 w-full bg-white border rounded shadow-lg max-h-48 overflow-y-auto mt-1">
                       {searchResults.map((res, idx) => (
                           <div 
@@ -1064,13 +1100,15 @@ const PricingApp = () => {
           </div>
           <div className="flex gap-2 mt-6">
             <button
-              onClick={() => onSave({ ...formData, item_code: searchTerm })}
-              className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+              onClick={handleSaveButton}
+              disabled={isValidating}
+              className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:bg-blue-400"
             >
-              Save
+              {isValidating ? "Validating..." : "Save"}
             </button>
             <button
               onClick={onClose}
+              disabled={isValidating}
               className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400"
             >
               Cancel
