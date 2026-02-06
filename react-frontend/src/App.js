@@ -964,7 +964,29 @@ const PricingApp = () => {
                 className="w-full p-2 border rounded"
               />
             </div>
+            {/* NEW: Principal Field */}
             <div>
+              <label className="block text-sm font-semibold mb-1">Principal</label>
+              <input
+                type="text"
+                value={formData.principal ?? ''}
+                onChange={(e) => setFormData({...formData, principal: e.target.value})}
+                className="w-full p-2 border rounded"
+                placeholder="e.g. Unlever"
+              />
+            </div>
+            {/* NEW: Brand Field */}
+            <div>
+              <label className="block text-sm font-semibold mb-1">Brand</label>
+              <input
+                type="text"
+                value={formData.brand ?? ''}
+                onChange={(e) => setFormData({...formData, brand: e.target.value})}
+                className="w-full p-2 border rounded"
+                placeholder="e.g. Sunsilk"
+              />
+            </div>
+            <div className="col-span-2">
               <label className="block text-sm font-semibold mb-1">Transportation Cost</label>
               <input
                 type="text"
@@ -1629,6 +1651,9 @@ const PricingApp = () => {
                     <tr>
                       <th className="border p-2 text-left">Item Code</th>
                       <th className="border p-2 text-left">Item Name</th>
+                      {/* NEW COLUMNS */}
+                      <th className="border p-2 text-left">Principal</th>
+                      <th className="border p-2 text-left">Brand</th>
                       <th className="border p-2 text-left">Transport Cost</th>
                       <th className="border p-2 text-left">Actions</th>
                     </tr>
@@ -1638,6 +1663,9 @@ const PricingApp = () => {
                       <tr key={index}>
                         <td className="border p-2">{item.item_code}</td>
                         <td className="border p-2">{item.item_name}</td>
+                        {/* NEW DATA CELLS */}
+                        <td className="border p-2">{item.principal}</td>
+                        <td className="border p-2">{item.brand}</td>
                         <td className="border p-2">{item.transportation_cost}</td>
                         <td className="border p-2">
                           {canEdit ? (
