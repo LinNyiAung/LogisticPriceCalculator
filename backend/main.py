@@ -488,8 +488,6 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     return {"access_token": access_token, "token_type": "bearer", "role": user[2], "username": user[0]}
 
 # --- User Management Endpoints (Admin Only) ---
-# ... (Previous user management endpoints remain the same, ommitted for brevity if needed but including full file logic) ...
-
 @app.get("/users", response_model=List[UserResponse])
 def get_all_users(user: dict = Depends(get_admin_user)):
     try:
@@ -1074,7 +1072,7 @@ def delete_gate(gate_id: int, user: dict = Depends(get_admin_user)):
         raise HTTPException(status_code=500, detail=f"Error deleting gate: {str(e)}")
 
 # --- Item Pricing Management Endpoints (SQLite) ---
-# ... (Same as previous file) ...
+
 @app.get("/account/item-pricing/{gate_id}")
 def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
     try:
@@ -1159,6 +1157,38 @@ def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(get_a
         return {"message": "Item deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting item: {str(e)}")
+
+# --- NEW: DWBI Item Search Endpoint ---
+
+@app.get("/dwbi/items/search")
+def search_dwbi_items(q: str = Query(..., min_length=2)):
+    try:
+        conn = get_dwbi_connection()
+        cursor = conn.cursor()
+        # Using TOP 50 to return reasonable number of results
+        # Mapping: ItemGroupName -> Principal, BrandName -> Brand
+        query_sql = """
+            SELECT TOP 50 ItemCode, ItemName, ItemGroupName, BrandName 
+            FROM _ItemAllinone 
+            WHERE ItemCode LIKE ? OR ItemName LIKE ?
+        """
+        search_term = f"%{q}%"
+        cursor.execute(query_sql, (search_term, search_term))
+        rows = cursor.fetchall()
+        
+        items = []
+        for row in rows:
+            items.append({
+                "item_code": row[0],
+                "item_name": row[1],
+                "principal": row[2], 
+                "brand": row[3]      
+            })
+        conn.close()
+        return {"items": items}
+    except Exception as e:
+        logger.error(f"Error searching DWBI items: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error searching items: {str(e)}")
 
 # --- Calculation & Main Endpoints ---
 

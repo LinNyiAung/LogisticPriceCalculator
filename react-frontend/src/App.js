@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, Lock, Settings, List as ListIcon } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, Lock, Settings, List as ListIcon, Search } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -940,28 +940,91 @@ const PricingApp = () => {
       transportation_cost: 'Ton'
     });
 
+    // --- Search State ---
+    const [searchResults, setSearchResults] = useState([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchTerm, setSearchTerm] = useState(item ? item.item_code : '');
+
+    const handleSearch = async (query) => {
+        setSearchTerm(query);
+        if (query.length < 2) {
+            setSearchResults([]);
+            return;
+        }
+        setIsSearching(true);
+        try {
+            const response = await authFetch(`${API_URL}/dwbi/items/search?q=${encodeURIComponent(query)}`);
+            if (response.ok) {
+                const data = await response.json();
+                setSearchResults(data.items);
+            }
+        } catch (error) {
+            console.error("Search failed", error);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    const selectItem = (selectedItem) => {
+        setFormData({
+            ...formData,
+            item_code: selectedItem.item_code,
+            item_name: selectedItem.item_name,
+            principal: selectedItem.principal || '',
+            brand: selectedItem.brand || ''
+        });
+        setSearchTerm(selectedItem.item_code);
+        setSearchResults([]); // Clear results
+    };
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-screen overflow-y-auto">
           <h2 className="text-2xl font-bold mb-4">{item ? 'Edit Item' : 'Add New Item'}</h2>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold mb-1">Item Code</label>
-              <input
-                type="text"
-                value={formData.item_code ?? ''}
-                onChange={(e) => setFormData({...formData, item_code: e.target.value})}
-                className="w-full p-2 border rounded"
-                disabled={!!item}
-              />
+            
+            {/* --- Updated Item Code Field with Search --- */}
+            <div className="relative">
+              <label className="block text-sm font-semibold mb-1">Item Code (Search)</label>
+              <div className="relative">
+                <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    className="w-full p-2 border rounded pr-8"
+                    placeholder="Type code or name..."
+                    disabled={!!item} // Disable search on edit to prevent accidental overwrites
+                />
+                <div className="absolute right-2 top-2 text-gray-400">
+                    <Search size={18} />
+                </div>
+              </div>
+              
+              {/* Dropdown Results */}
+              {searchResults.length > 0 && !item && (
+                  <div className="absolute z-10 w-full bg-white border rounded shadow-lg max-h-48 overflow-y-auto mt-1">
+                      {searchResults.map((res, idx) => (
+                          <div 
+                            key={idx} 
+                            onClick={() => selectItem(res)}
+                            className="p-2 hover:bg-blue-50 cursor-pointer border-b last:border-0 text-sm"
+                          >
+                              <div className="font-bold text-gray-800">{res.item_code}</div>
+                              <div className="text-gray-600 truncate">{res.item_name}</div>
+                          </div>
+                      ))}
+                  </div>
+              )}
             </div>
+
             <div>
               <label className="block text-sm font-semibold mb-1">Item Name</label>
               <input
                 type="text"
                 value={formData.item_name ?? ''}
                 onChange={(e) => setFormData({...formData, item_name: e.target.value})}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border rounded bg-gray-50"
+                readOnly
               />
             </div>
             {/* NEW: Principal Field */}
@@ -971,8 +1034,9 @@ const PricingApp = () => {
                 type="text"
                 value={formData.principal ?? ''}
                 onChange={(e) => setFormData({...formData, principal: e.target.value})}
-                className="w-full p-2 border rounded"
-                placeholder="e.g. Unlever"
+                className="w-full p-2 border rounded bg-gray-50"
+                placeholder="Auto-filled"
+                readOnly
               />
             </div>
             {/* NEW: Brand Field */}
@@ -982,8 +1046,9 @@ const PricingApp = () => {
                 type="text"
                 value={formData.brand ?? ''}
                 onChange={(e) => setFormData({...formData, brand: e.target.value})}
-                className="w-full p-2 border rounded"
-                placeholder="e.g. Sunsilk"
+                className="w-full p-2 border rounded bg-gray-50"
+                placeholder="Auto-filled"
+                readOnly
               />
             </div>
             <div className="col-span-2">
@@ -999,7 +1064,7 @@ const PricingApp = () => {
           </div>
           <div className="flex gap-2 mt-6">
             <button
-              onClick={() => onSave(formData)}
+              onClick={() => onSave({ ...formData, item_code: searchTerm })}
               className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
             >
               Save
