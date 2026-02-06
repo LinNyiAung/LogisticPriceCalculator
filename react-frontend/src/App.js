@@ -123,7 +123,8 @@ const PricingApp = () => {
   const [estimatedTotalCost, setEstimatedTotalCost] = useState(null);
 
   const [historyData, setHistoryData] = useState([]);
-  const [showSaveModal, setShowSaveModal] = useState(false);
+  
+  // Changed: Removed showSaveModal state as we always save new
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
 
   // User Management State
@@ -284,9 +285,11 @@ const PricingApp = () => {
 
   // --- Action Functions ---
 
+  // Changed: isUpdate logic simplified to always false in usage
   const handleSaveCalculation = async (isUpdate = false) => {
     try {
       const payload = {
+        // Force ID to null if we want to save as new (which is the new default behavior)
         id: isUpdate ? currentHistoryId : null,
         gate_name: selectedGate,
         from_loc: selectedFrom,
@@ -304,11 +307,13 @@ const PricingApp = () => {
       });
 
       if (response.ok) {
-        showNotification(isUpdate ? 'Calculation updated successfully' : 'New calculation saved successfully', 'success');
-        setShowSaveModal(false);
-        if (!isUpdate) {
-             setCurrentHistoryId(null);
-        }
+        // Changed message to reflect new behavior
+        showNotification('Calculation saved as new record successfully', 'success');
+        
+        // We do not set currentHistoryId here, so further saves also create new records 
+        // unless we reload the history list and pick the new one.
+        // If you want to "stay" on the new record, the backend would need to return the new ID.
+        // For now, this safely creates copies.
         loadHistory();
       } else {
         const error = await response.json();
@@ -320,11 +325,9 @@ const PricingApp = () => {
   };
 
   const handleSaveButtonClick = () => {
-    if (currentHistoryId) {
-        setShowSaveModal(true);
-    } else {
-        handleSaveCalculation(false);
-    }
+    // Changed: Always save as NEW.
+    // passing false ensures payload.id is null, triggering an insert on backend.
+    handleSaveCalculation(false);
   };
 
   const loadSavedCalculation = async (record) => {
@@ -349,7 +352,7 @@ const PricingApp = () => {
       setCalculatedTotalCost(record.final_total_cost);
       setEstimatedTotalCost(null);
 
-      showNotification(`Loaded calculation record. Ready to edit.`, 'info');
+      showNotification(`Loaded calculation record (ID: ${record.id}).`, 'info');
       
     } catch (error) {
       showNotification(`Error loading record: ${error.message}`, 'error');
@@ -450,7 +453,6 @@ const PricingApp = () => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      // NOTE: FormData automatically sets Content-Type to multipart/form-data
       const response = await authFetch(`${API_URL}/account/item-pricing/import/${selectedGateForPricing}`, {
         method: 'POST',
         body: formData
@@ -759,7 +761,7 @@ const PricingApp = () => {
   };
 
   const deleteUser = async (username) => {
-    if (username === userRole.username) return; // Prevent deleting self (though backend checks too)
+    if (username === userRole.username) return; 
     
     setConfirmDialog({
         message: `Are you sure you want to delete user "${username}"?`,
@@ -1033,42 +1035,7 @@ const PricingApp = () => {
     );
   };
 
-  const SaveModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-4">
-            Update Calculation
-        </h2>
-        <p className="mb-6 text-gray-600">
-            You are editing an existing record. Do you want to update the existing record or save it as a new one?
-        </p>
-
-        <div className="flex flex-col gap-3 mt-6">
-            <div className="flex gap-2">
-                <button
-                    onClick={() => handleSaveCalculation(true)} 
-                    className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-                >
-                    Update Existing
-                </button>
-                <button
-                    onClick={() => handleSaveCalculation(false)}
-                    className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700"
-                >
-                    Save as New
-                </button>
-            </div>
-          
-          <button
-            onClick={() => setShowSaveModal(false)}
-            className="w-full bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400 mt-2"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  // Removed SaveModal as it's no longer used
 
   const ConfirmDialog = ({ message, onConfirm, onCancel }) => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1842,7 +1809,7 @@ const PricingApp = () => {
                       className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
                     >
                       <Save size={20} />
-                      Save
+                      Save as New
                     </button>
                   )}
               </div>
@@ -1880,7 +1847,6 @@ const PricingApp = () => {
                 </div>
              )}
         </div>
-        {showSaveModal && <SaveModal />}
         
         {confirmDialog && (
             <ConfirmDialog
