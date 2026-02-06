@@ -115,6 +115,21 @@ def startup_db():
                 role TEXT
             )
         """)
+
+        # --- NEW: Reference Tables (Locations & UOMs) ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Locations (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [name] TEXT UNIQUE
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS UOMs (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [name] TEXT UNIQUE
+            )
+        """)
         
         # Create default account user if not exists
         cursor.execute("SELECT * FROM Users WHERE username = 'account'")
@@ -130,12 +145,23 @@ def startup_db():
             cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
                           ('logistic', log_pw, 'logistic'))
             
-        # --- NEW: Create default admin user ---
+        # Create default admin user
         cursor.execute("SELECT * FROM Users WHERE username = 'admin'")
         if not cursor.fetchone():
             admin_pw = pwd_context.hash("admin123")
             cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
                           ('admin', admin_pw, 'admin'))
+
+        # --- SEED DEFAULTS FOR REFERENCES ---
+        cursor.execute("SELECT COUNT(*) FROM Locations")
+        if cursor.fetchone()[0] == 0:
+            default_locs = [('YGN',), ('MDY',), ('NPT',), ('MGY',)]
+            cursor.executemany("INSERT INTO Locations (name) VALUES (?)", default_locs)
+
+        cursor.execute("SELECT COUNT(*) FROM UOMs")
+        if cursor.fetchone()[0] == 0:
+            default_uoms = [('Kg',), ('Ton',), ('Viss',)]
+            cursor.executemany("INSERT INTO UOMs (name) VALUES (?)", default_uoms)
         
         conn.commit()
         conn.close()
@@ -174,6 +200,9 @@ class CalculationSaveRequest(BaseModel):
     manual_total_cost: Optional[float] = None
     additional_charges: Optional[float] = 0.0
     final_total_cost: float
+
+class ReferenceItem(BaseModel):
+    name: str
 
 # --- User Management Models ---
 
@@ -239,11 +268,6 @@ async def get_admin_user(current_user: dict = Depends(get_current_user)):
 # --- Helper Functions ---
 
 def determine_calculation_type_sql(gate_id):
-    """
-    Determines calculation type based on Cost.
-    If Cost exists and > 0 -> gate_pricing
-    Else -> direct_pricing
-    """
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -364,10 +388,10 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
                 item_data['standard_unit_cost'] = p_val
                 direct_items.append(item_data)
             else:
-                cost = item_data['weight'] * cost
-                estimated_total_cost += cost
-                ton_cost_total += cost
-                item_data['total_cost'] = cost
+                cost_item = item_data['weight'] * cost
+                estimated_total_cost += cost_item
+                ton_cost_total += cost_item
+                item_data['total_cost'] = cost_item
                 ton_items.append(item_data)
 
         direct_unit_cost = 0.0
@@ -410,10 +434,10 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
             weight = float(row[4]) if row[4] else 0.0
             
             unit_cost = pricing_info.get('value', 0.0) or 0.0
-            cost = quantity * unit_cost
+            item_cost = quantity * unit_cost
             
-            total_cost += cost
-            estimated_total_cost += cost
+            total_cost += item_cost
+            estimated_total_cost += item_cost
             
             calculated_products.append({
                 "code": item_code,
@@ -423,7 +447,7 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
                 "weight": weight,
                 "calculation_type": "direct",
                 "unit_cost": unit_cost,
-                "total_cost": cost
+                "total_cost": item_cost
             })
 
     calculated_products.sort(key=lambda x: x['code'])
@@ -464,6 +488,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     return {"access_token": access_token, "token_type": "bearer", "role": user[2], "username": user[0]}
 
 # --- User Management Endpoints (Admin Only) ---
+# ... (Previous user management endpoints remain the same, ommitted for brevity if needed but including full file logic) ...
 
 @app.get("/users", response_model=List[UserResponse])
 def get_all_users(user: dict = Depends(get_admin_user)):
@@ -482,17 +507,13 @@ def create_user(user_data: UserCreate, user: dict = Depends(get_admin_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
-        # Check if user exists
         cursor.execute("SELECT username FROM Users WHERE username = ?", (user_data.username,))
         if cursor.fetchone():
             conn.close()
             raise HTTPException(status_code=400, detail="Username already exists")
-        
         hashed_pw = pwd_context.hash(user_data.password)
         cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
                       (user_data.username, hashed_pw, user_data.role))
-        
         conn.commit()
         conn.close()
         return {"message": "User created successfully"}
@@ -506,20 +527,15 @@ def update_user(username: str, user_data: UserUpdate, user: dict = Depends(get_a
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
-        # Check if user exists
         cursor.execute("SELECT username FROM Users WHERE username = ?", (username,))
         if not cursor.fetchone():
             conn.close()
             raise HTTPException(status_code=404, detail="User not found")
-        
         if user_data.password:
             hashed_pw = pwd_context.hash(user_data.password)
             cursor.execute("UPDATE Users SET hashed_password = ? WHERE username = ?", (hashed_pw, username))
-            
         if user_data.role:
             cursor.execute("UPDATE Users SET role = ? WHERE username = ?", (user_data.role, username))
-            
         conn.commit()
         conn.close()
         return {"message": "User updated successfully"}
@@ -532,16 +548,13 @@ def update_user(username: str, user_data: UserUpdate, user: dict = Depends(get_a
 def delete_user(username: str, user: dict = Depends(get_admin_user)):
     if username == user["username"]:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
-        
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
         cursor.execute("DELETE FROM Users WHERE username = ?", (username,))
         if cursor.rowcount == 0:
             conn.close()
             raise HTTPException(status_code=404, detail="User not found")
-            
         conn.commit()
         conn.close()
         return {"message": "User deleted successfully"}
@@ -550,6 +563,101 @@ def delete_user(username: str, user: dict = Depends(get_admin_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
 
+# --- Reference Data Endpoints (Locations & UOMs) ---
+
+@app.get("/references/locations")
+def get_ref_locations():
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM Locations ORDER BY name")
+        rows = cursor.fetchall()
+        conn.close()
+        return [row[0] for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.post("/references/locations")
+def add_ref_location(item: ReferenceItem, user: dict = Depends(get_account_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("INSERT INTO Locations (name) VALUES (?)", (item.name,))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.close()
+            raise HTTPException(status_code=400, detail="Location already exists")
+        conn.close()
+        return {"message": "Added successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.delete("/references/locations/{name}")
+def delete_ref_location(name: str, user: dict = Depends(get_account_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM Locations WHERE name = ?", (name,))
+        if cursor.rowcount == 0:
+             conn.close()
+             raise HTTPException(status_code=404, detail="Not found")
+        conn.commit()
+        conn.close()
+        return {"message": "Deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.get("/references/uoms")
+def get_ref_uoms():
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM UOMs ORDER BY name")
+        rows = cursor.fetchall()
+        conn.close()
+        return [row[0] for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.post("/references/uoms")
+def add_ref_uom(item: ReferenceItem, user: dict = Depends(get_account_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("INSERT INTO UOMs (name) VALUES (?)", (item.name,))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.close()
+            raise HTTPException(status_code=400, detail="UOM already exists")
+        conn.close()
+        return {"message": "Added successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.delete("/references/uoms/{name}")
+def delete_ref_uom(name: str, user: dict = Depends(get_account_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM UOMs WHERE name = ?", (name,))
+        if cursor.rowcount == 0:
+             conn.close()
+             raise HTTPException(status_code=404, detail="Not found")
+        conn.commit()
+        conn.close()
+        return {"message": "Deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 # --- Calculation History Endpoints ---
 
@@ -563,12 +671,10 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
         created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         if data.id:
-            # Check existence
             cursor.execute("SELECT id FROM Calculation_History WHERE id = ?", (data.id,))
             if not cursor.fetchone():
                 conn.close()
                 raise HTTPException(status_code=404, detail="Record to update not found")
-
             cursor.execute("""
                 UPDATE Calculation_History 
                 SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
@@ -606,10 +712,8 @@ def get_history(user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
         cursor.execute("SELECT * FROM Calculation_History ORDER BY id DESC")
         rows = cursor.fetchall()
-        
         history = []
         for row in rows:
             history.append({
@@ -623,25 +727,21 @@ def get_history(user: dict = Depends(get_current_user)):
                 "additional_charges": row[7],
                 "final_total_cost": row[8]
             })
-            
         conn.close()
         return {"history": history}
     except Exception as e:
         logger.error(f"Error loading history: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error loading history: {str(e)}")
 
-# --- UPDATED: Restrict Deletion to Admin Users Only ---
 @app.delete("/history/{record_id}")
 def delete_history_item(record_id: int, user: dict = Depends(get_admin_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
         cursor.execute("DELETE FROM Calculation_History WHERE id = ?", (record_id,))
         if cursor.rowcount == 0:
             conn.close()
             raise HTTPException(status_code=404, detail="Record not found")
-            
         conn.commit()
         conn.close()
         return {"message": "Record deleted successfully"}
@@ -653,7 +753,6 @@ def delete_history_item(record_id: int, user: dict = Depends(get_admin_user)):
 @app.get("/history/{record_id}/download")
 def download_history_excel(record_id: int):
     try:
-        # 1. Fetch the history record
         conn = get_logistic_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM Calculation_History WHERE id = ?", (record_id,))
@@ -663,7 +762,6 @@ def download_history_excel(record_id: int):
         if not row:
             raise HTTPException(status_code=404, detail="History record not found")
 
-        # Map row to dictionary
         record = {
             "id": row[0],
             "gate_name": row[2],
@@ -674,7 +772,6 @@ def download_history_excel(record_id: int):
             "additional_charges": row[7]
         }
 
-        # 2. Re-calculate cost breakdown using helper
         try:
             calc_result = _perform_calculation_logic(
                 gate_name=record['gate_name'],
@@ -687,7 +784,6 @@ def download_history_excel(record_id: int):
 
         products = calc_result['calculated_products']
 
-        # 3. Create Excel
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Cost Details"
@@ -749,36 +845,30 @@ def download_history_excel(record_id: int):
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
-        
         filename = f"Calculation_{record_id}_{record['gate_name']}.xlsx"
-        
         return StreamingResponse(
             output,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
-
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error generating download: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating download: {str(e)}")
 
-# --- Excel Export/Import Endpoints (account or admin) ---
+# --- Excel Export/Import Endpoints ---
 
 @app.get("/account/item-pricing/export/{gate_id}")
 def export_item_pricing_excel(gate_id: int):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
         cursor.execute("SELECT [Gate Name], [From], [To] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
         gate_row = cursor.fetchone()
-        
         if not gate_row:
             conn.close()
             raise HTTPException(status_code=404, detail="Gate not found")
-        
         gate_name = gate_row[0]
         from_loc = gate_row[1] or ""
         to_loc = gate_row[2] or ""
@@ -796,7 +886,6 @@ def export_item_pricing_excel(gate_id: int):
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Item Pricing"
-        
         ws['A1'] = f"Gate: {gate_name} ({from_loc} -> {to_loc})"
         ws['A1'].font = Font(bold=True, size=14)
         
@@ -829,15 +918,12 @@ def export_item_pricing_excel(gate_id: int):
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
-        
         filename = f"item_pricing_{gate_name.replace(' ', '_')}.xlsx"
-        
         return StreamingResponse(
             output,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -862,9 +948,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         inserts_made = 0
         
         for row in ws.iter_rows(min_row=4, values_only=True):
-            if not row[0]:
-                continue
-            
+            if not row[0]: continue
             item_code = str(row[0]).strip()
             item_name = str(row[1]) if row[1] else ""
             principal = str(row[2]) if row[2] else ""
@@ -899,14 +983,12 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         
         conn.commit()
         conn.close()
-        
         return {
             "message": "Import completed successfully",
             "updates": updates_made,
             "inserts": inserts_made,
             "deletes": deletes_made
         }
-        
     except Exception as e:
         logger.error(f"Error importing Excel: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error importing: {str(e)}")
@@ -918,15 +1000,12 @@ def get_all_gates(user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
         cursor.execute("SELECT [Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost] FROM Gate")
         rows = cursor.fetchall()
-        
         gates = []
         for row in rows:
             gate_id = row[0]
             calc_type = determine_calculation_type_sql(gate_id)
-            
             gates.append({
                 "gate_id": gate_id,
                 "gate_name": row[1],
@@ -937,7 +1016,6 @@ def get_all_gates(user: dict = Depends(get_current_user)):
                 "cost": float(row[6]) if row[6] is not None else None, 
                 "calculation_type": calc_type
             })
-        
         conn.close()
         return {"gates": gates}
     except Exception as e:
@@ -996,13 +1074,12 @@ def delete_gate(gate_id: int, user: dict = Depends(get_admin_user)):
         raise HTTPException(status_code=500, detail=f"Error deleting gate: {str(e)}")
 
 # --- Item Pricing Management Endpoints (SQLite) ---
-
+# ... (Same as previous file) ...
 @app.get("/account/item-pricing/{gate_id}")
 def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
         query = """
             SELECT [Pricing ID], [Item ID], [Item Name], [Principal], 
                    [Brand], [Transportation Cost]
@@ -1011,7 +1088,6 @@ def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
         """
         cursor.execute(query, (gate_id,))
         rows = cursor.fetchall()
-        
         items = []
         for row in rows:
             items.append({
@@ -1022,7 +1098,6 @@ def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
                 "brand": row[4],
                 "transportation_cost": row[5]
             })
-        
         conn.close()
         return {"items": items, "gate_id": gate_id}
     except Exception as e:
@@ -1075,13 +1150,10 @@ def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(get_a
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
         cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
-        
         if cursor.rowcount == 0:
             conn.close()
             raise HTTPException(status_code=404, detail="Item not found")
-            
         conn.commit()
         conn.close()
         return {"message": "Item deleted successfully"}
@@ -1109,12 +1181,10 @@ def get_to_locations(from_loc: Optional[str] = None):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
         if from_loc:
             cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [From] = ? AND [To] IS NOT NULL ORDER BY [To]", (from_loc,))
         else:
             cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [To] IS NOT NULL ORDER BY [To]")
-            
         rows = cursor.fetchall()
         locations = [row[0] for row in rows if row[0]]
         conn.close()
@@ -1133,7 +1203,6 @@ def calculate_with_gate(
     try:
         if not pick_ids:
             raise HTTPException(status_code=400, detail="No Pick IDs provided")
-            
         result = _perform_calculation_logic(
             gate_name=gate_name, 
             pick_ids=pick_ids, 
@@ -1141,7 +1210,6 @@ def calculate_with_gate(
             additional_charges=additional_charges
         )
         return result
-
     except HTTPException:
         raise
     except Exception as e:
@@ -1165,16 +1233,12 @@ def get_pick_ids():
 
 @app.get("/products-by-ids")
 def get_products_by_pick_ids(pick_ids: List[str] = Query(...)):
-    """Get aggregated products for multiple Pick IDs"""
     try:
         if not pick_ids:
             return {"products": [], "total_weight": 0}
-
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        
         placeholders = ','.join('?' * len(pick_ids))
-        
         query = f"""
             SELECT ItemCode, MAX(Dscription), SUM(Quantity), MAX(UomCode), SUM(ItemWeight)
             FROM PG_PickDetail 
@@ -1182,13 +1246,10 @@ def get_products_by_pick_ids(pick_ids: List[str] = Query(...)):
             GROUP BY ItemCode
             ORDER BY ItemCode
         """
-        
         cursor.execute(query, pick_ids)
         rows = cursor.fetchall()
-        
         products = []
         total_weight = 0.0
-        
         for row in rows:
             weight = float(row[4]) if row[4] else 0.0
             total_weight += weight
@@ -1199,7 +1260,6 @@ def get_products_by_pick_ids(pick_ids: List[str] = Query(...)):
                 "uom": row[3] or "",
                 "weight": weight
             })
-        
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
     except Exception as e:
@@ -1207,11 +1267,9 @@ def get_products_by_pick_ids(pick_ids: List[str] = Query(...)):
 
 @app.get("/products/{pick_id}")
 def get_products_by_pick_id(pick_id: str):
-    """Get products from SQL Server (Single ID)"""
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        
         cursor.execute("""
             SELECT ItemCode, MAX(Dscription), SUM(Quantity), MAX(UomCode), SUM(ItemWeight)
             FROM PG_PickDetail 
@@ -1220,14 +1278,11 @@ def get_products_by_pick_id(pick_id: str):
             ORDER BY ItemCode
         """, (pick_id,))
         rows = cursor.fetchall()
-        
         if not rows:
             conn.close()
             raise HTTPException(status_code=404, detail="No products found")
-        
         products = []
         total_weight = 0.0
-        
         for row in rows:
             weight = float(row[4]) if row[4] else 0.0
             total_weight += weight
@@ -1238,7 +1293,6 @@ def get_products_by_pick_id(pick_id: str):
                 "uom": row[3] or "",
                 "item_weight": weight
             })
-        
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
     except Exception as e:

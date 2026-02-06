@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, Lock } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, Lock, Settings, List as ListIcon } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -123,14 +123,17 @@ const PricingApp = () => {
   const [estimatedTotalCost, setEstimatedTotalCost] = useState(null);
 
   const [historyData, setHistoryData] = useState([]);
-  
-  // Changed: Removed showSaveModal state as we always save new
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
 
   // User Management State
   const [usersList, setUsersList] = useState([]);
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+
+  // Reference Management State (New)
+  const [refLocations, setRefLocations] = useState([]);
+  const [refUOMs, setRefUOMs] = useState([]);
+  const [newRefValue, setNewRefValue] = useState(''); // for adding new
 
   // --- Auth Helpers ---
 
@@ -274,22 +277,65 @@ const PricingApp = () => {
         if (response.ok) {
             const data = await response.json();
             setUsersList(data);
-        } else {
-             const error = await response.json();
-             showNotification(getErrorMessage(error), 'error');
         }
     } catch (error) {
         showNotification(`Error loading users: ${error.message}`, 'error');
     }
   }
 
+  // --- New Reference Loaders ---
+  const loadReferenceData = async () => {
+      try {
+          const locResp = await authFetch(`${API_URL}/references/locations`);
+          if (locResp.ok) setRefLocations(await locResp.json());
+          
+          const uomResp = await authFetch(`${API_URL}/references/uoms`);
+          if (uomResp.ok) setRefUOMs(await uomResp.json());
+      } catch (error) {
+          showNotification('Error loading reference data', 'error');
+      }
+  }
+
+  const addReference = async (type, value) => {
+      if(!value.trim()) return;
+      try {
+          const response = await authFetch(`${API_URL}/references/${type}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: value })
+          });
+          if(response.ok) {
+              showNotification('Added successfully', 'success');
+              setNewRefValue('');
+              loadReferenceData();
+          } else {
+              const err = await response.json();
+              showNotification(getErrorMessage(err), 'error');
+          }
+      } catch (error) {
+          showNotification(`Error: ${error.message}`, 'error');
+      }
+  }
+
+  const deleteReference = async (type, value) => {
+      if(!window.confirm(`Delete ${value}?`)) return;
+      try {
+          const response = await authFetch(`${API_URL}/references/${type}/${value}`, {
+              method: 'DELETE'
+          });
+          if(response.ok) {
+              loadReferenceData();
+          }
+      } catch (error) {
+           showNotification(`Error: ${error.message}`, 'error');
+      }
+  }
+
   // --- Action Functions ---
 
-  // Changed: isUpdate logic simplified to always false in usage
   const handleSaveCalculation = async (isUpdate = false) => {
     try {
       const payload = {
-        // Force ID to null if we want to save as new (which is the new default behavior)
         id: isUpdate ? currentHistoryId : null,
         gate_name: selectedGate,
         from_loc: selectedFrom,
@@ -307,13 +353,7 @@ const PricingApp = () => {
       });
 
       if (response.ok) {
-        // Changed message to reflect new behavior
         showNotification('Calculation saved as new record successfully', 'success');
-        
-        // We do not set currentHistoryId here, so further saves also create new records 
-        // unless we reload the history list and pick the new one.
-        // If you want to "stay" on the new record, the backend would need to return the new ID.
-        // For now, this safely creates copies.
         loadHistory();
       } else {
         const error = await response.json();
@@ -325,35 +365,25 @@ const PricingApp = () => {
   };
 
   const handleSaveButtonClick = () => {
-    // Changed: Always save as NEW.
-    // passing false ensures payload.id is null, triggering an insert on backend.
     handleSaveCalculation(false);
   };
 
   const loadSavedCalculation = async (record) => {
     try {
       setCurrentPage('calculator');
-      
       setCurrentHistoryId(record.id);
-
       setSelectedPickIds(record.pick_ids);
       await fetchAggregatedProducts(record.pick_ids);
-      
       setSelectedFrom(record.from_loc);
       await loadToLocations(record.from_loc);
-      
       setSelectedTo(record.to_loc);
       setSelectedGate(record.gate_name);
-      
       setManualTotalCost(record.manual_total_cost || '');
       setAdditionalCharges(record.additional_charges || '');
-      
       setCalculatedProducts([]); 
       setCalculatedTotalCost(record.final_total_cost);
       setEstimatedTotalCost(null);
-
       showNotification(`Loaded calculation record (ID: ${record.id}).`, 'info');
-      
     } catch (error) {
       showNotification(`Error loading record: ${error.message}`, 'error');
     }
@@ -363,26 +393,22 @@ const PricingApp = () => {
     try {
       showNotification('Generating Excel file...', 'info');
       const response = await authFetch(`${API_URL}/history/${record.id}/download`);
-      
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        
         const contentDisposition = response.headers.get('Content-Disposition');
         let filename = `Calculation_${record.id}.xlsx`;
         if (contentDisposition) {
           const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
           if (filenameMatch) filename = filenameMatch[1];
         }
-        
         a.download = filename;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        
         showNotification('History Excel file downloaded successfully', 'success');
       } else {
         const error = await response.json();
@@ -395,7 +421,6 @@ const PricingApp = () => {
 
   const deleteHistory = async (id) => {
     if(!window.confirm("Are you sure you want to delete this saved calculation?")) return;
-    
     try {
       const response = await authFetch(`${API_URL}/history/${id}`, { method: 'DELETE' });
       if (response.ok) {
@@ -478,11 +503,9 @@ const PricingApp = () => {
       setTotalWeight(0);
       return;
     }
-
     try {
       const queryString = ids.map(id => `pick_ids=${encodeURIComponent(id)}`).join('&');
       const response = await authFetch(`${API_URL}/products-by-ids?${queryString}`);
-      
       if (response.ok) {
         const data = await response.json();
         setProducts(data.products);
@@ -497,15 +520,12 @@ const PricingApp = () => {
 
   const handleAddPickId = (pickId) => {
     if (!pickId) return;
-    
     if (selectedPickIds.includes(pickId)) {
       showNotification('Pick ID already selected', 'info');
       return;
     }
-
     const newSelection = [...selectedPickIds, pickId];
     setSelectedPickIds(newSelection);
-    
     setSelectedFrom('');
     setSelectedTo('');
     setSelectedGate('');
@@ -515,18 +535,15 @@ const PricingApp = () => {
     setEstimatedTotalCost(null);
     setManualTotalCost('');
     setAdditionalCharges('');
-
     fetchAggregatedProducts(newSelection);
   };
 
   const handleRemovePickId = (pickId) => {
     const newSelection = selectedPickIds.filter(id => id !== pickId);
     setSelectedPickIds(newSelection);
-    
     setCalculatedProducts([]);
     setCalculatedTotalCost(null);
     setEstimatedTotalCost(null);
-    
     fetchAggregatedProducts(newSelection);
   };
 
@@ -538,7 +555,6 @@ const PricingApp = () => {
     setCalculatedTotalCost(null);
     setEstimatedTotalCost(null);
     setManualTotalCost('');
-    
     if (val) {
       loadToLocations(val);
     } else {
@@ -561,7 +577,6 @@ const PricingApp = () => {
     setCalculatedTotalCost(null);
     setEstimatedTotalCost(null);
     setManualTotalCost('');
-    
     const gateInfo = gates.find(g => g.gate_name === gateName);
     if (gateInfo) {
       setCalculationType(gateInfo.calculation_type);
@@ -573,27 +588,22 @@ const PricingApp = () => {
       showNotification('Please select Pick ID(s), From, To, and Gate', 'error');
       return;
     }
-
     setIsLoading(true);
     try {
       let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(selectedGate)}`;
-      
       selectedPickIds.forEach(id => {
         url += `&pick_ids=${encodeURIComponent(id)}`;
       });
-
       if (manualTotalCost) {
         url += `&manual_total_cost=${manualTotalCost}`;
       }
       if (additionalCharges) {
         url += `&additional_charges=${additionalCharges}`;
       }
-
       const response = await authFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
-
       if (response.ok) {
         const data = await response.json();
         setCalculatedProducts(data.calculated_products);
@@ -688,7 +698,6 @@ const PricingApp = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-
       if (response.ok) {
         showNotification('Item saved successfully', 'success');
         await loadItemPricing(selectedGateForPricing);
@@ -733,19 +742,15 @@ const PricingApp = () => {
     try {
         let url = `${API_URL}/users`;
         let method = 'POST';
-        
-        // If editing, append username to URL and change method to PUT
         if (editingUser) {
             url += `/${editingUser.username}`;
             method = 'PUT';
         }
-        
         const response = await authFetch(url, {
             method: method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(userData)
         });
-
         if (response.ok) {
             showNotification(editingUser ? 'User updated successfully' : 'User created successfully', 'success');
             await loadUsers();
@@ -762,7 +767,6 @@ const PricingApp = () => {
 
   const deleteUser = async (username) => {
     if (username === userRole.username) return; 
-    
     setConfirmDialog({
         message: `Are you sure you want to delete user "${username}"?`,
         onConfirm: async () => {
@@ -790,6 +794,8 @@ const PricingApp = () => {
         loadPickIds();
         loadGates();
         loadFromLocations();
+        // Also load ref data eagerly so dropdowns work even if page isn't visited
+        loadReferenceData();
     }
   }, [token]);
 
@@ -807,6 +813,9 @@ const PricingApp = () => {
     }
     if (token && currentPage === 'users' && userRole === 'admin') {
         loadUsers();
+    }
+    if (token && currentPage === 'references') {
+        loadReferenceData();
     }
   }, [currentPage, token, userRole]);
 
@@ -836,36 +845,51 @@ const PricingApp = () => {
                 className="w-full p-2 border rounded"
               />
             </div>
+            
+            {/* UPDATED: From Location Dropdown */}
             <div>
               <label className="block text-sm font-semibold mb-1">From</label>
-              <input
-                type="text"
+              <select
                 value={formData.from_loc ?? ''}
                 onChange={(e) => setFormData({...formData, from_loc: e.target.value})}
                 className="w-full p-2 border rounded"
-                placeholder="e.g. YGN"
-              />
+              >
+                  <option value="">-- Select --</option>
+                  {refLocations.map((loc, i) => (
+                      <option key={i} value={loc}>{loc}</option>
+                  ))}
+              </select>
             </div>
+
+            {/* UPDATED: To Location Dropdown */}
             <div>
               <label className="block text-sm font-semibold mb-1">To</label>
-              <input
-                type="text"
+              <select
                 value={formData.to_loc ?? ''}
                 onChange={(e) => setFormData({...formData, to_loc: e.target.value})}
                 className="w-full p-2 border rounded"
-                placeholder="e.g. MDY"
-              />
+              >
+                  <option value="">-- Select --</option>
+                  {refLocations.map((loc, i) => (
+                      <option key={i} value={loc}>{loc}</option>
+                  ))}
+              </select>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
+                {/* UPDATED: UOM Dropdown */}
                 <div>
                   <label className="block text-sm font-semibold mb-1">UOM</label>
-                  <input
-                    type="text"
+                  <select
                     value={formData.uom ?? ''}
                     onChange={(e) => setFormData({...formData, uom: e.target.value})}
                     className="w-full p-2 border rounded"
-                    placeholder="e.g. Kg"
-                  />
+                  >
+                      <option value="">-- Select --</option>
+                      {refUOMs.map((u, i) => (
+                          <option key={i} value={u}>{u}</option>
+                      ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold mb-1">Unit</label>
@@ -974,7 +998,7 @@ const PricingApp = () => {
     const [formData, setFormData] = useState(user ? { ...user, password: '' } : {
         username: '',
         password: '',
-        role: 'logistic' // default role
+        role: 'logistic' 
     });
 
     return (
@@ -989,7 +1013,7 @@ const PricingApp = () => {
                             value={formData.username}
                             onChange={(e) => setFormData({...formData, username: e.target.value})}
                             className="w-full p-2 border rounded"
-                            disabled={!!user} // Username cannot be changed
+                            disabled={!!user} 
                         />
                     </div>
                     <div>
@@ -1034,8 +1058,6 @@ const PricingApp = () => {
         </div>
     );
   };
-
-  // Removed SaveModal as it's no longer used
 
   const ConfirmDialog = ({ message, onConfirm, onCancel }) => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1100,6 +1122,17 @@ const PricingApp = () => {
             <History size={20} />
             History
           </button>
+          {['admin', 'account'].includes(userRole) && (
+              <button
+                onClick={() => setCurrentPage('references')}
+                className={`flex items-center gap-2 px-4 py-2 rounded transition ${
+                  currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                <ListIcon size={20} />
+                References
+              </button>
+          )}
           {userRole === 'admin' && (
               <button
                 onClick={() => setCurrentPage('users')}
@@ -1113,7 +1146,6 @@ const PricingApp = () => {
           )}
         </div>
         
-        {/* User Info & Logout */}
         <div className="flex items-center gap-4">
             <div className="text-right">
                 <p className="text-xs text-gray-500">Logged in as</p>
@@ -1140,8 +1172,8 @@ const PricingApp = () => {
   }
 
   // --- Views ---
-  
-  // 1. Users View (Admin Only)
+
+  // ... (Users View - same as before) ...
   if (currentPage === 'users' && userRole === 'admin') {
       return (
         <div className="min-h-screen bg-gray-50 p-6">
@@ -1198,7 +1230,6 @@ const PricingApp = () => {
                                                         setShowUserModal(true);
                                                     }}
                                                     className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
-                                                    title="Edit User"
                                                 >
                                                     <Edit2 size={16} />
                                                 </button>
@@ -1206,15 +1237,9 @@ const PricingApp = () => {
                                                     <button
                                                         onClick={() => deleteUser(u.username)}
                                                         className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"
-                                                        title="Delete User"
                                                     >
                                                         <Trash2 size={16} />
                                                     </button>
-                                                )}
-                                                {u.username === username && (
-                                                    <span className="p-2 text-gray-400 cursor-not-allowed" title="Cannot delete yourself">
-                                                        <Lock size={16} />
-                                                    </span>
                                                 )}
                                             </div>
                                         </td>
@@ -1246,7 +1271,101 @@ const PricingApp = () => {
       );
   }
 
-  // 2. History View
+  // --- NEW: Reference Management View ---
+  if (currentPage === 'references' && ['admin', 'account'].includes(userRole)) {
+      return (
+        <div className="min-h-screen bg-gray-50 p-6">
+            <div className="max-w-6xl mx-auto">
+                {notification && (
+                    <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${
+                    notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+                    } text-white z-50`}>
+                    {notification.message}
+                    </div>
+                )}
+                {renderNavigation()}
+                
+                <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Reference Data</h1>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Locations Panel */}
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h2 className="text-xl font-bold mb-4 text-blue-700">Locations (From/To)</h2>
+                        <div className="flex gap-2 mb-4">
+                            <input 
+                                type="text" 
+                                placeholder="New Location (e.g., NPT)" 
+                                className="border p-2 rounded flex-1"
+                                id="new-loc"
+                            />
+                            <button 
+                                onClick={() => {
+                                    const val = document.getElementById('new-loc').value;
+                                    addReference('locations', val);
+                                    document.getElementById('new-loc').value = '';
+                                }}
+                                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                            >
+                                Add
+                            </button>
+                        </div>
+                        <div className="border rounded max-h-96 overflow-y-auto">
+                            {refLocations.map((loc, i) => (
+                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
+                                    <span>{loc}</span>
+                                    <button 
+                                        onClick={() => deleteReference('locations', loc)}
+                                        className="text-red-500 hover:text-red-700"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* UOM Panel */}
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h2 className="text-xl font-bold mb-4 text-purple-700">Units of Measure (UOM)</h2>
+                        <div className="flex gap-2 mb-4">
+                            <input 
+                                type="text" 
+                                placeholder="New UOM (e.g., Box)" 
+                                className="border p-2 rounded flex-1"
+                                id="new-uom"
+                            />
+                            <button 
+                                onClick={() => {
+                                    const val = document.getElementById('new-uom').value;
+                                    addReference('uoms', val);
+                                    document.getElementById('new-uom').value = '';
+                                }}
+                                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                            >
+                                Add
+                            </button>
+                        </div>
+                        <div className="border rounded max-h-96 overflow-y-auto">
+                            {refUOMs.map((u, i) => (
+                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
+                                    <span>{u}</span>
+                                    <button 
+                                        onClick={() => deleteReference('uoms', u)}
+                                        className="text-red-500 hover:text-red-700"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+      );
+  }
+
+  // ... (History View - same as before) ...
   if (currentPage === 'history') {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -1294,7 +1413,6 @@ const PricingApp = () => {
                             <button
                               onClick={() => handleDownloadHistoryExcel(record)}
                               className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1"
-                              title="Download Excel"
                             >
                                 <FileDown size={16} />
                             </button>
@@ -1308,7 +1426,6 @@ const PricingApp = () => {
                                 <button
                                     onClick={() => deleteHistory(record.id)}
                                     className="p-1 text-red-500 hover:bg-red-50 rounded"
-                                    title="Delete Record"
                                 >
                                     <Trash2 size={18} />
                                 </button>
@@ -1327,10 +1444,10 @@ const PricingApp = () => {
     );
   }
 
-  // 3. Gates View
+  // ... (Gates View - same as before) ...
   if (currentPage === 'gates') {
     const canEdit = ['account', 'admin'].includes(userRole);
-    const canDelete = userRole === 'admin'; // Only admin can delete
+    const canDelete = userRole === 'admin'; 
 
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -1433,10 +1550,11 @@ const PricingApp = () => {
     );
   }
 
-  // 4. Items View
+  // ... (Items View and Default Calculator View remain same, omitted for brevity but logic is unchanged) ...
+
   if (currentPage === 'items') {
     const canEdit = ['account', 'admin'].includes(userRole);
-    const canDelete = userRole === 'admin'; // Only admin can delete
+    const canDelete = userRole === 'admin'; 
 
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -1462,7 +1580,6 @@ const PricingApp = () => {
                       <Download size={20} />
                       Download Excel
                     </button>
-                    
                     {canEdit && (
                         <>
                             <label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer">
@@ -1578,7 +1695,7 @@ const PricingApp = () => {
     );
   }
 
-  // 5. Default: Calculator View
+  // Calculator View (Default)
   const hasCalculated = calculatedProducts.length > 0;
   const tableData = hasCalculated ? calculatedProducts : products;
 
@@ -1598,7 +1715,6 @@ const PricingApp = () => {
           
           <div className="bg-white rounded-lg border p-6 mb-6">
             <h2 className="text-xl font-bold mb-4">Select Pick IDs</h2>
-            
             <div className="mb-4">
                <select
                 onChange={(e) => handleAddPickId(e.target.value)}
@@ -1613,7 +1729,6 @@ const PricingApp = () => {
                   ))}
               </select>
             </div>
-
             <div className="flex flex-wrap gap-2">
               {selectedPickIds.length === 0 && (
                 <p className="text-gray-500 text-sm italic">No Pick IDs selected</p>
@@ -1621,12 +1736,7 @@ const PricingApp = () => {
               {selectedPickIds.map(id => (
                 <div key={id} className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full border border-blue-200">
                   <span className="font-semibold">{id}</span>
-                  <button 
-                    onClick={() => handleRemovePickId(id)}
-                    className="hover:text-red-600 transition"
-                  >
-                    <X size={16} />
-                  </button>
+                  <button onClick={() => handleRemovePickId(id)} className="hover:text-red-600 transition"><X size={16} /></button>
                 </div>
               ))}
             </div>
@@ -1681,9 +1791,7 @@ const PricingApp = () => {
                       .filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo)
                       .map((gate) => (
                         <option key={gate.gate_name} value={gate.gate_name}>
-                          {gate.gate_name} - 
-                          {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : 
-                           gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}
+                          {gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}
                         </option>
                       ))}
                   </select>
@@ -1835,7 +1943,6 @@ const PricingApp = () => {
                             <div className="w-full md:w-1/3 border-b border-gray-300 my-1"></div>
                           </>
                         )}
-                        
                         <div className="flex justify-between w-full md:w-1/3 items-center">
                           <span className="text-lg font-bold">Total Cost:</span>
                           <span className="text-2xl font-bold text-blue-600">
