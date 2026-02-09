@@ -130,10 +130,22 @@ const PricingApp = () => {
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
 
-  // Reference Management State (New)
+  // Reference Management State
   const [refLocations, setRefLocations] = useState([]);
   const [refUOMs, setRefUOMs] = useState([]);
-  const [newRefValue, setNewRefValue] = useState(''); // for adding new
+  const [newRefValue, setNewRefValue] = useState('');
+
+  // --- Formatting Helper ---
+  const formatNumber = (num) => {
+    if (num === null || num === undefined || num === '') return '-';
+    // If it's a string like "Ton", return as is
+    if (isNaN(num)) return num;
+    
+    return Number(num).toLocaleString(undefined, { 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2 
+    });
+  };
 
   // --- Auth Helpers ---
 
@@ -178,9 +190,7 @@ const PricingApp = () => {
     if (!error?.detail) return 'An unknown error occurred';
     if (Array.isArray(error.detail)) {
         return error.detail.map(e => {
-            // Handle plain string errors (from manual validation)
             if (typeof e === 'string') return e;
-            // Handle Pydantic validation errors
             return `${e.loc.slice(-1)}: ${e.msg}`;
         }).join('\n');
     }
@@ -192,7 +202,7 @@ const PricingApp = () => {
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
-    setTimeout(() => setNotification(null), 5000); // Increased timeout for reading errors
+    setTimeout(() => setNotification(null), 5000); 
   };
 
   // --- Data Loading Functions ---
@@ -288,7 +298,6 @@ const PricingApp = () => {
     }
   }
 
-  // --- New Reference Loaders ---
   const loadReferenceData = async () => {
       try {
           const locResp = await authFetch(`${API_URL}/references/locations`);
@@ -799,7 +808,6 @@ const PricingApp = () => {
         loadPickIds();
         loadGates();
         loadFromLocations();
-        // Also load ref data eagerly so dropdowns work even if page isn't visited
         loadReferenceData();
     }
   }, [token]);
@@ -851,7 +859,6 @@ const PricingApp = () => {
               />
             </div>
             
-            {/* UPDATED: From Location Dropdown */}
             <div>
               <label className="block text-sm font-semibold mb-1">From</label>
               <select
@@ -866,7 +873,6 @@ const PricingApp = () => {
               </select>
             </div>
 
-            {/* UPDATED: To Location Dropdown */}
             <div>
               <label className="block text-sm font-semibold mb-1">To</label>
               <select
@@ -882,7 +888,6 @@ const PricingApp = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-                {/* UPDATED: UOM Dropdown */}
                 <div>
                   <label className="block text-sm font-semibold mb-1">UOM</label>
                   <select
@@ -945,7 +950,6 @@ const PricingApp = () => {
       transportation_cost: 'Ton'
     });
 
-    // --- Search State ---
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
     const [isValidating, setIsValidating] = useState(false);
@@ -980,7 +984,7 @@ const PricingApp = () => {
             brand: selectedItem.brand || ''
         });
         setSearchTerm(selectedItem.item_code);
-        setSearchResults([]); // Clear results
+        setSearchResults([]); 
     };
 
     const handleSaveButton = async () => {
@@ -991,15 +995,13 @@ const PricingApp = () => {
         
         setIsValidating(true);
         try {
-            // Validate against backend
             const response = await authFetch(`${API_URL}/dwbi/items/validate?code=${encodeURIComponent(searchTerm)}`);
             if (response.ok) {
                 const result = await response.json();
                 if (result.valid) {
-                    // Item is valid, update formData with latest details from validation result (optional but safer)
                     const finalData = {
                         ...formData,
-                        item_code: result.item.item_code, // Use exact casing from DB
+                        item_code: result.item.item_code, 
                         item_name: result.item.item_name,
                         principal: result.item.principal,
                         brand: result.item.brand
@@ -1024,7 +1026,6 @@ const PricingApp = () => {
           <h2 className="text-2xl font-bold mb-4">{item ? 'Edit Item' : 'Add New Item'}</h2>
           <div className="grid grid-cols-2 gap-4">
             
-            {/* --- Updated Item Code Field with Search --- */}
             <div className="relative">
               <label className="block text-sm font-semibold mb-1">Item Code (Search)</label>
               <div className="relative">
@@ -1034,14 +1035,12 @@ const PricingApp = () => {
                     onChange={(e) => handleSearch(e.target.value)}
                     className="w-full p-2 border rounded pr-8"
                     placeholder="Type code or name..."
-                    // Editing enabled by removing disabled prop
                 />
                 <div className="absolute right-2 top-2 text-gray-400">
                     <Search size={18} />
                 </div>
               </div>
               
-              {/* Dropdown Results */}
               {searchResults.length > 0 && (
                   <div className="absolute z-10 w-full bg-white border rounded shadow-lg max-h-48 overflow-y-auto mt-1">
                       {searchResults.map((res, idx) => (
@@ -1068,7 +1067,6 @@ const PricingApp = () => {
                 readOnly
               />
             </div>
-            {/* NEW: Principal Field */}
             <div>
               <label className="block text-sm font-semibold mb-1">Principal</label>
               <input
@@ -1080,7 +1078,6 @@ const PricingApp = () => {
                 readOnly
               />
             </div>
-            {/* NEW: Brand Field */}
             <div>
               <label className="block text-sm font-semibold mb-1">Brand</label>
               <input
@@ -1303,7 +1300,6 @@ const PricingApp = () => {
 
   // --- Views ---
 
-  // ... (Users View - same as before) ...
   if (currentPage === 'users' && userRole === 'admin') {
       return (
         <div className="min-h-screen bg-gray-50 p-6">
@@ -1495,7 +1491,7 @@ const PricingApp = () => {
       );
   }
 
-  // ... (History View - same as before) ...
+  // ... (History View) ...
   if (currentPage === 'history') {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -1536,7 +1532,7 @@ const PricingApp = () => {
                           {record.pick_ids.length} ID(s): {record.pick_ids.join(', ')}
                         </td>
                         <td className="border p-3 text-right font-bold text-blue-600">
-                          {record.final_total_cost?.toLocaleString()}
+                          {formatNumber(record.final_total_cost)}
                         </td>
                         <td className="border p-3 text-center">
                           <div className="flex justify-center gap-2">
@@ -1574,7 +1570,7 @@ const PricingApp = () => {
     );
   }
 
-  // ... (Gates View - same as before) ...
+  // ... (Gates View) ...
   if (currentPage === 'gates') {
     const canEdit = ['account', 'admin'].includes(userRole);
     const canDelete = userRole === 'admin'; 
@@ -1624,7 +1620,7 @@ const PricingApp = () => {
                       <td className="border p-3">{gate.to_loc}</td>
                       <td className="border p-3">{gate.uom || '-'}</td>
                       <td className="border p-3">{gate.unit || '-'}</td>
-                      <td className="border p-3">{gate.cost || '-'}</td>
+                      <td className="border p-3">{formatNumber(gate.cost)}</td>
                       <td className="border p-3">
                         {canEdit ? (
                             <div className="flex gap-2">
@@ -1680,8 +1676,7 @@ const PricingApp = () => {
     );
   }
 
-  // ... (Items View and Default Calculator View remain same, omitted for brevity but logic is unchanged) ...
-
+  // ... (Items View) ...
   if (currentPage === 'items') {
     const canEdit = ['account', 'admin'].includes(userRole);
     const canDelete = userRole === 'admin'; 
@@ -1759,7 +1754,6 @@ const PricingApp = () => {
                     <tr>
                       <th className="border p-2 text-left">Item Code</th>
                       <th className="border p-2 text-left">Item Name</th>
-                      {/* NEW COLUMNS */}
                       <th className="border p-2 text-left">Principal</th>
                       <th className="border p-2 text-left">Brand</th>
                       <th className="border p-2 text-left">Transport Cost</th>
@@ -1771,10 +1765,9 @@ const PricingApp = () => {
                       <tr key={index}>
                         <td className="border p-2">{item.item_code}</td>
                         <td className="border p-2">{item.item_name}</td>
-                        {/* NEW DATA CELLS */}
                         <td className="border p-2">{item.principal}</td>
                         <td className="border p-2">{item.brand}</td>
-                        <td className="border p-2">{item.transportation_cost}</td>
+                        <td className="border p-2">{formatNumber(item.transportation_cost)}</td>
                         <td className="border p-2">
                           {canEdit ? (
                             <div className="flex gap-2">
@@ -1980,10 +1973,10 @@ const PricingApp = () => {
                           <td className="border p-2">{product.code}</td>
                           <td className="border p-2">{product.name}</td>
                           <td className="border p-2">{product.quantity}</td>
-                          <td className="border p-2">{product.weight.toFixed(2)}</td>
+                          <td className="border p-2">{formatNumber(product.weight)}</td>
                           {hasCalculated && (
                             <td className="border p-2 font-semibold">
-                                {product.total_cost !== undefined ? product.total_cost.toFixed(2) : '-'}
+                                {product.total_cost !== undefined ? formatNumber(product.total_cost) : '-'}
                             </td>
                           )}
                         </tr>
@@ -1996,7 +1989,7 @@ const PricingApp = () => {
               <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border-2 border-purple-300 p-6 mb-6">
                 <div className="flex items-center justify-between">
                   <span className="text-lg font-semibold text-gray-700">Total Weight:</span>
-                  <span className="text-3xl font-bold text-purple-600">{totalWeight.toFixed(2)}</span>
+                  <span className="text-3xl font-bold text-purple-600">{formatNumber(totalWeight)}</span>
                 </div>
               </div>
               <div className="bg-white rounded-lg border p-6 mb-6">
@@ -2030,7 +2023,7 @@ const PricingApp = () => {
                     <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col justify-center col-span-1 md:col-span-2">
                       <span className="text-sm text-gray-600">Standard Estimated Total Cost (Inc. Extras):</span>
                       <span className="text-xl font-bold text-gray-700">
-                        {estimatedTotalCost.toLocaleString()} MMK
+                        {formatNumber(estimatedTotalCost)} MMK
                       </span>
                     </div>
                   )}
@@ -2070,11 +2063,11 @@ const PricingApp = () => {
                           <>
                             <div className="flex justify-between w-full md:w-1/3 text-gray-600">
                               <span>Subtotal (Transport):</span>
-                              <span>{(calculatedTotalCost - (parseFloat(additionalCharges) || 0)).toFixed(2)} MMK</span>
+                              <span>{formatNumber(calculatedTotalCost - (parseFloat(additionalCharges) || 0))} MMK</span>
                             </div>
                             <div className="flex justify-between w-full md:w-1/3 text-gray-600">
                               <span>Additional Charges:</span>
-                              <span>{parseFloat(additionalCharges).toFixed(2)} MMK</span>
+                              <span>{formatNumber(additionalCharges)} MMK</span>
                             </div>
                             <div className="w-full md:w-1/3 border-b border-gray-300 my-1"></div>
                           </>
@@ -2082,7 +2075,7 @@ const PricingApp = () => {
                         <div className="flex justify-between w-full md:w-1/3 items-center">
                           <span className="text-lg font-bold">Total Cost:</span>
                           <span className="text-2xl font-bold text-blue-600">
-                            {calculatedTotalCost.toFixed(2)} MMK
+                            {formatNumber(calculatedTotalCost)} MMK
                           </span>
                         </div>
                       </div>
