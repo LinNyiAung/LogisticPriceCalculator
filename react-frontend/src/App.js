@@ -177,7 +177,12 @@ const PricingApp = () => {
   const getErrorMessage = (error) => {
     if (!error?.detail) return 'An unknown error occurred';
     if (Array.isArray(error.detail)) {
-        return error.detail.map(e => `${e.loc.slice(-1)}: ${e.msg}`).join(', ');
+        return error.detail.map(e => {
+            // Handle plain string errors (from manual validation)
+            if (typeof e === 'string') return e;
+            // Handle Pydantic validation errors
+            return `${e.loc.slice(-1)}: ${e.msg}`;
+        }).join('\n');
     }
     if (typeof error.detail === 'object') {
         return JSON.stringify(error.detail);
@@ -187,7 +192,7 @@ const PricingApp = () => {
 
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
-    setTimeout(() => setNotification(null), 3000);
+    setTimeout(() => setNotification(null), 5000); // Increased timeout for reading errors
   };
 
   // --- Data Loading Functions ---

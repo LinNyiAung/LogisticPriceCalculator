@@ -928,6 +928,8 @@ def export_item_pricing_excel(gate_id: int):
         logger.error(f"Error exporting Excel: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error exporting: {str(e)}")
 
+# --- UPDATED: Import with Strict DWBI Validation ---
+
 @app.post("/account/item-pricing/import/{gate_id}")
 async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), user: dict = Depends(get_account_user)):
     try:
@@ -935,42 +937,126 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         wb = openpyxl.load_workbook(io.BytesIO(contents))
         ws = wb.active
         
+        # 1. Parse Excel Data
+        excel_rows = []
+        item_codes_to_check = set()
+        
+        for row_idx, row in enumerate(ws.iter_rows(min_row=4, values_only=True), start=4):
+            if not row[0]: continue # Skip empty rows
+            
+            # Extract and clean data
+            item_code = str(row[0]).strip()
+            item_name = str(row[1]).strip() if row[1] else ""
+            principal = str(row[2]).strip() if row[2] else ""
+            brand = str(row[3]).strip() if row[3] else ""
+            transport_cost = str(row[4]).strip() if row[4] else "Ton"
+            
+            excel_rows.append({
+                "row_num": row_idx,
+                "code": item_code,
+                "name": item_name,
+                "principal": principal,
+                "brand": brand,
+                "cost": transport_cost
+            })
+            item_codes_to_check.add(item_code)
+            
+        if not excel_rows:
+             raise HTTPException(status_code=400, detail="No data found in Excel file")
+
+        # 2. Fetch Reference Data from DWBI (Batch fetch for performance)
+        conn_dwbi = get_dwbi_connection()
+        cursor_dwbi = conn_dwbi.cursor()
+        
+        dwbi_data = {}
+        unique_codes_list = list(item_codes_to_check)
+        batch_size = 1000
+        
+        for i in range(0, len(unique_codes_list), batch_size):
+            batch = unique_codes_list[i:i + batch_size]
+            placeholders = ','.join('?' * len(batch))
+            query_dwbi = f"""
+                SELECT ItemCode, ItemName, ItemGroupName, BrandName 
+                FROM _ItemAllinone 
+                WHERE ItemCode IN ({placeholders})
+            """
+            cursor_dwbi.execute(query_dwbi, batch)
+            rows = cursor_dwbi.fetchall()
+            for r in rows:
+                # Store in dict: ItemCode -> { details }
+                dwbi_data[str(r[0]).strip()] = {
+                    "name": str(r[1]).strip() if r[1] else "",
+                    "principal": str(r[2]).strip() if r[2] else "", 
+                    "brand": str(r[3]).strip() if r[3] else ""
+                }
+        
+        conn_dwbi.close()
+        
+        # 3. Validation Logic
+        errors = []
+        
+        for row in excel_rows:
+            code = row["code"]
+            
+            # Check 1: Does Item Code exist in DWBI?
+            if code not in dwbi_data:
+                errors.append(f"Row {row['row_num']}: Item Code '{code}' not found in DWBI.")
+                continue
+                
+            db_item = dwbi_data[code]
+            
+            # Check 2: Item Name Match?
+            if row["name"].lower() != db_item["name"].lower():
+                 errors.append(f"Row {row['row_num']}: Item Name mismatch. Excel: '{row['name']}', System: '{db_item['name']}'")
+            
+            # Check 3: Principal (ItemGroupName) Match?
+            if row["principal"].lower() != db_item["principal"].lower():
+                 errors.append(f"Row {row['row_num']}: Principal mismatch. Excel: '{row['principal']}', System: '{db_item['principal']}'")
+
+            # Check 4: Brand Match?
+            if row["brand"].lower() != db_item["brand"].lower():
+                 errors.append(f"Row {row['row_num']}: Brand mismatch. Excel: '{row['brand']}', System: '{db_item['brand']}'")
+
+        if errors:
+            # Return errors to frontend. Limit to first 10 to avoid huge payloads.
+            error_msg = errors[:10]
+            if len(errors) > 10:
+                error_msg.append(f"... and {len(errors) - 10} more errors.")
+            
+            raise HTTPException(status_code=400, detail=error_msg)
+
+        # 4. If Valid, Proceed with SQLite Updates
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
         cursor.execute("SELECT [Item ID] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
         existing_items = {row[0] for row in cursor.fetchall()}
         
-        updated_items = set()
+        updated_items_set = set()
         updates_made = 0
         inserts_made = 0
         
-        for row in ws.iter_rows(min_row=4, values_only=True):
-            if not row[0]: continue
-            item_code = str(row[0]).strip()
-            item_name = str(row[1]) if row[1] else ""
-            principal = str(row[2]) if row[2] else ""
-            brand = str(row[3]) if row[3] else ""
-            transportation_cost = str(row[4]) if row[4] else "Ton"
-            
-            updated_items.add(item_code)
+        for row in excel_rows:
+            item_code = row["code"]
+            updated_items_set.add(item_code)
             
             if item_code in existing_items:
                 cursor.execute("""
                     UPDATE Item_Pricing
                     SET [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ?
                     WHERE [Gate ID] = ? AND [Item ID] = ?
-                """, (item_name, principal, brand, transportation_cost, gate_id, item_code))
+                """, (row["name"], row["principal"], row["brand"], row["cost"], gate_id, item_code))
                 updates_made += 1
             else:
                 cursor.execute("""
                     INSERT INTO Item_Pricing 
                     ([Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost])
                     VALUES (?, ?, ?, ?, ?, ?)
-                """, (gate_id, item_code, item_name, principal, brand, transportation_cost))
+                """, (gate_id, item_code, row["name"], row["principal"], row["brand"], row["cost"]))
                 inserts_made += 1
         
-        items_to_delete = existing_items - updated_items
+        # Logic to remove items that are in DB but NOT in the Excel file
+        items_to_delete = existing_items - updated_items_set
         deletes_made = 0
         for item_code in items_to_delete:
             cursor.execute("""
@@ -978,15 +1064,19 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                 WHERE [Gate ID] = ? AND [Item ID] = ?
             """, (gate_id, item_code))
             deletes_made += 1
-        
+            
         conn.commit()
         conn.close()
+        
         return {
             "message": "Import completed successfully",
             "updates": updates_made,
             "inserts": inserts_made,
             "deletes": deletes_made
         }
+        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error importing Excel: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error importing: {str(e)}")
