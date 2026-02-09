@@ -80,6 +80,7 @@ def startup_db():
             )
         """)
         
+        # Item_Pricing table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Item_Pricing (
                 [Pricing ID] INTEGER PRIMARY KEY,
@@ -88,13 +89,20 @@ def startup_db():
                 [Item Name] TEXT,
                 [Principal] TEXT,
                 [Brand] TEXT,
+                [UOM] TEXT,
                 [Transportation Cost] TEXT,
                 FOREIGN KEY([Gate ID]) REFERENCES Gate([Gate ID])
             )
         """)
 
+        # Migration: Add UOM column if it doesn't exist in Item_Pricing
+        try:
+            cursor.execute("SELECT [UOM] FROM Item_Pricing LIMIT 1")
+        except sqlite3.OperationalError:
+            logger.info("Adding UOM column to Item_Pricing table...")
+            cursor.execute("ALTER TABLE Item_Pricing ADD COLUMN [UOM] TEXT")
+
         # Calculation History Table
-        # UPDATED: Removed AUTOINCREMENT to allow manual 8-digit ID insertion
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Calculation_History (
                 [id] INTEGER PRIMARY KEY, 
@@ -190,6 +198,7 @@ class ItemPricingData(BaseModel):
     item_name: str
     principal: Optional[str] = ""
     brand: Optional[str] = ""
+    uom: Optional[str] = None  # Added
     transportation_cost: str
     original_item_code: Optional[str] = None
 
@@ -336,8 +345,9 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
     cost = float(gate_row[3] or 0)
     
     # 3. Get Item Pricing
+    # NOTE: We fetch UOM as well, but logic depends on Cost as requested.
     cursor_log.execute("""
-        SELECT [Item ID], [Transportation Cost] 
+        SELECT [Item ID], [UOM], [Transportation Cost] 
         FROM Item_Pricing 
         WHERE [Gate ID] = ?
     """, (gate_id,))
@@ -347,15 +357,21 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
     item_pricing = {}
     for row in pricing_rows:
         i_code = row[0]
-        t_cost = str(row[1]).strip()
+        # uom_val = str(row[1]).strip() if row[1] else "" # Not used for logic per request
+        t_cost = str(row[2]).strip() if row[2] else ""
         
-        if t_cost.lower() == 'ton':
+        # LOGIC UPDATE:
+        # If Cost is Blank -> 'ton' (Weight Pricing)
+        # If Cost is Number -> 'direct' (Direct Pricing)
+        
+        if not t_cost or t_cost.lower() == 'nan' or t_cost.lower() == 'none' or t_cost == '':
             item_pricing[i_code] = {'type': 'ton', 'value': None}
         else:
             try:
                 val = float(t_cost)
                 item_pricing[i_code] = {'type': 'direct', 'value': val}
             except:
+                # If parsed value is not a number but is not blank, treat as unknown
                 item_pricing[i_code] = {'type': 'unknown', 'value': None}
 
     if cost > 0:
@@ -382,30 +398,38 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
             }
             
             p_info = item_pricing.get(item_data['code'], {})
-            p_type = p_info.get('type', 'ton') 
+            p_type = p_info.get('type', 'ton') # Default to ton if not found
             p_val = p_info.get('value', 0.0)
             
             if p_type == 'direct':
+                # Direct Pricing Item
                 estimated_total_cost += (item_data['quantity'] * p_val)
                 item_data['standard_unit_cost'] = p_val
                 direct_items.append(item_data)
             else:
+                # Weight Pricing Item (Ton)
                 cost_item = item_data['weight'] * cost
                 estimated_total_cost += cost_item
                 ton_cost_total += cost_item
                 item_data['total_cost'] = cost_item
                 ton_items.append(item_data)
 
+        # Handle Manual Total Cost Override
         direct_unit_cost = 0.0
         if manual_total_cost is not None:
+            # If manual cost provided, subtract ton costs first
             remainder = manual_total_cost - ton_cost_total
             total_direct_qty = sum(item['quantity'] for item in direct_items)
+            
+            # Distribute remainder to direct items
             if total_direct_qty > 0:
                 direct_unit_cost = remainder / total_direct_qty
+            
             total_cost = manual_total_cost
         else:
             total_cost = estimated_total_cost
 
+        # Finalize Ton Items
         for item in ton_items:
             avg_unit_cost = item['total_cost'] / item['quantity'] if item['quantity'] > 0 else 0
             
@@ -416,6 +440,7 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
                 "total_cost": item['total_cost'] 
             })
         
+        # Finalize Direct Items
         for item in direct_items:
             final_unit_cost = direct_unit_cost if manual_total_cost is not None else item['standard_unit_cost']
             final_item_cost = item['quantity'] * final_unit_cost
@@ -428,6 +453,7 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
             })
 
     elif calc_type == "direct_pricing":
+        # Fallback for gates with no standard Ton Cost
         for row in pick_rows:
             item_code = row[0] if row[0] else ""
             pricing_info = item_pricing.get(item_code, {})
@@ -885,8 +911,9 @@ def export_item_pricing_excel(gate_id: int):
         from_loc = gate_row[1] or ""
         to_loc = gate_row[2] or ""
         
+        # UPDATED: Select UOM
         query = """
-            SELECT [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]
+            SELECT [Item ID], [Item Name], [Principal], [Brand], [UOM], [Transportation Cost]
             FROM Item_Pricing 
             WHERE [Gate ID] = ?
             ORDER BY [Item ID]
@@ -901,7 +928,8 @@ def export_item_pricing_excel(gate_id: int):
         ws['A1'] = f"Gate: {gate_name} ({from_loc} -> {to_loc})"
         ws['A1'].font = Font(bold=True, size=14)
         
-        headers = ['Item Code', 'Item Name', 'Principal', 'Brand', 'Transportation Cost']
+        # UPDATED: Headers include UOM
+        headers = ['Item Code', 'Item Name', 'Principal', 'Brand', 'UOM', 'Transportation Cost']
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
         header_font = Font(bold=True, color='FFFFFF')
         
@@ -963,7 +991,9 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
             item_name = str(row[1]).strip() if row[1] else ""
             principal = str(row[2]).strip() if row[2] else ""
             brand = str(row[3]).strip() if row[3] else ""
-            transport_cost = str(row[4]).strip() if row[4] else "Ton"
+            # UPDATED: UOM at index 4, Cost at index 5
+            uom = str(row[4]).strip() if len(row) > 4 and row[4] else ""
+            transport_cost = str(row[5]).strip() if len(row) > 5 and row[5] else ""
             
             excel_rows.append({
                 "row_num": row_idx,
@@ -971,6 +1001,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                 "name": item_name,
                 "principal": principal,
                 "brand": brand,
+                "uom": uom,
                 "cost": transport_cost
             })
             item_codes_to_check.add(item_code)
@@ -997,7 +1028,6 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
             cursor_dwbi.execute(query_dwbi, batch)
             rows = cursor_dwbi.fetchall()
             for r in rows:
-                # Store in dict: ItemCode -> { details }
                 dwbi_data[str(r[0]).strip()] = {
                     "name": str(r[1]).strip() if r[1] else "",
                     "principal": str(r[2]).strip() if r[2] else "", 
@@ -1059,11 +1089,12 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
             updated_items_set.add(item_code)
             
             if item_code in existing_items:
+                # UPDATED: Update UOM as well
                 cursor.execute("""
                     UPDATE Item_Pricing
-                    SET [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ?
+                    SET [Item Name] = ?, [Principal] = ?, [Brand] = ?, [UOM] = ?, [Transportation Cost] = ?
                     WHERE [Gate ID] = ? AND [Item ID] = ?
-                """, (row["name"], row["principal"], row["brand"], row["cost"], gate_id, item_code))
+                """, (row["name"], row["principal"], row["brand"], row["uom"], row["cost"], gate_id, item_code))
                 updates_made += 1
             else:
                 # UPDATED: Generate unique 8-digit ID for new items
@@ -1073,11 +1104,12 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                         used_ids.add(new_id)
                         break
                 
+                # UPDATED: Insert UOM
                 cursor.execute("""
                     INSERT INTO Item_Pricing 
-                    ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost])
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (new_id, gate_id, item_code, row["name"], row["principal"], row["brand"], row["cost"]))
+                    ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [UOM], [Transportation Cost])
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (new_id, gate_id, item_code, row["name"], row["principal"], row["brand"], row["uom"], row["cost"]))
                 inserts_made += 1
         
         # Logic to remove items that are in DB but NOT in the Excel file
@@ -1193,9 +1225,10 @@ def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
+        # UPDATED: Select UOM
         query = """
             SELECT [Pricing ID], [Item ID], [Item Name], [Principal], 
-                   [Brand], [Transportation Cost]
+                   [Brand], [UOM], [Transportation Cost]
             FROM Item_Pricing 
             WHERE [Gate ID] = ?
         """
@@ -1209,7 +1242,8 @@ def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
                 "item_name": row[2],
                 "principal": row[3],
                 "brand": row[4],
-                "transportation_cost": row[5]
+                "uom": row[5], # Added
+                "transportation_cost": row[6]
             })
         conn.close()
         return {"items": items, "gate_id": gate_id}
@@ -1227,16 +1261,17 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
         existing = cursor.fetchone()
 
         if existing:
+            # UPDATED: Update UOM
             update_query = """
                 UPDATE Item_Pricing
                 SET [Item ID] = ?, [Item Name] = ?, [Principal] = ?,
-                    [Brand] = ?, [Transportation Cost] = ?
+                    [Brand] = ?, [UOM] = ?, [Transportation Cost] = ?
                 WHERE [Pricing ID] = ?
             """
             cursor.execute(update_query, (
                 item_data.item_code, item_data.item_name,
                 item_data.principal, item_data.brand,
-                item_data.transportation_cost,
+                item_data.uom, item_data.transportation_cost,
                 existing[0]
             ))
         else:
@@ -1247,15 +1282,16 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
                 if not cursor.fetchone():
                     break
 
+            # UPDATED: Insert UOM
             insert_query = """
                 INSERT INTO Item_Pricing 
                 ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal],
-                 [Brand], [Transportation Cost])
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                 [Brand], [UOM], [Transportation Cost])
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """
             cursor.execute(insert_query, (
                 new_id, item_data.gate_id, item_data.item_code, item_data.item_name,
-                item_data.principal, item_data.brand, item_data.transportation_cost
+                item_data.principal, item_data.brand, item_data.uom, item_data.transportation_cost
             ))
 
         conn.commit()

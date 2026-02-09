@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, Lock, Settings, List as ListIcon, Search } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -110,12 +110,13 @@ const PricingApp = () => {
   const [selectedGateForPricing, setSelectedGateForPricing] = useState('');
   const [itemPricingData, setItemPricingData] = useState([]);
   
-  // --- NEW: Filter State for Items ---
+  // Filter State for Items
   const [itemFilters, setItemFilters] = useState({
     item_code: '',
     item_name: '',
     principal: '',
     brand: '',
+    uom: '',
     transportation_cost: ''
   });
 
@@ -157,7 +158,6 @@ const PricingApp = () => {
   };
 
   // --- Auth Helpers ---
-
   const handleLogin = (data) => {
     setToken(data.access_token);
     setUserRole(data.role);
@@ -194,13 +194,12 @@ const PricingApp = () => {
   };
 
   // --- General Helpers ---
-
   const getErrorMessage = (error) => {
     if (!error?.detail) return 'An unknown error occurred';
     if (Array.isArray(error.detail)) {
         return error.detail.map(e => {
             if (typeof e === 'string') return e;
-            return `${e.loc.slice(-1)}: ${e.msg}`;
+            return `${e.loc ? e.loc.slice(-1) + ': ' : ''}${e.msg}`;
         }).join('\n');
     }
     if (typeof error.detail === 'object') {
@@ -215,7 +214,6 @@ const PricingApp = () => {
   };
 
   // --- Data Loading Functions ---
-
   const loadPickIds = async () => {
     try {
       const response = await authFetch(`${API_URL}/pick-ids`);
@@ -272,12 +270,12 @@ const PricingApp = () => {
   const loadItemPricing = async (gateId) => {
     if (!gateId) return;
     try {
-      // Clear filters when loading new gate data
       setItemFilters({
         item_code: '',
         item_name: '',
         principal: '',
         brand: '',
+        uom: '',
         transportation_cost: ''
       });
       
@@ -520,7 +518,13 @@ const PricingApp = () => {
         await loadItemPricing(selectedGateForPricing);
       } else {
         const error = await response.json();
-        showNotification(getErrorMessage(error), 'error');
+        // Handle array of error messages from strict validation
+        if(Array.isArray(error.detail)) {
+            const msg = error.detail.join('\n');
+            alert(`Import Errors:\n${msg}`); // Alert is better for long error lists
+        } else {
+            showNotification(getErrorMessage(error), 'error');
+        }
       }
     } catch (error) {
       showNotification(`Error: ${error.message}`, 'error');
@@ -820,7 +824,6 @@ const PricingApp = () => {
     });
   };
 
-
   useEffect(() => {
     if (token) {
         loadPickIds();
@@ -965,7 +968,8 @@ const PricingApp = () => {
       item_name: '',
       principal: '',
       brand: '',
-      transportation_cost: 'Ton'
+      uom: '', 
+      transportation_cost: ''
     });
 
     const [searchResults, setSearchResults] = useState([]);
@@ -1107,14 +1111,30 @@ const PricingApp = () => {
                 readOnly
               />
             </div>
-            <div className="col-span-2">
+            
+            {/* Added UOM Field */}
+            <div>
+              <label className="block text-sm font-semibold mb-1">UOM</label>
+              <select
+                value={formData.uom ?? ''}
+                onChange={(e) => setFormData({...formData, uom: e.target.value})}
+                className="w-full p-2 border rounded"
+              >
+                  <option value="">-- Select --</option>
+                  {refUOMs.map((u, i) => (
+                      <option key={i} value={u}>{u}</option>
+                  ))}
+              </select>
+            </div>
+
+            <div>
               <label className="block text-sm font-semibold mb-1">Transportation Cost</label>
               <input
                 type="text"
                 value={formData.transportation_cost ?? ''}
                 onChange={(e) => setFormData({...formData, transportation_cost: e.target.value})}
                 className="w-full p-2 border rounded"
-                placeholder="Ton or numeric value"
+                placeholder="Transport cost"
               />
             </div>
           </div>
@@ -1415,7 +1435,7 @@ const PricingApp = () => {
       );
   }
 
-  // --- NEW: Reference Management View ---
+  // --- Reference Management View ---
   if (currentPage === 'references' && ['admin', 'account'].includes(userRole)) {
       return (
         <div className="min-h-screen bg-gray-50 p-6">
@@ -1707,9 +1727,10 @@ const PricingApp = () => {
       const matchName = (item.item_name || '').toLowerCase().includes(itemFilters.item_name.toLowerCase());
       const matchPrincipal = (item.principal || '').toLowerCase().includes(itemFilters.principal.toLowerCase());
       const matchBrand = (item.brand || '').toLowerCase().includes(itemFilters.brand.toLowerCase());
+      const matchUom = (item.uom || '').toLowerCase().includes(itemFilters.uom.toLowerCase());
       const matchCost = (String(item.transportation_cost) || '').toLowerCase().includes(itemFilters.transportation_cost.toLowerCase());
       
-      return matchCode && matchName && matchPrincipal && matchBrand && matchCost;
+      return matchCode && matchName && matchPrincipal && matchBrand && matchUom && matchCost;
     });
 
     return (
@@ -1823,6 +1844,17 @@ const PricingApp = () => {
                             onChange={(e) => setItemFilters({...itemFilters, brand: e.target.value})}
                         />
                       </th>
+                      {/* Added UOM Filter */}
+                      <th className="border p-2 text-left">
+                        <div>UOM</div>
+                        <input 
+                            type="text" 
+                            placeholder="Filter..." 
+                            className="w-full mt-1 p-1 border rounded text-xs font-normal"
+                            value={itemFilters.uom}
+                            onChange={(e) => setItemFilters({...itemFilters, uom: e.target.value})}
+                        />
+                      </th>
                       <th className="border p-2 text-left">
                         <div>Transport Cost</div>
                         <input 
@@ -1843,6 +1875,7 @@ const PricingApp = () => {
                         <td className="border p-2">{item.item_name}</td>
                         <td className="border p-2">{item.principal}</td>
                         <td className="border p-2">{item.brand}</td>
+                        <td className="border p-2">{item.uom || '-'}</td>
                         <td className="border p-2">{formatNumber(item.transportation_cost)}</td>
                         <td className="border p-2">
                           {canEdit ? (
@@ -1874,7 +1907,7 @@ const PricingApp = () => {
                     ))}
                     {filteredItems.length === 0 && (
                         <tr>
-                            <td colSpan="6" className="text-center p-4 text-gray-500 italic">
+                            <td colSpan="7" className="text-center p-4 text-gray-500 italic">
                                 No items found matching your filters.
                             </td>
                         </tr>
