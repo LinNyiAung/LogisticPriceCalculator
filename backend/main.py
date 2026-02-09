@@ -3,6 +3,7 @@ import pyodbc
 import sqlite3
 import json
 import datetime
+import random  # Added for ID generation
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -932,7 +933,7 @@ def export_item_pricing_excel(gate_id: int):
         logger.error(f"Error exporting Excel: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error exporting: {str(e)}")
 
-# --- UPDATED: Import with Strict DWBI Validation ---
+# --- UPDATED: Import with Strict DWBI Validation & 8-Digit ID Generation ---
 
 @app.post("/account/item-pricing/import/{gate_id}")
 async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), user: dict = Depends(get_account_user)):
@@ -1036,6 +1037,10 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         cursor.execute("SELECT [Item ID] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
         existing_items = {row[0] for row in cursor.fetchall()}
         
+        # Pre-fetch all Pricing IDs to ensure uniqueness when generating new ones
+        cursor.execute("SELECT [Pricing ID] FROM Item_Pricing")
+        used_ids = {row[0] for row in cursor.fetchall()}
+        
         updated_items_set = set()
         updates_made = 0
         inserts_made = 0
@@ -1052,11 +1057,18 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                 """, (row["name"], row["principal"], row["brand"], row["cost"], gate_id, item_code))
                 updates_made += 1
             else:
+                # UPDATED: Generate unique 8-digit ID for new items
+                while True:
+                    new_id = random.randint(10000000, 99999999)
+                    if new_id not in used_ids:
+                        used_ids.add(new_id)
+                        break
+                
                 cursor.execute("""
                     INSERT INTO Item_Pricing 
-                    ([Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost])
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (gate_id, item_code, row["name"], row["principal"], row["brand"], row["cost"]))
+                    ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost])
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (new_id, gate_id, item_code, row["name"], row["principal"], row["brand"], row["cost"]))
                 inserts_made += 1
         
         # Logic to remove items that are in DB but NOT in the Excel file
@@ -1219,14 +1231,21 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
                 existing[0]
             ))
         else:
+            # UPDATED: Generate 8-digit unique ID
+            while True:
+                new_id = random.randint(10000000, 99999999)
+                cursor.execute("SELECT 1 FROM Item_Pricing WHERE [Pricing ID] = ?", (new_id,))
+                if not cursor.fetchone():
+                    break
+
             insert_query = """
                 INSERT INTO Item_Pricing 
-                ([Gate ID], [Item ID], [Item Name], [Principal],
+                ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal],
                  [Brand], [Transportation Cost])
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """
             cursor.execute(insert_query, (
-                item_data.gate_id, item_data.item_code, item_data.item_name,
+                new_id, item_data.gate_id, item_data.item_code, item_data.item_name,
                 item_data.principal, item_data.brand, item_data.transportation_cost
             ))
 

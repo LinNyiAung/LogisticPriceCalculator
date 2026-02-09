@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import random
 
 def clean_sql_string(value):
     """Escapes single quotes and handles missing values for strings."""
@@ -47,7 +48,8 @@ def generate_sql():
     sql_statements.append("CREATE TABLE Item_Pricing ([Pricing ID] INTEGER PRIMARY KEY, [Gate ID] INT, [Item ID] VARCHAR(50), [Item Name] VARCHAR(255), [Principal] VARCHAR(255), [Brand] VARCHAR(255), [Transportation Cost] VARCHAR(50));")
     sql_statements.append("")
 
-    pricing_id_counter = 1
+    # TRACKER: Set to keep track of generated IDs to ensure uniqueness
+    used_pricing_ids = set()
 
     # 2. Iterate through each gate to generate SQL
     for index, row in gate_df.iterrows():
@@ -72,19 +74,25 @@ def generate_sql():
         val_unit = clean_sql_number(unit)
         
         # INSERT statement for Gate table
-        # UPDATED: Changed [Gate Price] to [Cost]
         sql_statements.append(f"INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES ({val_gate_id}, {val_gate_name}, {val_from}, {val_to}, {val_uom}, {val_unit}, {val_cost});")
         
         # 3. Process the corresponding Item Master file if it exists
         if pd.notna(file_name):
             if os.path.exists(file_name):
                 try:
-                    # FIX: Pass dtype={'Item Code': str} to keep leading zeros (e.g. 0201...)
+                    # FIX: Pass dtype={'Item Code': str} to keep leading zeros
                     item_df = read_csv_robust(file_name, dtype={'Item Code': str})
                     
                     for _, item_row in item_df.iterrows():
-                        # Map columns
-                        val_pricing_id = str(pricing_id_counter)
+                        # GENERATE 8-DIGIT ID
+                        while True:
+                            # Generate random 8-digit number (10000000 to 99999999)
+                            new_id = random.randint(10000000, 99999999)
+                            if new_id not in used_pricing_ids:
+                                used_pricing_ids.add(new_id)
+                                val_pricing_id = str(new_id)
+                                break
+                        
                         val_gate_fk = str(gate_id)
                         
                         val_item_id = clean_sql_string(item_row.get('Item Code'))
@@ -95,7 +103,6 @@ def generate_sql():
                         
                         sql_statements.append(f"INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES ({val_pricing_id}, {val_gate_fk}, {val_item_id}, {val_item_name}, {val_principal}, {val_brand}, {val_trans_cost});")
                         
-                        pricing_id_counter += 1
                 except Exception as e:
                     print(f"Error processing {file_name}: {e}")
                     sql_statements.append(f"-- Error processing file {file_name}: {e}")
