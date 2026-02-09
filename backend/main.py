@@ -3,7 +3,7 @@ import pyodbc
 import sqlite3
 import json
 import datetime
-import random  # Added for ID generation
+import random
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -94,9 +94,10 @@ def startup_db():
         """)
 
         # Calculation History Table
+        # UPDATED: Removed AUTOINCREMENT to allow manual 8-digit ID insertion
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Calculation_History (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [id] INTEGER PRIMARY KEY, 
                 [created_at] TEXT,
                 [gate_name] TEXT,
                 [from_loc] TEXT,
@@ -670,6 +671,7 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
         created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         if data.id:
+            # Update Existing Record
             cursor.execute("SELECT id FROM Calculation_History WHERE id = ?", (data.id,))
             if not cursor.fetchone():
                 conn.close()
@@ -686,13 +688,20 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
             ))
             message = "Calculation updated successfully"
         else:
+            # Insert New Record with Unique 8-digit ID
+            while True:
+                new_id = random.randint(10000000, 99999999)
+                cursor.execute("SELECT 1 FROM Calculation_History WHERE id = ?", (new_id,))
+                if not cursor.fetchone():
+                    break
+
             cursor.execute("""
                 INSERT INTO Calculation_History 
-                ([created_at], [gate_name], [from_loc], [to_loc], 
+                ([id], [created_at], [gate_name], [from_loc], [to_loc], 
                  [pick_ids], [manual_total_cost], [additional_charges], [final_total_cost])
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                created_at, data.gate_name, data.from_loc, data.to_loc,
+                new_id, created_at, data.gate_name, data.from_loc, data.to_loc,
                 pick_ids_json, data.manual_total_cost, data.additional_charges, data.final_total_cost
             ))
             message = "Calculation saved successfully"
@@ -711,7 +720,7 @@ def get_history(user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Calculation_History ORDER BY id DESC")
+        cursor.execute("SELECT * FROM Calculation_History ORDER BY created_at DESC") # Ordered by created_at since ID is random now
         rows = cursor.fetchall()
         history = []
         for row in rows:
