@@ -110,6 +110,15 @@ const PricingApp = () => {
   const [selectedGateForPricing, setSelectedGateForPricing] = useState('');
   const [itemPricingData, setItemPricingData] = useState([]);
   
+  // --- NEW: Filter State for Items ---
+  const [itemFilters, setItemFilters] = useState({
+    item_code: '',
+    item_name: '',
+    principal: '',
+    brand: '',
+    transportation_cost: ''
+  });
+
   const [editingGate, setEditingGate] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
   const [showAddGateModal, setShowAddGateModal] = useState(false);
@@ -263,6 +272,15 @@ const PricingApp = () => {
   const loadItemPricing = async (gateId) => {
     if (!gateId) return;
     try {
+      // Clear filters when loading new gate data
+      setItemFilters({
+        item_code: '',
+        item_name: '',
+        principal: '',
+        brand: '',
+        transportation_cost: ''
+      });
+      
       const response = await authFetch(`${API_URL}/account/item-pricing/${gateId}`);
       if (response.ok) {
         const data = await response.json();
@@ -1682,6 +1700,17 @@ const PricingApp = () => {
   if (currentPage === 'items') {
     const canEdit = ['account', 'admin'].includes(userRole);
     const canDelete = userRole === 'admin'; 
+    
+    // Filter Logic
+    const filteredItems = itemPricingData.filter(item => {
+      const matchCode = (item.item_code || '').toLowerCase().includes(itemFilters.item_code.toLowerCase());
+      const matchName = (item.item_name || '').toLowerCase().includes(itemFilters.item_name.toLowerCase());
+      const matchPrincipal = (item.principal || '').toLowerCase().includes(itemFilters.principal.toLowerCase());
+      const matchBrand = (item.brand || '').toLowerCase().includes(itemFilters.brand.toLowerCase());
+      const matchCost = (String(item.transportation_cost) || '').toLowerCase().includes(itemFilters.transportation_cost.toLowerCase());
+      
+      return matchCode && matchName && matchPrincipal && matchBrand && matchCost;
+    });
 
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -1754,16 +1783,61 @@ const PricingApp = () => {
                 <table className="w-full border-collapse border text-sm">
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="border p-2 text-left">Item Code</th>
-                      <th className="border p-2 text-left">Item Name</th>
-                      <th className="border p-2 text-left">Principal</th>
-                      <th className="border p-2 text-left">Brand</th>
-                      <th className="border p-2 text-left">Transport Cost</th>
+                      <th className="border p-2 text-left">
+                        <div>Item Code</div>
+                        <input 
+                            type="text" 
+                            placeholder="Filter..." 
+                            className="w-full mt-1 p-1 border rounded text-xs font-normal"
+                            value={itemFilters.item_code}
+                            onChange={(e) => setItemFilters({...itemFilters, item_code: e.target.value})}
+                        />
+                      </th>
+                      <th className="border p-2 text-left">
+                        <div>Item Name</div>
+                        <input 
+                            type="text" 
+                            placeholder="Filter..." 
+                            className="w-full mt-1 p-1 border rounded text-xs font-normal"
+                            value={itemFilters.item_name}
+                            onChange={(e) => setItemFilters({...itemFilters, item_name: e.target.value})}
+                        />
+                      </th>
+                      <th className="border p-2 text-left">
+                        <div>Principal</div>
+                        <input 
+                            type="text" 
+                            placeholder="Filter..." 
+                            className="w-full mt-1 p-1 border rounded text-xs font-normal"
+                            value={itemFilters.principal}
+                            onChange={(e) => setItemFilters({...itemFilters, principal: e.target.value})}
+                        />
+                      </th>
+                      <th className="border p-2 text-left">
+                        <div>Brand</div>
+                        <input 
+                            type="text" 
+                            placeholder="Filter..." 
+                            className="w-full mt-1 p-1 border rounded text-xs font-normal"
+                            value={itemFilters.brand}
+                            onChange={(e) => setItemFilters({...itemFilters, brand: e.target.value})}
+                        />
+                      </th>
+                      <th className="border p-2 text-left">
+                        <div>Transport Cost</div>
+                        <input 
+                            type="text" 
+                            placeholder="Filter..." 
+                            className="w-full mt-1 p-1 border rounded text-xs font-normal"
+                            value={itemFilters.transportation_cost}
+                            onChange={(e) => setItemFilters({...itemFilters, transportation_cost: e.target.value})}
+                        />
+                      </th>
                       <th className="border p-2 text-left">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {itemPricingData.map((item, index) => (
+                    {filteredItems.map((item, index) => (
                       <tr key={index}>
                         <td className="border p-2">{item.item_code}</td>
                         <td className="border p-2">{item.item_name}</td>
@@ -1798,6 +1872,13 @@ const PricingApp = () => {
                         </td>
                       </tr>
                     ))}
+                    {filteredItems.length === 0 && (
+                        <tr>
+                            <td colSpan="6" className="text-center p-4 text-gray-500 italic">
+                                No items found matching your filters.
+                            </td>
+                        </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
