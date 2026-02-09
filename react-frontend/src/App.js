@@ -969,7 +969,7 @@ const PricingApp = () => {
       principal: '',
       brand: '',
       uom: '', 
-      transportation_cost: ''
+      transportation_cost: '' // UPDATED: Default to empty string instead of 'Ton'
     });
 
     const [searchResults, setSearchResults] = useState([]);
@@ -1127,14 +1127,16 @@ const PricingApp = () => {
               </select>
             </div>
 
+            {/* UPDATED: Numeric Input for Transportation Cost */}
             <div>
               <label className="block text-sm font-semibold mb-1">Transportation Cost</label>
               <input
-                type="text"
+                type="number" // Enforces numeric input
+                step="any"    // Allows decimals
                 value={formData.transportation_cost ?? ''}
                 onChange={(e) => setFormData({...formData, transportation_cost: e.target.value})}
                 className="w-full p-2 border rounded"
-                placeholder="Transport cost"
+                placeholder="Enter cost"
               />
             </div>
           </div>
