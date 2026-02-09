@@ -1510,6 +1510,7 @@ const PricingApp = () => {
               <table className="w-full border-collapse border">
                 <thead className="bg-gray-100">
                   <tr>
+                    <th className="border p-3 text-left">ID</th> {/* Added ID Header */}
                     <th className="border p-3 text-left">Date</th>
                     <th className="border p-3 text-left">Route</th>
                     <th className="border p-3 text-left">Pick IDs</th>
@@ -1519,10 +1520,11 @@ const PricingApp = () => {
                 </thead>
                 <tbody>
                   {historyData.length === 0 ? (
-                    <tr><td colSpan="5" className="text-center p-4 text-gray-500">No saved calculations found.</td></tr>
+                    <tr><td colSpan="6" className="text-center p-4 text-gray-500">No saved calculations found.</td></tr>
                   ) : (
                     historyData.map((record) => (
                       <tr key={record.id} className="hover:bg-gray-50">
+                        <td className="border p-3 text-sm text-gray-600">{record.id}</td> {/* Added ID Cell */}
                         <td className="border p-3 text-sm text-gray-600">{record.created_at}</td>
                         <td className="border p-3">
                           <span className="font-bold text-gray-700">{record.gate_name}</span> <br/>

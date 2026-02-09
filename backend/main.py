@@ -786,9 +786,10 @@ def download_history_excel(record_id: int):
         ws = wb.active
         ws.title = "Cost Details"
 
+        # UPDATED HEADERS
         headers = [
             "No", "Claim Date", "Area", "Item", "Quantity", 
-            "Price", "Total Amount", "Ton", "Gate", "Branch"
+            "Price", "Total Amount", "Ton", "Gate", "Branch", "Calculation ID"
         ]
         
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
@@ -828,6 +829,9 @@ def download_history_excel(record_id: int):
 
             ws.cell(row=row_num, column=9, value=record['gate_name']).border = border
             ws.cell(row=row_num, column=10, value=record['to_loc']).border = border
+            
+            # UPDATED: Add ID in column 11
+            ws.cell(row=row_num, column=11, value=record['id']).border = border
 
         for col in ws.columns:
             max_length = 0
