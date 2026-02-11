@@ -150,6 +150,11 @@ const PricingApp = () => {
   const [logsData, setLogsData] = useState([]);
   const [currentLogGateName, setCurrentLogGateName] = useState('');
 
+  // Item Log Modal State
+  const [showItemLogModal, setShowItemLogModal] = useState(false);
+  const [itemLogsData, setItemLogsData] = useState([]);
+  const [currentLogItemName, setCurrentLogItemName] = useState('');
+
   // --- Formatting Helper ---
   const formatNumber = (num) => {
     if (num === null || num === undefined || num === '') return '-';
@@ -380,6 +385,22 @@ const PricingApp = () => {
       } catch (error) {
           showNotification(`Error: ${error.message}`, 'error');
       }
+  };
+
+  const fetchItemLogs = async (item) => {
+    try {
+        const response = await authFetch(`${API_URL}/account/items/${item.pricing_id}/logs`);
+        if (response.ok) {
+            const data = await response.json();
+            setItemLogsData(data);
+            setCurrentLogItemName(item.item_name);
+            setShowItemLogModal(true);
+        } else {
+            showNotification('Failed to fetch logs', 'error');
+        }
+    } catch (error) {
+        showNotification(`Error: ${error.message}`, 'error');
+    }
   };
 
   // --- Action Functions ---
@@ -882,6 +903,59 @@ const PricingApp = () => {
             <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-2xl font-bold">Change Log: {gateName}</h2>
+                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+                        <X size={24} />
+                    </button>
+                </div>
+                <div className="overflow-y-auto flex-1 border rounded">
+                    <table className="w-full border-collapse">
+                        <thead className="bg-gray-100 sticky top-0">
+                            <tr>
+                                <th className="border p-3 text-left">Date</th>
+                                <th className="border p-3 text-left">User</th>
+                                <th className="border p-3 text-left">Field</th>
+                                <th className="border p-3 text-left">Old Value</th>
+                                <th className="border p-3 text-left">New Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {logs.length === 0 ? (
+                                <tr>
+                                    <td colSpan="5" className="p-4 text-center text-gray-500">No changes recorded.</td>
+                                </tr>
+                            ) : (
+                                logs.map((log) => (
+                                    <tr key={log.id} className="hover:bg-gray-50 text-sm">
+                                        <td className="border p-3 whitespace-nowrap">{log.change_date}</td>
+                                        <td className="border p-3">{log.changed_by}</td>
+                                        <td className="border p-3 font-semibold">{log.field_name}</td>
+                                        <td className="border p-3 text-red-600 bg-red-50">{log.old_value || '(empty)'}</td>
+                                        <td className="border p-3 text-green-600 bg-green-50">{log.new_value || '(empty)'}</td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="mt-4 flex justify-end">
+                    <button
+                        onClick={onClose}
+                        className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
+  const ItemLogModal = ({ logs, itemName, onClose }) => {
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-bold">Change Log: {itemName}</h2>
                     <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
                         <X size={24} />
                     </button>
@@ -1970,30 +2044,37 @@ const PricingApp = () => {
                         <td className="border p-2">{item.uom || '-'}</td>
                         <td className="border p-2">{formatNumber(item.transportation_cost)}</td>
                         <td className="border p-2">
-                          {canEdit ? (
-                            <div className="flex gap-2">
+                          <div className="flex gap-2">
                                 <button
-                                    onClick={() => {
-                                        setOriginalItemCode(item.item_code);
-                                        setEditingItem(item);
-                                        setShowAddItemModal(true);
-                                    }}
-                                    className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                    onClick={() => fetchItemLogs(item)}
+                                    className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                                    title="View Change Logs"
                                 >
-                                    <Edit2 size={14} />
+                                    <Clock size={14} />
                                 </button>
-                                {canDelete && (
-                                    <button
-                                        onClick={() => deleteItem(item.item_code)}
-                                        className="p-1 bg-red-500 text-white rounded hover:bg-red-600"
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
+                                {canEdit && (
+                                    <>
+                                        <button
+                                            onClick={() => {
+                                                setOriginalItemCode(item.item_code);
+                                                setEditingItem(item);
+                                                setShowAddItemModal(true);
+                                            }}
+                                            className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                        >
+                                            <Edit2 size={14} />
+                                        </button>
+                                        {canDelete && (
+                                            <button
+                                                onClick={() => deleteItem(item.item_code)}
+                                                className="p-1 bg-red-500 text-white rounded hover:bg-red-600"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
+                                    </>
                                 )}
-                            </div>
-                          ) : (
-                             <span className="text-gray-400 text-xs">Read Only</span>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -2019,6 +2100,13 @@ const PricingApp = () => {
                 setOriginalItemCode(null);
               }}
             />
+          )}
+          {showItemLogModal && (
+              <ItemLogModal 
+                logs={itemLogsData}
+                itemName={currentLogItemName}
+                onClose={() => setShowItemLogModal(false)}
+              />
           )}
           {confirmDialog && (
             <ConfirmDialog

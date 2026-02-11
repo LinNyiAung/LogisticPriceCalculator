@@ -141,7 +141,7 @@ def startup_db():
             )
         """)
 
-        # --- NEW: Gate Change Log Table ---
+        # --- Gate Change Log Table ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Gate_Change_Log (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -152,6 +152,20 @@ def startup_db():
                 [old_value] TEXT,
                 [new_value] TEXT,
                 FOREIGN KEY([gate_id]) REFERENCES Gate([Gate ID])
+            )
+        """)
+
+        # --- NEW: Item Change Log Table ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Item_Change_Log (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [pricing_id] INTEGER,
+                [changed_by] TEXT,
+                [change_date] TEXT,
+                [field_name] TEXT,
+                [old_value] TEXT,
+                [new_value] TEXT,
+                FOREIGN KEY([pricing_id]) REFERENCES Item_Pricing([Pricing ID])
             )
         """)
         
@@ -208,6 +222,15 @@ class GateData(BaseModel):
 class GateLogItem(BaseModel):
     id: int
     gate_id: int
+    changed_by: str
+    change_date: str
+    field_name: str
+    old_value: Optional[str]
+    new_value: Optional[str]
+
+class ItemLogItem(BaseModel):
+    id: int
+    pricing_id: int
     changed_by: str
     change_date: str
     field_name: str
@@ -1299,11 +1322,36 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
         conn = get_logistic_connection()
         cursor = conn.cursor()
 
-        query_check = "SELECT [Pricing ID] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?"
+        query_check = "SELECT [Pricing ID], [UOM], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?"
         cursor.execute(query_check, (item_data.gate_id, item_data.original_item_code or item_data.item_code))
         existing = cursor.fetchone()
 
         if existing:
+            pricing_id, old_uom, old_cost = existing
+            
+            # Change Log Logic
+            old_uom = old_uom if old_uom else None
+            new_uom = item_data.uom if item_data.uom else None
+            
+            old_cost_str = str(old_cost).strip() if old_cost else ""
+            new_cost_str = str(item_data.transportation_cost).strip() if item_data.transportation_cost else ""
+            
+            change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            username = user['username']
+            changes = []
+            
+            if old_uom != new_uom:
+                 changes.append((pricing_id, username, change_date, 'UOM', str(old_uom or ''), str(new_uom or '')))
+            
+            if old_cost_str != new_cost_str:
+                 changes.append((pricing_id, username, change_date, 'Transportation Cost', old_cost_str, new_cost_str))
+
+            if changes:
+                 cursor.executemany("""
+                    INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                 """, changes)
+
             update_query = """
                 UPDATE Item_Pricing
                 SET [Item ID] = ?, [Item Name] = ?, [Principal] = ?,
@@ -1314,7 +1362,7 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
                 item_data.item_code, item_data.item_name,
                 item_data.principal, item_data.brand,
                 item_data.uom, item_data.transportation_cost,
-                existing[0]
+                pricing_id
             ))
         else:
             while True:
@@ -1340,11 +1388,48 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
         logger.error(f"Error saving item: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error saving item: {str(e)}")
 
+@app.get("/account/items/{pricing_id}/logs", response_model=List[ItemLogItem])
+def get_item_logs(pricing_id: int, user: dict = Depends(get_current_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, pricing_id, changed_by, change_date, field_name, old_value, new_value
+            FROM Item_Change_Log
+            WHERE pricing_id = ?
+            ORDER BY change_date DESC
+        """, (pricing_id,))
+        rows = cursor.fetchall()
+        logs = []
+        for row in rows:
+            logs.append({
+                "id": row[0],
+                "pricing_id": row[1],
+                "changed_by": row[2],
+                "change_date": row[3],
+                "field_name": row[4],
+                "old_value": row[5],
+                "new_value": row[6]
+            })
+        conn.close()
+        return logs
+    except Exception as e:
+        logger.error(f"Error fetching logs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching logs: {str(e)}")
+
 @app.delete("/account/item-pricing/{gate_id}/{item_code}")
 def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(get_admin_user)): 
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
+        
+        # Get Pricing ID for log deletion (optional cleanup)
+        cursor.execute("SELECT [Pricing ID] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
+        row = cursor.fetchone()
+        if row:
+             pricing_id = row[0]
+             cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (pricing_id,))
+
         cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
         if cursor.rowcount == 0:
             conn.close()
