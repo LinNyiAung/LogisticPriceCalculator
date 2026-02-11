@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -144,6 +144,11 @@ const PricingApp = () => {
   const [refLocations, setRefLocations] = useState([]);
   const [refUOMs, setRefUOMs] = useState([]);
   const [newRefValue, setNewRefValue] = useState('');
+
+  // Log Modal State
+  const [showLogModal, setShowLogModal] = useState(false);
+  const [logsData, setLogsData] = useState([]);
+  const [currentLogGateName, setCurrentLogGateName] = useState('');
 
   // --- Formatting Helper ---
   const formatNumber = (num) => {
@@ -360,6 +365,22 @@ const PricingApp = () => {
            showNotification(`Error: ${error.message}`, 'error');
       }
   }
+
+  const fetchGateLogs = async (gate) => {
+      try {
+          const response = await authFetch(`${API_URL}/account/gates/${gate.gate_id}/logs`);
+          if(response.ok) {
+              const data = await response.json();
+              setLogsData(data);
+              setCurrentLogGateName(gate.gate_name);
+              setShowLogModal(true);
+          } else {
+              showNotification('Failed to fetch logs', 'error');
+          }
+      } catch (error) {
+          showNotification(`Error: ${error.message}`, 'error');
+      }
+  };
 
   // --- Action Functions ---
 
@@ -855,6 +876,59 @@ const PricingApp = () => {
 
   // --- Sub-Components ---
 
+  const GateLogModal = ({ logs, gateName, onClose }) => {
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-bold">Change Log: {gateName}</h2>
+                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+                        <X size={24} />
+                    </button>
+                </div>
+                <div className="overflow-y-auto flex-1 border rounded">
+                    <table className="w-full border-collapse">
+                        <thead className="bg-gray-100 sticky top-0">
+                            <tr>
+                                <th className="border p-3 text-left">Date</th>
+                                <th className="border p-3 text-left">User</th>
+                                <th className="border p-3 text-left">Field</th>
+                                <th className="border p-3 text-left">Old Value</th>
+                                <th className="border p-3 text-left">New Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {logs.length === 0 ? (
+                                <tr>
+                                    <td colSpan="5" className="p-4 text-center text-gray-500">No changes recorded.</td>
+                                </tr>
+                            ) : (
+                                logs.map((log) => (
+                                    <tr key={log.id} className="hover:bg-gray-50 text-sm">
+                                        <td className="border p-3 whitespace-nowrap">{log.change_date}</td>
+                                        <td className="border p-3">{log.changed_by}</td>
+                                        <td className="border p-3 font-semibold">{log.field_name}</td>
+                                        <td className="border p-3 text-red-600 bg-red-50">{log.old_value || '(empty)'}</td>
+                                        <td className="border p-3 text-green-600 bg-green-50">{log.new_value || '(empty)'}</td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="mt-4 flex justify-end">
+                    <button
+                        onClick={onClose}
+                        className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
   const GateModal = ({ gate, onSave, onClose }) => {
     const [formData, setFormData] = useState(gate || {
       gate_name: '',
@@ -969,7 +1043,7 @@ const PricingApp = () => {
       principal: '',
       brand: '',
       uom: '', 
-      transportation_cost: '' // UPDATED: Default to empty string instead of 'Ton'
+      transportation_cost: '' 
     });
 
     const [searchResults, setSearchResults] = useState([]);
@@ -1112,7 +1186,6 @@ const PricingApp = () => {
               />
             </div>
             
-            {/* Added UOM Field */}
             <div>
               <label className="block text-sm font-semibold mb-1">UOM</label>
               <select
@@ -1127,12 +1200,11 @@ const PricingApp = () => {
               </select>
             </div>
 
-            {/* UPDATED: Numeric Input for Transportation Cost */}
             <div>
               <label className="block text-sm font-semibold mb-1">Transportation Cost</label>
               <input
-                type="number" // Enforces numeric input
-                step="any"    // Allows decimals
+                type="number" 
+                step="any"    
                 value={formData.transportation_cost ?? ''}
                 onChange={(e) => setFormData({...formData, transportation_cost: e.target.value})}
                 className="w-full p-2 border rounded"
@@ -1651,7 +1723,7 @@ const PricingApp = () => {
                     <th className="border p-3 text-left">UOM</th>
                     <th className="border p-3 text-left">Unit</th>
                     <th className="border p-3 text-left">Cost</th>
-                    <th className="border p-3 text-left">Actions</th>
+                    <th className="border p-3 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1663,31 +1735,42 @@ const PricingApp = () => {
                       <td className="border p-3">{gate.uom || '-'}</td>
                       <td className="border p-3">{gate.unit || '-'}</td>
                       <td className="border p-3">{formatNumber(gate.cost)}</td>
-                      <td className="border p-3">
-                        {canEdit ? (
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => {
-                                    setOriginalGateName(gate.gate_name);
-                                    setEditingGate(gate);
-                                    setShowAddGateModal(true);
-                                    }}
-                                    className="p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                                >
-                                    <Edit2 size={16} />
-                                </button>
-                                {canDelete && (
+                      <td className="border p-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                            {/* UPDATED: Add History Button */}
+                            <button
+                                onClick={() => fetchGateLogs(gate)}
+                                className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                                title="View Change Logs"
+                            >
+                                <Clock size={16} />
+                            </button>
+
+                            {canEdit ? (
+                                <>
                                     <button
-                                        onClick={() => deleteGate(gate.gate_id)}
-                                        className="p-2 bg-red-500 text-white rounded hover:bg-red-600"
+                                        onClick={() => {
+                                        setOriginalGateName(gate.gate_name);
+                                        setEditingGate(gate);
+                                        setShowAddGateModal(true);
+                                        }}
+                                        className="p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
                                     >
-                                        <Trash2 size={16} />
+                                        <Edit2 size={16} />
                                     </button>
-                                )}
-                            </div>
-                        ) : (
-                            <span className="text-gray-400 text-sm">Read Only</span>
-                        )}
+                                    {canDelete && (
+                                        <button
+                                            onClick={() => deleteGate(gate.gate_id)}
+                                            className="p-2 bg-red-500 text-white rounded hover:bg-red-600"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
+                                </>
+                            ) : (
+                                <span className="text-gray-400 text-sm ml-2">Read Only</span>
+                            )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1705,6 +1788,13 @@ const PricingApp = () => {
                 setOriginalGateName(null);
               }}
             />
+          )}
+          {showLogModal && (
+              <GateLogModal 
+                logs={logsData}
+                gateName={currentLogGateName}
+                onClose={() => setShowLogModal(false)}
+              />
           )}
           {confirmDialog && (
             <ConfirmDialog

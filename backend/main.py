@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends, st
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Any
 import os
 import io
 import openpyxl
@@ -126,7 +126,7 @@ def startup_db():
             )
         """)
 
-        # --- NEW: Reference Tables (Locations & UOMs) ---
+        # --- Reference Tables (Locations & UOMs) ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Locations (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -138,6 +138,20 @@ def startup_db():
             CREATE TABLE IF NOT EXISTS UOMs (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [name] TEXT UNIQUE
+            )
+        """)
+
+        # --- NEW: Gate Change Log Table ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Gate_Change_Log (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [gate_id] INTEGER,
+                [changed_by] TEXT,
+                [change_date] TEXT,
+                [field_name] TEXT,
+                [old_value] TEXT,
+                [new_value] TEXT,
+                FOREIGN KEY([gate_id]) REFERENCES Gate([Gate ID])
             )
         """)
         
@@ -190,6 +204,15 @@ class GateData(BaseModel):
     unit: Optional[int] = None      
     cost: Optional[float] = None 
     original_gate_name: Optional[str] = None
+
+class GateLogItem(BaseModel):
+    id: int
+    gate_id: int
+    changed_by: str
+    change_date: str
+    field_name: str
+    old_value: Optional[str]
+    new_value: Optional[str]
 
 class ItemPricingData(BaseModel):
     pricing_id: Optional[int] = None
@@ -345,7 +368,6 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
     cost = float(gate_row[3] or 0)
     
     # 3. Get Item Pricing
-    # NOTE: We fetch UOM as well, but logic depends on Cost as requested.
     cursor_log.execute("""
         SELECT [Item ID], [UOM], [Transportation Cost] 
         FROM Item_Pricing 
@@ -357,12 +379,7 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
     item_pricing = {}
     for row in pricing_rows:
         i_code = row[0]
-        # uom_val = str(row[1]).strip() if row[1] else "" # Not used for logic per request
         t_cost = str(row[2]).strip() if row[2] else ""
-        
-        # LOGIC UPDATE:
-        # If Cost is Blank -> 'ton' (Weight Pricing)
-        # If Cost is Number -> 'direct' (Direct Pricing)
         
         if not t_cost or t_cost.lower() == 'nan' or t_cost.lower() == 'none' or t_cost == '':
             item_pricing[i_code] = {'type': 'ton', 'value': None}
@@ -371,7 +388,6 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
                 val = float(t_cost)
                 item_pricing[i_code] = {'type': 'direct', 'value': val}
             except:
-                # If parsed value is not a number but is not blank, treat as unknown
                 item_pricing[i_code] = {'type': 'unknown', 'value': None}
 
     if cost > 0:
@@ -398,30 +414,25 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
             }
             
             p_info = item_pricing.get(item_data['code'], {})
-            p_type = p_info.get('type', 'ton') # Default to ton if not found
+            p_type = p_info.get('type', 'ton')
             p_val = p_info.get('value', 0.0)
             
             if p_type == 'direct':
-                # Direct Pricing Item
                 estimated_total_cost += (item_data['quantity'] * p_val)
                 item_data['standard_unit_cost'] = p_val
                 direct_items.append(item_data)
             else:
-                # Weight Pricing Item (Ton)
                 cost_item = item_data['weight'] * cost
                 estimated_total_cost += cost_item
                 ton_cost_total += cost_item
                 item_data['total_cost'] = cost_item
                 ton_items.append(item_data)
 
-        # Handle Manual Total Cost Override
         direct_unit_cost = 0.0
         if manual_total_cost is not None:
-            # If manual cost provided, subtract ton costs first
             remainder = manual_total_cost - ton_cost_total
             total_direct_qty = sum(item['quantity'] for item in direct_items)
             
-            # Distribute remainder to direct items
             if total_direct_qty > 0:
                 direct_unit_cost = remainder / total_direct_qty
             
@@ -429,7 +440,6 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
         else:
             total_cost = estimated_total_cost
 
-        # Finalize Ton Items
         for item in ton_items:
             avg_unit_cost = item['total_cost'] / item['quantity'] if item['quantity'] > 0 else 0
             
@@ -440,7 +450,6 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
                 "total_cost": item['total_cost'] 
             })
         
-        # Finalize Direct Items
         for item in direct_items:
             final_unit_cost = direct_unit_cost if manual_total_cost is not None else item['standard_unit_cost']
             final_item_cost = item['quantity'] * final_unit_cost
@@ -453,7 +462,6 @@ def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, addi
             })
 
     elif calc_type == "direct_pricing":
-        # Fallback for gates with no standard Ton Cost
         for row in pick_rows:
             item_code = row[0] if row[0] else ""
             pricing_info = item_pricing.get(item_code, {})
@@ -589,8 +597,6 @@ def delete_user(username: str, user: dict = Depends(get_admin_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
 
-# --- Reference Data Endpoints (Locations & UOMs) ---
-
 @app.get("/references/locations")
 def get_ref_locations():
     try:
@@ -685,8 +691,6 @@ def delete_ref_uom(name: str, user: dict = Depends(get_account_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-# --- Calculation History Endpoints ---
-
 @app.post("/history/save")
 def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_current_user)):
     try:
@@ -697,7 +701,6 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
         created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         if data.id:
-            # Update Existing Record
             cursor.execute("SELECT id FROM Calculation_History WHERE id = ?", (data.id,))
             if not cursor.fetchone():
                 conn.close()
@@ -714,7 +717,6 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
             ))
             message = "Calculation updated successfully"
         else:
-            # Insert New Record with Unique 8-digit ID
             while True:
                 new_id = random.randint(10000000, 99999999)
                 cursor.execute("SELECT 1 FROM Calculation_History WHERE id = ?", (new_id,))
@@ -746,7 +748,7 @@ def get_history(user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Calculation_History ORDER BY created_at DESC") # Ordered by created_at since ID is random now
+        cursor.execute("SELECT * FROM Calculation_History ORDER BY created_at DESC")
         rows = cursor.fetchall()
         history = []
         for row in rows:
@@ -822,7 +824,6 @@ def download_history_excel(record_id: int):
         ws = wb.active
         ws.title = "Cost Details"
 
-        # UPDATED HEADERS
         headers = [
             "No", "Claim Date", "Area", "Item", "Quantity", 
             "Price", "Total Amount", "Ton", "Gate", "Branch", "Calculation ID"
@@ -865,8 +866,6 @@ def download_history_excel(record_id: int):
 
             ws.cell(row=row_num, column=9, value=record['gate_name']).border = border
             ws.cell(row=row_num, column=10, value=record['to_loc']).border = border
-            
-            # UPDATED: Add ID in column 11
             ws.cell(row=row_num, column=11, value=record['id']).border = border
 
         for col in ws.columns:
@@ -895,7 +894,7 @@ def download_history_excel(record_id: int):
         logger.error(f"Error generating download: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating download: {str(e)}")
 
-# --- Excel Export/Import Endpoints ---
+# --- Item Pricing Excel Export/Import ---
 
 @app.get("/account/item-pricing/export/{gate_id}")
 def export_item_pricing_excel(gate_id: int):
@@ -911,7 +910,6 @@ def export_item_pricing_excel(gate_id: int):
         from_loc = gate_row[1] or ""
         to_loc = gate_row[2] or ""
         
-        # UPDATED: Select UOM
         query = """
             SELECT [Item ID], [Item Name], [Principal], [Brand], [UOM], [Transportation Cost]
             FROM Item_Pricing 
@@ -928,7 +926,6 @@ def export_item_pricing_excel(gate_id: int):
         ws['A1'] = f"Gate: {gate_name} ({from_loc} -> {to_loc})"
         ws['A1'].font = Font(bold=True, size=14)
         
-        # UPDATED: Headers include UOM
         headers = ['Item Code', 'Item Name', 'Principal', 'Brand', 'UOM', 'Transportation Cost']
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
         header_font = Font(bold=True, color='FFFFFF')
@@ -970,8 +967,6 @@ def export_item_pricing_excel(gate_id: int):
         logger.error(f"Error exporting Excel: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error exporting: {str(e)}")
 
-# --- UPDATED: Import with Strict DWBI Validation & 8-Digit ID Generation ---
-
 @app.post("/account/item-pricing/import/{gate_id}")
 async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), user: dict = Depends(get_account_user)):
     try:
@@ -979,19 +974,16 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         wb = openpyxl.load_workbook(io.BytesIO(contents))
         ws = wb.active
         
-        # 1. Parse Excel Data
         excel_rows = []
         item_codes_to_check = set()
         
         for row_idx, row in enumerate(ws.iter_rows(min_row=4, values_only=True), start=4):
-            if not row[0]: continue # Skip empty rows
+            if not row[0]: continue
             
-            # Extract and clean data
             item_code = str(row[0]).strip()
             item_name = str(row[1]).strip() if row[1] else ""
             principal = str(row[2]).strip() if row[2] else ""
             brand = str(row[3]).strip() if row[3] else ""
-            # UPDATED: UOM at index 4, Cost at index 5
             uom = str(row[4]).strip() if len(row) > 4 and row[4] else ""
             transport_cost = str(row[5]).strip() if len(row) > 5 and row[5] else ""
             
@@ -1009,7 +1001,6 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         if not excel_rows:
              raise HTTPException(status_code=400, detail="No data found in Excel file")
 
-        # 2. Fetch Reference Data from DWBI (Batch fetch for performance)
         conn_dwbi = get_dwbi_connection()
         cursor_dwbi = conn_dwbi.cursor()
         
@@ -1036,47 +1027,32 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         
         conn_dwbi.close()
         
-        # 3. Validation Logic
         errors = []
-        
         for row in excel_rows:
             code = row["code"]
-            
-            # Check 1: Does Item Code exist in DWBI?
             if code not in dwbi_data:
                 errors.append(f"Row {row['row_num']}: Item Code '{code}' not found in DWBI.")
                 continue
-                
             db_item = dwbi_data[code]
-            
-            # Check 2: Item Name Match?
             if row["name"].lower() != db_item["name"].lower():
                  errors.append(f"Row {row['row_num']}: Item Name mismatch. Excel: '{row['name']}', System: '{db_item['name']}'")
-            
-            # Check 3: Principal (ItemGroupName) Match?
             if row["principal"].lower() != db_item["principal"].lower():
                  errors.append(f"Row {row['row_num']}: Principal mismatch. Excel: '{row['principal']}', System: '{db_item['principal']}'")
-
-            # Check 4: Brand Match?
             if row["brand"].lower() != db_item["brand"].lower():
                  errors.append(f"Row {row['row_num']}: Brand mismatch. Excel: '{row['brand']}', System: '{db_item['brand']}'")
 
         if errors:
-            # Return errors to frontend. Limit to first 10 to avoid huge payloads.
             error_msg = errors[:10]
             if len(errors) > 10:
                 error_msg.append(f"... and {len(errors) - 10} more errors.")
-            
             raise HTTPException(status_code=400, detail=error_msg)
 
-        # 4. If Valid, Proceed with SQLite Updates
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
         cursor.execute("SELECT [Item ID] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
         existing_items = {row[0] for row in cursor.fetchall()}
         
-        # Pre-fetch all Pricing IDs to ensure uniqueness when generating new ones
         cursor.execute("SELECT [Pricing ID] FROM Item_Pricing")
         used_ids = {row[0] for row in cursor.fetchall()}
         
@@ -1089,7 +1065,6 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
             updated_items_set.add(item_code)
             
             if item_code in existing_items:
-                # UPDATED: Update UOM as well
                 cursor.execute("""
                     UPDATE Item_Pricing
                     SET [Item Name] = ?, [Principal] = ?, [Brand] = ?, [UOM] = ?, [Transportation Cost] = ?
@@ -1097,14 +1072,11 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                 """, (row["name"], row["principal"], row["brand"], row["uom"], row["cost"], gate_id, item_code))
                 updates_made += 1
             else:
-                # UPDATED: Generate unique 8-digit ID for new items
                 while True:
                     new_id = random.randint(10000000, 99999999)
                     if new_id not in used_ids:
                         used_ids.add(new_id)
                         break
-                
-                # UPDATED: Insert UOM
                 cursor.execute("""
                     INSERT INTO Item_Pricing 
                     ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [UOM], [Transportation Cost])
@@ -1112,7 +1084,6 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                 """, (new_id, gate_id, item_code, row["name"], row["principal"], row["brand"], row["uom"], row["cost"]))
                 inserts_made += 1
         
-        # Logic to remove items that are in DB but NOT in the Excel file
         items_to_delete = existing_items - updated_items_set
         deletes_made = 0
         for item_code in items_to_delete:
@@ -1131,7 +1102,6 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
             "inserts": inserts_made,
             "deletes": deletes_made
         }
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -1173,7 +1143,51 @@ def save_gate(gate_data: GateData, user: dict = Depends(get_account_user)):
         conn = get_logistic_connection()
         cursor = conn.cursor()
 
+        # Check for changes if editing existing gate
         if gate_data.original_gate_name:
+            # 1. Fetch current data before update to detect changes
+            cursor.execute("""
+                SELECT [Gate ID], [UOM], [Unit], [Cost] 
+                FROM Gate 
+                WHERE [Gate Name] = ?
+            """, (gate_data.original_gate_name,))
+            current_row = cursor.fetchone()
+            
+            if current_row:
+                gate_id, old_uom, old_unit, old_cost = current_row
+                
+                # Normalize values for comparison
+                old_uom = old_uom if old_uom else None
+                new_uom = gate_data.uom if gate_data.uom else None
+                
+                old_unit = old_unit if old_unit is not None else None
+                new_unit = gate_data.unit if gate_data.unit is not None else None
+                
+                old_cost = float(old_cost) if old_cost is not None else None
+                new_cost = float(gate_data.cost) if gate_data.cost is not None else None
+
+                change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                username = user['username']
+                
+                changes = []
+
+                if old_uom != new_uom:
+                    changes.append((gate_id, username, change_date, 'UOM', str(old_uom or ''), str(new_uom or '')))
+                
+                if old_unit != new_unit:
+                    changes.append((gate_id, username, change_date, 'Unit', str(old_unit) if old_unit is not None else '', str(new_unit) if new_unit is not None else ''))
+                
+                if old_cost != new_cost:
+                    changes.append((gate_id, username, change_date, 'Cost', str(old_cost) if old_cost is not None else '', str(new_cost) if new_cost is not None else ''))
+                
+                # Insert logs if changes detected
+                if changes:
+                    cursor.executemany("""
+                        INSERT INTO Gate_Change_Log (gate_id, changed_by, change_date, field_name, old_value, new_value)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, changes)
+
+            # 2. Perform Update
             cursor.execute("""
                 UPDATE Gate 
                 SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Cost] = ?
@@ -1182,6 +1196,7 @@ def save_gate(gate_data: GateData, user: dict = Depends(get_account_user)):
                   gate_data.uom, gate_data.unit, gate_data.cost, 
                   gate_data.original_gate_name))
         else:
+            # Insert New Gate
             cursor.execute("""
                 INSERT INTO Gate ([Gate Name], [From], [To], [UOM], [Unit], [Cost])
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -1196,12 +1211,43 @@ def save_gate(gate_data: GateData, user: dict = Depends(get_account_user)):
         logger.error(f"Error saving gate: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error saving gate: {str(e)}")
 
+@app.get("/account/gates/{gate_id}/logs", response_model=List[GateLogItem])
+def get_gate_logs(gate_id: int, user: dict = Depends(get_current_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, gate_id, changed_by, change_date, field_name, old_value, new_value
+            FROM Gate_Change_Log
+            WHERE gate_id = ?
+            ORDER BY change_date DESC
+        """, (gate_id,))
+        rows = cursor.fetchall()
+        logs = []
+        for row in rows:
+            logs.append({
+                "id": row[0],
+                "gate_id": row[1],
+                "changed_by": row[2],
+                "change_date": row[3],
+                "field_name": row[4],
+                "old_value": row[5],
+                "new_value": row[6]
+            })
+        conn.close()
+        return logs
+    except Exception as e:
+        logger.error(f"Error fetching logs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching logs: {str(e)}")
+
 @app.delete("/account/gates/{gate_id}")
 def delete_gate(gate_id: int, user: dict = Depends(get_admin_user)): 
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
+        # Delete logs first (FK constraint usually handles this if cascade is on, but doing manually for safety in sqlite)
+        cursor.execute("DELETE FROM Gate_Change_Log WHERE gate_id = ?", (gate_id,))
         cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
         cursor.execute("DELETE FROM Gate WHERE [Gate ID] = ?", (gate_id,))
         
@@ -1218,14 +1264,11 @@ def delete_gate(gate_id: int, user: dict = Depends(get_admin_user)):
         logger.error(f"Error deleting gate: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error deleting gate: {str(e)}")
 
-# --- Item Pricing Management Endpoints (SQLite) ---
-
 @app.get("/account/item-pricing/{gate_id}")
 def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        # UPDATED: Select UOM
         query = """
             SELECT [Pricing ID], [Item ID], [Item Name], [Principal], 
                    [Brand], [UOM], [Transportation Cost]
@@ -1242,7 +1285,7 @@ def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
                 "item_name": row[2],
                 "principal": row[3],
                 "brand": row[4],
-                "uom": row[5], # Added
+                "uom": row[5], 
                 "transportation_cost": row[6]
             })
         conn.close()
@@ -1261,7 +1304,6 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
         existing = cursor.fetchone()
 
         if existing:
-            # UPDATED: Update UOM
             update_query = """
                 UPDATE Item_Pricing
                 SET [Item ID] = ?, [Item Name] = ?, [Principal] = ?,
@@ -1275,14 +1317,11 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
                 existing[0]
             ))
         else:
-            # UPDATED: Generate 8-digit unique ID
             while True:
                 new_id = random.randint(10000000, 99999999)
                 cursor.execute("SELECT 1 FROM Item_Pricing WHERE [Pricing ID] = ?", (new_id,))
                 if not cursor.fetchone():
                     break
-
-            # UPDATED: Insert UOM
             insert_query = """
                 INSERT INTO Item_Pricing 
                 ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal],
@@ -1316,15 +1355,11 @@ def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(get_a
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting item: {str(e)}")
 
-# --- NEW: DWBI Item Search & Validation Endpoints ---
-
 @app.get("/dwbi/items/search")
 def search_dwbi_items(q: str = Query(..., min_length=2)):
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        # Using TOP 50 to return reasonable number of results
-        # Mapping: ItemGroupName -> Principal, BrandName -> Brand
         query_sql = """
             SELECT TOP 50 ItemCode, ItemName, ItemGroupName, BrandName 
             FROM _ItemAllinone 
@@ -1372,8 +1407,6 @@ def validate_dwbi_item(code: str = Query(...)):
     except Exception as e:
         logger.error(f"Error validating item: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
-
-# --- Calculation & Main Endpoints ---
 
 @app.get("/locations/from")
 def get_from_locations():
@@ -1428,8 +1461,6 @@ def calculate_with_gate(
     except Exception as e:
         logger.error(f"Calculation error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")
-
-# --- Standard Lookups (SQL Server - DWBI) ---
 
 @app.get("/pick-ids")
 def get_pick_ids():
