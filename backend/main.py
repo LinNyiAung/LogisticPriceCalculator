@@ -141,6 +141,18 @@ def startup_db():
             )
         """)
 
+        # --- Branch Code Mapping Table ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Branch_Code (
+                [Log-Pric] TEXT,
+                [Code] TEXT,
+                [Name] TEXT,
+                [Dept] TEXT,
+                [Principal] TEXT,
+                [Description] TEXT
+            )
+        """)
+
         # --- Gate Change Log Table ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Gate_Change_Log (
@@ -355,14 +367,15 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         conn_dwbi = get_dwbi_connection()
         cursor_dwbi = conn_dwbi.cursor()
         
-        # CHANGED: PG_TransferDetails logic
         placeholders = ','.join('?' * len(doc_nums))
+        
+        # Added SUM(BatchQtyByCtn) to the query
         query = f"""
-            SELECT ItemCode, MAX(Dscription), SUM(BatchQty), MAX(UoM), SUM(ItemWeight)
+            SELECT ItemCode, MAX(Dscription), SUM(BatchQty), MAX(UoM), SUM(ItemWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(BatchQtyByCtn)
             FROM PG_TransferDetails 
             WHERE DocNum IN ({placeholders}) 
-            GROUP BY ItemCode
-            ORDER BY ItemCode
+            GROUP BY DocNum, ItemCode
+            ORDER BY DocNum, ItemCode
         """
         cursor_dwbi.execute(query, doc_nums)
         pick_rows = cursor_dwbi.fetchall()
@@ -373,14 +386,26 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
     if not pick_rows:
         raise Exception("No products found for the selected Doc Nums")
     
-    # 2. Get Gate Data
+    # 2. Get Gate Data and Branch_Code mapping
     try:
         conn_log = get_logistic_connection()
         cursor_log = conn_log.cursor()
+        
         cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
         gate_row = cursor_log.fetchone()
+        
+        # Fetch Branch_Code mapping
+        cursor_log.execute("SELECT [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code")
+        branch_code_map = {row[3].strip().lower(): {
+            "Code": row[0],
+            "Name": row[1],
+            "Dept": row[2],
+            "Principal": row[3],
+            "Description": row[4]
+        } for row in cursor_log.fetchall() if row[3]}
+
     except Exception as e:
-        raise Exception(f"Error fetching gate config: {str(e)}")
+        raise Exception(f"Error fetching local configs: {str(e)}")
     
     if not gate_row:
         if 'conn_log' in locals(): conn_log.close()
@@ -429,12 +454,24 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         ton_cost_total = 0.0
         
         for row in pick_rows:
+            principal_val = row[7] or ""
+            bc_info = branch_code_map.get(principal_val.strip().lower(), {})
+
             item_data = {
                 "code": row[0] if row[0] else "",
                 "name": row[1] if row[1] else "",
                 "quantity": float(row[2]) if row[2] else 0.0,
                 "uom": row[3] if row[3] else "",
                 "weight": float(row[4]) if row[4] else 0.0,
+                "doc_date": row[5],         
+                "sin_no": row[6],           
+                "principal": principal_val,   
+                "ctns": float(row[8]) if row[8] else 0.0,
+                "b_code": bc_info.get("Code", ""),
+                "b_name": bc_info.get("Name", ""),
+                "b_dept": bc_info.get("Dept", ""),
+                "b_principal": bc_info.get("Principal", ""),
+                "b_desc": bc_info.get("Description", "")
             }
             
             p_info = item_pricing.get(item_data['code'], {})
@@ -492,7 +529,9 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
             
             quantity = float(row[2]) if row[2] else 0.0
             weight = float(row[4]) if row[4] else 0.0
-            
+            principal_val = row[7] or ""
+            bc_info = branch_code_map.get(principal_val.strip().lower(), {})
+
             unit_cost = pricing_info.get('value', 0.0) or 0.0
             item_cost = quantity * unit_cost
             
@@ -505,12 +544,22 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
                 "quantity": quantity,
                 "uom": row[3] if row[3] else "",
                 "weight": weight,
+                "doc_date": row[5],       
+                "sin_no": row[6],         
+                "principal": principal_val,
+                "ctns": float(row[8]) if row[8] else 0.0,
+                "b_code": bc_info.get("Code", ""),
+                "b_name": bc_info.get("Name", ""),
+                "b_dept": bc_info.get("Dept", ""),
+                "b_principal": bc_info.get("Principal", ""),
+                "b_desc": bc_info.get("Description", ""),
                 "calculation_type": "direct",
                 "unit_cost": unit_cost,
                 "total_cost": item_cost
             })
 
-    calculated_products.sort(key=lambda x: x['code'])
+    # Sort primarily by Document Number, then by Item Code to keep them neatly organized
+    calculated_products.sort(key=lambda x: (x.get('sin_no', ''), x['code']))
     
     total_cost += add_charges
     estimated_total_cost += add_charges
@@ -849,9 +898,13 @@ def download_history_excel(record_id: int):
         ws = wb.active
         ws.title = "Cost Details"
 
+        # Expanded Headers according to the exact requested order
         headers = [
-            "No", "Claim Date", "Area", "Item", "Quantity", 
-            "Price", "Total Amount", "Ton", "Gate", "Branch", "Calculation ID"
+            "No", "Claim Date", "Delivery Date", "SIN No", "Area", 
+            "Code", "Name", "Principal", "Ctns", "Item", "Quantity", 
+            "Price", "Total Amount", "Ton", "Gate", "Month", "Year", 
+            "Description for Account", "Description with cnts and price", 
+            "Branch", "B-Dept", "B-Principal", "Calculation ID"
         ]
         
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
@@ -867,31 +920,68 @@ def download_history_excel(record_id: int):
             cell.alignment = Alignment(horizontal='center')
             cell.border = border
 
-        claim_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        # Claim Date Logic
+        now = datetime.datetime.now()
+        claim_date_str = now.strftime("%Y-%m-%d")
+        claim_month = now.strftime("%B") 
+        claim_year = now.year
         
         for idx, item in enumerate(products, 1):
             row_num = idx + 1
-            ws.cell(row=row_num, column=1, value=idx).border = border
-            ws.cell(row=row_num, column=2, value=claim_date).border = border
-            ws.cell(row=row_num, column=3, value=record['to_loc']).border = border
-            ws.cell(row=row_num, column=4, value=item['name']).border = border
-            ws.cell(row=row_num, column=5, value=item['quantity']).border = border
             
-            price_cell = ws.cell(row=row_num, column=6, value=item['unit_cost']) 
+            # Formatting Date if possible
+            doc_date_val = item.get('doc_date')
+            if isinstance(doc_date_val, datetime.datetime):
+                doc_date_str = doc_date_val.strftime("%Y-%m-%d")
+            else:
+                doc_date_str = str(doc_date_val) if doc_date_val else ""
+
+            # Extract necessary items for calculations
+            b_desc = item.get('b_desc', '')
+            ctns_val = item.get('ctns', 0)
+            price_val = item.get('unit_cost', 0)
+            
+            # Formatting variables so decimals like 10.0 appear clean as 10
+            ctns_formatted = int(ctns_val) if float(ctns_val).is_integer() else ctns_val
+            price_formatted = int(price_val) if float(price_val).is_integer() else round(price_val, 2)
+            
+            concat_desc = f"{b_desc.strip()} - {ctns_formatted} ctns @{price_formatted} kyats"
+
+            # Populating columns strictly matching the header index mapping
+            ws.cell(row=row_num, column=1, value=idx).border = border # No
+            ws.cell(row=row_num, column=2, value=claim_date_str).border = border # Claim Date
+            ws.cell(row=row_num, column=3, value=doc_date_str).border = border # Delivery Date
+            ws.cell(row=row_num, column=4, value=item.get('sin_no', '')).border = border # SIN No
+            ws.cell(row=row_num, column=5, value=record['to_loc']).border = border # Area
+            ws.cell(row=row_num, column=6, value=item.get('b_code', '')).border = border # Code
+            ws.cell(row=row_num, column=7, value=item.get('b_name', '')).border = border # Name
+            ws.cell(row=row_num, column=8, value=item.get('principal', '')).border = border # Principal
+            ws.cell(row=row_num, column=9, value=ctns_formatted).border = border # Ctns
+            
+            ws.cell(row=row_num, column=10, value=item['name']).border = border # Item
+            ws.cell(row=row_num, column=11, value=item['quantity']).border = border # Quantity
+            
+            price_cell = ws.cell(row=row_num, column=12, value=price_val) # Price
             price_cell.number_format = '#,##0.00'
             price_cell.border = border
 
-            amt_cell = ws.cell(row=row_num, column=7, value=item['total_cost'])
+            amt_cell = ws.cell(row=row_num, column=13, value=item['total_cost']) # Total Amount
             amt_cell.number_format = '#,##0.00'
             amt_cell.border = border
 
-            weight_cell = ws.cell(row=row_num, column=8, value=item['weight'])
+            weight_cell = ws.cell(row=row_num, column=14, value=item['weight']) # Ton
             weight_cell.number_format = '#,##0.00'
             weight_cell.border = border
 
-            ws.cell(row=row_num, column=9, value=record['gate_name']).border = border
-            ws.cell(row=row_num, column=10, value=record['to_loc']).border = border
-            ws.cell(row=row_num, column=11, value=record['id']).border = border
+            ws.cell(row=row_num, column=15, value=record['gate_name']).border = border # Gate
+            ws.cell(row=row_num, column=16, value=claim_month).border = border # Month
+            ws.cell(row=row_num, column=17, value=claim_year).border = border # Year
+            ws.cell(row=row_num, column=18, value=b_desc).border = border # Description for Account
+            ws.cell(row=row_num, column=19, value=concat_desc).border = border # Description with cnts and price
+            ws.cell(row=row_num, column=20, value=record['to_loc']).border = border # Branch
+            ws.cell(row=row_num, column=21, value=item.get('b_dept', '')).border = border # B-Dept
+            ws.cell(row=row_num, column=22, value=item.get('b_principal', '')).border = border # B-Principal
+            ws.cell(row=row_num, column=23, value=record['id']).border = border # Calculation ID
 
         for col in ws.columns:
             max_length = 0
@@ -1554,7 +1644,6 @@ def get_doc_nums():
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        # CHANGED: Table PG_TransferDetails, Field DocNum
         cursor.execute("SELECT DISTINCT DocNum FROM PG_TransferDetails WHERE DocNum IS NOT NULL ORDER BY DocNum DESC")
         rows = cursor.fetchall()
         doc_nums = [row[0] for row in rows]
@@ -1572,15 +1661,12 @@ def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums"))
         cursor = conn.cursor()
         placeholders = ','.join('?' * len(doc_nums))
         
-        # CHANGED: PG_TransferDetails logic
-        # Quantity -> SUM(BatchQty)
-        # Weight -> SUM(ItemWeight) (Assumed to be line total weight based on sample data analysis)
         query = f"""
-            SELECT ItemCode, MAX(Dscription), SUM(BatchQty), MAX(UoM), SUM(ItemWeight)
+            SELECT ItemCode, MAX(Dscription), SUM(BatchQty), MAX(UoM), SUM(ItemWeight), DocNum
             FROM PG_TransferDetails 
             WHERE DocNum IN ({placeholders}) 
-            GROUP BY ItemCode
-            ORDER BY ItemCode
+            GROUP BY DocNum, ItemCode
+            ORDER BY DocNum, ItemCode
         """
         cursor.execute(query, doc_nums)
         rows = cursor.fetchall()
@@ -1606,13 +1692,12 @@ def get_products_by_doc_num(doc_num: str):
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        # CHANGED: PG_TransferDetails logic
         cursor.execute("""
-            SELECT ItemCode, MAX(Dscription), SUM(BatchQty), MAX(UoM), SUM(ItemWeight)
+            SELECT ItemCode, MAX(Dscription), SUM(BatchQty), MAX(UoM), SUM(ItemWeight), DocNum
             FROM PG_TransferDetails 
             WHERE DocNum = ? 
-            GROUP BY ItemCode
-            ORDER BY ItemCode
+            GROUP BY DocNum, ItemCode
+            ORDER BY DocNum, ItemCode
         """, (doc_num,))
         rows = cursor.fetchall()
         if not rows:

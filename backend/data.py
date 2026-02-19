@@ -33,17 +33,54 @@ def read_csv_robust(file_path, **kwargs):
     return pd.read_csv(file_path, encoding='utf-8', errors='replace', **kwargs)
 
 def generate_sql():
-    # 1. Load the main Gate Data file
+    sql_statements = []
+
+    # ---------------------------------------------------------
+    # 1. Process Branch Code Data
+    # ---------------------------------------------------------
+    print("Processing Branch Code.csv...")
+    try:
+        # Read Branch Code file with robust reader
+        # Force 'Code' to be string to preserve leading zeros if any
+        branch_df = read_csv_robust("Branch Code.csv", dtype={'Code': str})
+        
+        # Create Table Definition for Branch_Code
+        sql_statements.append("CREATE TABLE Branch_Code ([Log-Pric] VARCHAR(255), [Code] VARCHAR(50), [Name] VARCHAR(255), [Dept] VARCHAR(255), [Principal] VARCHAR(255), [Description] VARCHAR(255));")
+        
+        # Iterate through rows and generate INSERT statements
+        for index, row in branch_df.iterrows():
+            val_log_pric = clean_sql_string(row.get('Log-Pric'))
+            val_code = clean_sql_string(row.get('Code'))
+            val_name = clean_sql_string(row.get('Name'))
+            val_dept = clean_sql_string(row.get('Dept'))
+            val_principal = clean_sql_string(row.get('Principal'))
+            val_desc = clean_sql_string(row.get('Description'))
+            
+            sql_statements.append(f"INSERT INTO Branch_Code ([Log-Pric], [Code], [Name], [Dept], [Principal], [Description]) VALUES ({val_log_pric}, {val_code}, {val_name}, {val_dept}, {val_principal}, {val_desc});")
+            
+        sql_statements.append("") # Add a blank line for separation
+
+    except FileNotFoundError:
+        print("Error: 'Branch Code.csv' not found. Skipping Branch Code table.")
+        sql_statements.append("-- Error: 'Branch Code.csv' not found.")
+    except Exception as e:
+        print(f"Error processing 'Branch Code.csv': {e}")
+        sql_statements.append(f"-- Error processing 'Branch Code.csv': {e}")
+
+    # ---------------------------------------------------------
+    # 2. Process Gate Data and Item Pricing
+    # ---------------------------------------------------------
+    print("Processing Gate Data.csv...")
     try:
         gate_df = read_csv_robust("Gate Data.csv")
     except FileNotFoundError:
         print("Error: 'Gate Data.csv' not found.")
+        # We can still save whatever we have (e.g. Branch Code)
+        with open('output_script.sql', 'w', encoding='utf-8') as f:
+            f.write('\n'.join(sql_statements))
         return
 
-    sql_statements = []
-    
-    # Create Table Definitions (DDL)
-    # UPDATED: Gate table definition
+    # Create Table Definitions (DDL) for Gate and Item_Pricing
     sql_statements.append("CREATE TABLE Gate ([Gate ID] INTEGER PRIMARY KEY, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [UOM] VARCHAR(50), [Unit] INTEGER, [Cost] DECIMAL(18,2));")
     
     # UPDATED: Added [UOM] column to Item_Pricing table
@@ -53,7 +90,7 @@ def generate_sql():
     # TRACKER: Set to keep track of generated IDs to ensure uniqueness
     used_pricing_ids = set()
 
-    # 2. Iterate through each gate to generate SQL
+    # Iterate through each gate to generate SQL
     for index, row in gate_df.iterrows():
         # Generate a Gate ID (1, 2, 3...)
         gate_id = index + 1
@@ -78,7 +115,7 @@ def generate_sql():
         # INSERT statement for Gate table
         sql_statements.append(f"INSERT INTO Gate ([Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES ({val_gate_id}, {val_gate_name}, {val_from}, {val_to}, {val_uom}, {val_unit}, {val_cost});")
         
-        # 3. Process the corresponding Item Master file if it exists
+        # Process the corresponding Item Master file if it exists
         if pd.notna(file_name):
             if os.path.exists(file_name):
                 try:
@@ -117,7 +154,9 @@ def generate_sql():
                 print(f"File not found: {file_name}")
                 sql_statements.append(f"-- File not found: {file_name}")
 
-    # 4. Save to a SQL file
+    # ---------------------------------------------------------
+    # 3. Save to a SQL file
+    # ---------------------------------------------------------
     output_filename = 'output_script.sql'
     with open(output_filename, 'w', encoding='utf-8') as f:
         f.write('\n'.join(sql_statements))
