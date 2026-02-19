@@ -110,7 +110,7 @@ def startup_db():
                 [gate_name] TEXT,
                 [from_loc] TEXT,
                 [to_loc] TEXT,
-                [pick_ids] TEXT, -- Stored as JSON string
+                [doc_nums] TEXT, -- Stored as JSON string (contains DocNums)
                 [manual_total_cost] REAL,
                 [additional_charges] REAL,
                 [final_total_cost] REAL
@@ -155,7 +155,7 @@ def startup_db():
             )
         """)
 
-        # --- NEW: Item Change Log Table ---
+        # --- Item Change Log Table ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Item_Change_Log (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -244,7 +244,7 @@ class ItemPricingData(BaseModel):
     item_name: str
     principal: Optional[str] = ""
     brand: Optional[str] = ""
-    uom: Optional[str] = None  # Added
+    uom: Optional[str] = None 
     transportation_cost: str
     original_item_code: Optional[str] = None
 
@@ -253,7 +253,7 @@ class CalculationSaveRequest(BaseModel):
     gate_name: str
     from_loc: str
     to_loc: str
-    pick_ids: List[str]
+    doc_nums: List[str]
     manual_total_cost: Optional[float] = None
     additional_charges: Optional[float] = 0.0
     final_total_cost: float
@@ -347,30 +347,31 @@ def determine_calculation_type_sql(gate_id):
         logger.error(f"Error determining calc type: {str(e)}")
         return "unknown"
 
-def _perform_calculation_logic(gate_name, pick_ids, manual_total_cost=None, additional_charges=0.0):
+def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, additional_charges=0.0):
     add_charges = float(additional_charges) if additional_charges is not None else 0.0
 
-    # 1. Get Pick Data from DWBI
+    # 1. Get Transfer Data from DWBI (PG_TransferDetails)
     try:
         conn_dwbi = get_dwbi_connection()
         cursor_dwbi = conn_dwbi.cursor()
         
-        placeholders = ','.join('?' * len(pick_ids))
+        # CHANGED: PG_TransferDetails logic
+        placeholders = ','.join('?' * len(doc_nums))
         query = f"""
-            SELECT ItemCode, MAX(Dscription), SUM(Quantity), MAX(UomCode), SUM(ItemWeight)
-            FROM PG_PickDetail 
-            WHERE ID IN ({placeholders}) 
+            SELECT ItemCode, MAX(Dscription), SUM(BatchQty), MAX(UoM), SUM(ItemWeight)
+            FROM PG_TransferDetails 
+            WHERE DocNum IN ({placeholders}) 
             GROUP BY ItemCode
             ORDER BY ItemCode
         """
-        cursor_dwbi.execute(query, pick_ids)
+        cursor_dwbi.execute(query, doc_nums)
         pick_rows = cursor_dwbi.fetchall()
         conn_dwbi.close()
     except Exception as e:
-        raise Exception(f"Error fetching pick details: {str(e)}")
+        raise Exception(f"Error fetching transfer details: {str(e)}")
     
     if not pick_rows:
-        raise Exception("No products found for the selected Pick IDs")
+        raise Exception("No products found for the selected Doc Nums")
     
     # 2. Get Gate Data
     try:
@@ -720,7 +721,8 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        pick_ids_json = json.dumps(data.pick_ids)
+        # Save DocNums as JSON in the doc_nums column
+        doc_nums_json = json.dumps(data.doc_nums)
         created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         if data.id:
@@ -731,11 +733,11 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
             cursor.execute("""
                 UPDATE Calculation_History 
                 SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
-                    pick_ids = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?
+                    doc_nums = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?
                 WHERE id = ?
             """, (
                 created_at, data.gate_name, data.from_loc, data.to_loc,
-                pick_ids_json, data.manual_total_cost, data.additional_charges, 
+                doc_nums_json, data.manual_total_cost, data.additional_charges, 
                 data.final_total_cost, data.id
             ))
             message = "Calculation updated successfully"
@@ -749,11 +751,11 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
             cursor.execute("""
                 INSERT INTO Calculation_History 
                 ([id], [created_at], [gate_name], [from_loc], [to_loc], 
-                 [pick_ids], [manual_total_cost], [additional_charges], [final_total_cost])
+                 [doc_nums], [manual_total_cost], [additional_charges], [final_total_cost])
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 new_id, created_at, data.gate_name, data.from_loc, data.to_loc,
-                pick_ids_json, data.manual_total_cost, data.additional_charges, data.final_total_cost
+                doc_nums_json, data.manual_total_cost, data.additional_charges, data.final_total_cost
             ))
             message = "Calculation saved successfully"
         
@@ -781,7 +783,7 @@ def get_history(user: dict = Depends(get_current_user)):
                 "gate_name": row[2],
                 "from_loc": row[3],
                 "to_loc": row[4],
-                "pick_ids": json.loads(row[5]),
+                "doc_nums": json.loads(row[5]), # Returns DocNums
                 "manual_total_cost": row[6],
                 "additional_charges": row[7],
                 "final_total_cost": row[8]
@@ -826,7 +828,7 @@ def download_history_excel(record_id: int):
             "gate_name": row[2],
             "from_loc": row[3],
             "to_loc": row[4],
-            "pick_ids": json.loads(row[5]),
+            "doc_nums": json.loads(row[5]),
             "manual_total_cost": row[6],
             "additional_charges": row[7]
         }
@@ -834,7 +836,7 @@ def download_history_excel(record_id: int):
         try:
             calc_result = _perform_calculation_logic(
                 gate_name=record['gate_name'],
-                pick_ids=record['pick_ids'],
+                doc_nums=record['doc_nums'],
                 manual_total_cost=record['manual_total_cost'],
                 additional_charges=record['additional_charges']
             )
@@ -1527,16 +1529,16 @@ def get_to_locations(from_loc: Optional[str] = None):
 @app.post("/calculate-with-gate")
 def calculate_with_gate(
     gate_name: str, 
-    pick_ids: List[str] = Query(...), 
+    doc_nums: List[str] = Query(...),
     manual_total_cost: Optional[float] = None, 
     additional_charges: Optional[float] = 0.0
 ):
     try:
-        if not pick_ids:
-            raise HTTPException(status_code=400, detail="No Pick IDs provided")
+        if not doc_nums:
+            raise HTTPException(status_code=400, detail="No Doc Nums provided")
         result = _perform_calculation_logic(
             gate_name=gate_name, 
-            pick_ids=pick_ids, 
+            doc_nums=doc_nums, 
             manual_total_cost=manual_total_cost, 
             additional_charges=additional_charges
         )
@@ -1547,35 +1549,40 @@ def calculate_with_gate(
         logger.error(f"Calculation error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")
 
-@app.get("/pick-ids")
-def get_pick_ids():
+@app.get("/doc-nums")
+def get_doc_nums():
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT ID FROM PG_PickDetail WHERE ID IS NOT NULL ORDER BY ID DESC")
+        # CHANGED: Table PG_TransferDetails, Field DocNum
+        cursor.execute("SELECT DISTINCT DocNum FROM PG_TransferDetails WHERE DocNum IS NOT NULL ORDER BY DocNum DESC")
         rows = cursor.fetchall()
-        pick_ids = [row[0] for row in rows]
+        doc_nums = [row[0] for row in rows]
         conn.close()
-        return {"pick_ids": pick_ids}
+        return {"doc_nums": doc_nums}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@app.get("/products-by-ids")
-def get_products_by_pick_ids(pick_ids: List[str] = Query(...)):
+@app.get("/products-by-doc-nums")
+def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums")):
     try:
-        if not pick_ids:
+        if not doc_nums:
             return {"products": [], "total_weight": 0}
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        placeholders = ','.join('?' * len(pick_ids))
+        placeholders = ','.join('?' * len(doc_nums))
+        
+        # CHANGED: PG_TransferDetails logic
+        # Quantity -> SUM(BatchQty)
+        # Weight -> SUM(ItemWeight) (Assumed to be line total weight based on sample data analysis)
         query = f"""
-            SELECT ItemCode, MAX(Dscription), SUM(Quantity), MAX(UomCode), SUM(ItemWeight)
-            FROM PG_PickDetail 
-            WHERE ID IN ({placeholders}) 
+            SELECT ItemCode, MAX(Dscription), SUM(BatchQty), MAX(UoM), SUM(ItemWeight)
+            FROM PG_TransferDetails 
+            WHERE DocNum IN ({placeholders}) 
             GROUP BY ItemCode
             ORDER BY ItemCode
         """
-        cursor.execute(query, pick_ids)
+        cursor.execute(query, doc_nums)
         rows = cursor.fetchall()
         products = []
         total_weight = 0.0
@@ -1594,18 +1601,19 @@ def get_products_by_pick_ids(pick_ids: List[str] = Query(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@app.get("/products/{pick_id}")
-def get_products_by_pick_id(pick_id: str):
+@app.get("/products/{doc_num}")
+def get_products_by_doc_num(doc_num: str):
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
+        # CHANGED: PG_TransferDetails logic
         cursor.execute("""
-            SELECT ItemCode, MAX(Dscription), SUM(Quantity), MAX(UomCode), SUM(ItemWeight)
-            FROM PG_PickDetail 
-            WHERE ID = ? 
+            SELECT ItemCode, MAX(Dscription), SUM(BatchQty), MAX(UoM), SUM(ItemWeight)
+            FROM PG_TransferDetails 
+            WHERE DocNum = ? 
             GROUP BY ItemCode
             ORDER BY ItemCode
-        """, (pick_id,))
+        """, (doc_num,))
         rows = cursor.fetchall()
         if not rows:
             conn.close()

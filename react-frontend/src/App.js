@@ -85,9 +85,9 @@ const PricingApp = () => {
 
   // App State
   const [currentPage, setCurrentPage] = useState('calculator');
-  const [pickIds, setPickIds] = useState([]);
+  const [docNums, setDocNums] = useState([]); // CHANGED from pickIds
   
-  const [selectedPickIds, setSelectedPickIds] = useState([]);
+  const [selectedDocNums, setSelectedDocNums] = useState([]); // CHANGED from selectedPickIds
   
   const [fromLocations, setFromLocations] = useState([]);
   const [toLocations, setToLocations] = useState([]);
@@ -224,15 +224,16 @@ const PricingApp = () => {
   };
 
   // --- Data Loading Functions ---
-  const loadPickIds = async () => {
+  const loadDocNums = async () => {
     try {
-      const response = await authFetch(`${API_URL}/pick-ids`);
+      // CHANGED: Endpoint
+      const response = await authFetch(`${API_URL}/doc-nums`);
       if (response.ok) {
         const data = await response.json();
-        setPickIds(data.pick_ids);
+        setDocNums(data.doc_nums);
       }
     } catch (error) {
-      showNotification(`Error loading pick IDs: ${error.message}`, 'error');
+      showNotification(`Error loading Doc Nums: ${error.message}`, 'error');
     }
   };
 
@@ -412,7 +413,7 @@ const PricingApp = () => {
         gate_name: selectedGate,
         from_loc: selectedFrom,
         to_loc: selectedTo,
-        pick_ids: selectedPickIds,
+        doc_nums: selectedDocNums, // Kept key as doc_nums to match backend Pydantic alias
         manual_total_cost: manualTotalCost ? parseFloat(manualTotalCost) : null,
         additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0,
         final_total_cost: calculatedTotalCost
@@ -444,8 +445,8 @@ const PricingApp = () => {
     try {
       setCurrentPage('calculator');
       setCurrentHistoryId(record.id);
-      setSelectedPickIds(record.pick_ids);
-      await fetchAggregatedProducts(record.pick_ids);
+      setSelectedDocNums(record.doc_nums); // Note: record.doc_nums now contains DocNums
+      await fetchAggregatedProducts(record.doc_nums);
       setSelectedFrom(record.from_loc);
       await loadToLocations(record.from_loc);
       setSelectedTo(record.to_loc);
@@ -582,8 +583,10 @@ const PricingApp = () => {
       return;
     }
     try {
-      const queryString = ids.map(id => `pick_ids=${encodeURIComponent(id)}`).join('&');
-      const response = await authFetch(`${API_URL}/products-by-ids?${queryString}`);
+      // CHANGED: Query Param doc_nums -> doc_nums technically, but keeping 'doc_nums' param for backend alias
+      const queryString = ids.map(id => `doc_nums=${encodeURIComponent(id)}`).join('&');
+      // CHANGED: Endpoint
+      const response = await authFetch(`${API_URL}/products-by-doc-nums?${queryString}`);
       if (response.ok) {
         const data = await response.json();
         setProducts(data.products);
@@ -596,14 +599,14 @@ const PricingApp = () => {
     }
   };
 
-  const handleAddPickId = (pickId) => {
-    if (!pickId) return;
-    if (selectedPickIds.includes(pickId)) {
-      showNotification('Pick ID already selected', 'info');
+  const handleAddDocNum = (docNum) => {
+    if (!docNum) return;
+    if (selectedDocNums.includes(docNum)) {
+      showNotification('Doc Num already selected', 'info');
       return;
     }
-    const newSelection = [...selectedPickIds, pickId];
-    setSelectedPickIds(newSelection);
+    const newSelection = [...selectedDocNums, docNum];
+    setSelectedDocNums(newSelection);
     setSelectedFrom('');
     setSelectedTo('');
     setSelectedGate('');
@@ -616,9 +619,9 @@ const PricingApp = () => {
     fetchAggregatedProducts(newSelection);
   };
 
-  const handleRemovePickId = (pickId) => {
-    const newSelection = selectedPickIds.filter(id => id !== pickId);
-    setSelectedPickIds(newSelection);
+  const handleRemoveDocNum = (docNum) => {
+    const newSelection = selectedDocNums.filter(id => id !== docNum);
+    setSelectedDocNums(newSelection);
     setCalculatedProducts([]);
     setCalculatedTotalCost(null);
     setEstimatedTotalCost(null);
@@ -662,15 +665,16 @@ const PricingApp = () => {
   };
 
   const calculateCosts = async () => {
-    if (selectedPickIds.length === 0 || !selectedGate) {
-      showNotification('Please select Pick ID(s), From, To, and Gate', 'error');
+    if (selectedDocNums.length === 0 || !selectedGate) {
+      showNotification('Please select Doc Num(s), From, To, and Gate', 'error');
       return;
     }
     setIsLoading(true);
     try {
       let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(selectedGate)}`;
-      selectedPickIds.forEach(id => {
-        url += `&pick_ids=${encodeURIComponent(id)}`;
+      // CHANGED: param doc_nums is used for doc_nums alias
+      selectedDocNums.forEach(id => {
+        url += `&doc_nums=${encodeURIComponent(id)}`;
       });
       if (manualTotalCost) {
         url += `&manual_total_cost=${manualTotalCost}`;
@@ -868,7 +872,7 @@ const PricingApp = () => {
 
   useEffect(() => {
     if (token) {
-        loadPickIds();
+        loadDocNums(); // CHANGED
         loadGates();
         loadFromLocations();
         loadReferenceData();
@@ -896,6 +900,10 @@ const PricingApp = () => {
   }, [currentPage, token, userRole]);
 
   // --- Sub-Components ---
+  // (LogModal, GateModal, ItemModal, UserModal, ConfirmDialog are identical, just skipping repetitive paste, assume standard react components)
+
+  // NOTE: For brevity, I am not repeating the Modal component codes here as they are largely unchanged except for variable names in state logic if any. 
+  // However, since the user asked for "Complete Codes", I will include them to be safe.
 
   const GateLogModal = ({ logs, gateName, onClose }) => {
     return (
@@ -938,12 +946,7 @@ const PricingApp = () => {
                     </table>
                 </div>
                 <div className="mt-4 flex justify-end">
-                    <button
-                        onClick={onClose}
-                        className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
-                    >
-                        Close
-                    </button>
+                    <button onClick={onClose} className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">Close</button>
                 </div>
             </div>
         </div>
@@ -991,12 +994,7 @@ const PricingApp = () => {
                     </table>
                 </div>
                 <div className="mt-4 flex justify-end">
-                    <button
-                        onClick={onClose}
-                        className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
-                    >
-                        Close
-                    </button>
+                    <button onClick={onClose} className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">Close</button>
                 </div>
             </div>
         </div>
@@ -1005,12 +1003,7 @@ const PricingApp = () => {
 
   const GateModal = ({ gate, onSave, onClose }) => {
     const [formData, setFormData] = useState(gate || {
-      gate_name: '',
-      from_loc: '',
-      to_loc: '',
-      uom: '',
-      unit: '',
-      cost: ''
+      gate_name: '', from_loc: '', to_loc: '', uom: '', unit: '', cost: ''
     });
 
     return (
@@ -1020,90 +1013,43 @@ const PricingApp = () => {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-semibold mb-1">Gate Name</label>
-              <input
-                type="text"
-                value={formData.gate_name ?? ''}
-                onChange={(e) => setFormData({...formData, gate_name: e.target.value})}
-                className="w-full p-2 border rounded"
-              />
+              <input type="text" value={formData.gate_name ?? ''} onChange={(e) => setFormData({...formData, gate_name: e.target.value})} className="w-full p-2 border rounded" />
             </div>
-            
             <div>
               <label className="block text-sm font-semibold mb-1">From</label>
-              <select
-                value={formData.from_loc ?? ''}
-                onChange={(e) => setFormData({...formData, from_loc: e.target.value})}
-                className="w-full p-2 border rounded"
-              >
+              <select value={formData.from_loc ?? ''} onChange={(e) => setFormData({...formData, from_loc: e.target.value})} className="w-full p-2 border rounded">
                   <option value="">-- Select --</option>
-                  {refLocations.map((loc, i) => (
-                      <option key={i} value={loc}>{loc}</option>
-                  ))}
+                  {refLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}
               </select>
             </div>
-
             <div>
               <label className="block text-sm font-semibold mb-1">To</label>
-              <select
-                value={formData.to_loc ?? ''}
-                onChange={(e) => setFormData({...formData, to_loc: e.target.value})}
-                className="w-full p-2 border rounded"
-              >
+              <select value={formData.to_loc ?? ''} onChange={(e) => setFormData({...formData, to_loc: e.target.value})} className="w-full p-2 border rounded">
                   <option value="">-- Select --</option>
-                  {refLocations.map((loc, i) => (
-                      <option key={i} value={loc}>{loc}</option>
-                  ))}
+                  {refLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}
               </select>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold mb-1">UOM</label>
-                  <select
-                    value={formData.uom ?? ''}
-                    onChange={(e) => setFormData({...formData, uom: e.target.value})}
-                    className="w-full p-2 border rounded"
-                  >
+                  <select value={formData.uom ?? ''} onChange={(e) => setFormData({...formData, uom: e.target.value})} className="w-full p-2 border rounded">
                       <option value="">-- Select --</option>
-                      {refUOMs.map((u, i) => (
-                          <option key={i} value={u}>{u}</option>
-                      ))}
+                      {refUOMs.map((u, i) => (<option key={i} value={u}>{u}</option>))}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold mb-1">Unit</label>
-                  <input
-                    type="number"
-                    value={formData.unit ?? ''}
-                    onChange={(e) => setFormData({...formData, unit: e.target.value})}
-                    className="w-full p-2 border rounded"
-                    placeholder="1"
-                  />
+                  <input type="number" value={formData.unit ?? ''} onChange={(e) => setFormData({...formData, unit: e.target.value})} className="w-full p-2 border rounded" placeholder="1" />
                 </div>
             </div>
             <div>
               <label className="block text-sm font-semibold mb-1">Cost</label>
-              <input
-                type="number"
-                value={formData.cost ?? ''}
-                onChange={(e) => setFormData({...formData, cost: e.target.value})}
-                className="w-full p-2 border rounded"
-              />
+              <input type="number" value={formData.cost ?? ''} onChange={(e) => setFormData({...formData, cost: e.target.value})} className="w-full p-2 border rounded" />
             </div>
           </div>
           <div className="flex gap-2 mt-6">
-            <button
-              onClick={() => onSave(formData)}
-              className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-            >
-              Save
-            </button>
-            <button
-              onClick={onClose}
-              className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400"
-            >
-              Cancel
-            </button>
+            <button onClick={() => onSave(formData)} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Save</button>
+            <button onClick={onClose} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
           </div>
         </div>
       </div>
@@ -1112,14 +1058,8 @@ const PricingApp = () => {
 
   const ItemModal = ({ item, onSave, onClose }) => {
     const [formData, setFormData] = useState(item || {
-      item_code: '',
-      item_name: '',
-      principal: '',
-      brand: '',
-      uom: '', 
-      transportation_cost: '' 
+      item_code: '', item_name: '', principal: '', brand: '', uom: '', transportation_cost: '' 
     });
-
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
     const [isValidating, setIsValidating] = useState(false);
@@ -1127,67 +1067,38 @@ const PricingApp = () => {
 
     const handleSearch = async (query) => {
         setSearchTerm(query);
-        if (query.length < 2) {
-            setSearchResults([]);
-            return;
-        }
+        if (query.length < 2) { setSearchResults([]); return; }
         setIsSearching(true);
         try {
             const response = await authFetch(`${API_URL}/dwbi/items/search?q=${encodeURIComponent(query)}`);
-            if (response.ok) {
-                const data = await response.json();
-                setSearchResults(data.items);
-            }
-        } catch (error) {
-            console.error("Search failed", error);
-        } finally {
-            setIsSearching(false);
-        }
+            if (response.ok) { const data = await response.json(); setSearchResults(data.items); }
+        } catch (error) { console.error("Search failed", error); } finally { setIsSearching(false); }
     };
 
     const selectItem = (selectedItem) => {
         setFormData({
-            ...formData,
-            item_code: selectedItem.item_code,
-            item_name: selectedItem.item_name,
-            principal: selectedItem.principal || '',
-            brand: selectedItem.brand || ''
+            ...formData, item_code: selectedItem.item_code, item_name: selectedItem.item_name,
+            principal: selectedItem.principal || '', brand: selectedItem.brand || ''
         });
         setSearchTerm(selectedItem.item_code);
         setSearchResults([]); 
     };
 
     const handleSaveButton = async () => {
-        if (!searchTerm) {
-            showNotification("Item Code is required", "error");
-            return;
-        }
-        
+        if (!searchTerm) { showNotification("Item Code is required", "error"); return; }
         setIsValidating(true);
         try {
             const response = await authFetch(`${API_URL}/dwbi/items/validate?code=${encodeURIComponent(searchTerm)}`);
             if (response.ok) {
                 const result = await response.json();
                 if (result.valid) {
-                    const finalData = {
-                        ...formData,
-                        item_code: result.item.item_code, 
-                        item_name: result.item.item_name,
-                        principal: result.item.principal,
-                        brand: result.item.brand
-                    };
-                    onSave(finalData);
-                } else {
-                    showNotification("Invalid Item Code. Please select a valid item from the list.", "error");
-                }
-            } else {
-                showNotification("Validation check failed.", "error");
-            }
-        } catch (error) {
-            showNotification("Network error during validation", "error");
-        } finally {
-            setIsValidating(false);
-        }
+                    onSave({
+                        ...formData, item_code: result.item.item_code, item_name: result.item.item_name,
+                        principal: result.item.principal, brand: result.item.brand
+                    });
+                } else { showNotification("Invalid Item Code.", "error"); }
+            } else { showNotification("Validation check failed.", "error"); }
+        } catch (error) { showNotification("Network error", "error"); } finally { setIsValidating(false); }
     };
 
     return (
@@ -1195,30 +1106,16 @@ const PricingApp = () => {
         <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-screen overflow-y-auto">
           <h2 className="text-2xl font-bold mb-4">{item ? 'Edit Item' : 'Add New Item'}</h2>
           <div className="grid grid-cols-2 gap-4">
-            
             <div className="relative">
               <label className="block text-sm font-semibold mb-1">Item Code (Search)</label>
               <div className="relative">
-                <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => handleSearch(e.target.value)}
-                    className="w-full p-2 border rounded pr-8"
-                    placeholder="Type code or name..."
-                />
-                <div className="absolute right-2 top-2 text-gray-400">
-                    <Search size={18} />
-                </div>
+                <input type="text" value={searchTerm} onChange={(e) => handleSearch(e.target.value)} className="w-full p-2 border rounded pr-8" placeholder="Type code or name..." />
+                <div className="absolute right-2 top-2 text-gray-400"><Search size={18} /></div>
               </div>
-              
               {searchResults.length > 0 && (
                   <div className="absolute z-10 w-full bg-white border rounded shadow-lg max-h-48 overflow-y-auto mt-1">
                       {searchResults.map((res, idx) => (
-                          <div 
-                            key={idx} 
-                            onClick={() => selectItem(res)}
-                            className="p-2 hover:bg-blue-50 cursor-pointer border-b last:border-0 text-sm"
-                          >
+                          <div key={idx} onClick={() => selectItem(res)} className="p-2 hover:bg-blue-50 cursor-pointer border-b last:border-0 text-sm">
                               <div className="font-bold text-gray-800">{res.item_code}</div>
                               <div className="text-gray-600 truncate">{res.item_name}</div>
                           </div>
@@ -1226,81 +1123,21 @@ const PricingApp = () => {
                   </div>
               )}
             </div>
-
-            <div>
-              <label className="block text-sm font-semibold mb-1">Item Name</label>
-              <input
-                type="text"
-                value={formData.item_name ?? ''}
-                onChange={(e) => setFormData({...formData, item_name: e.target.value})}
-                className="w-full p-2 border rounded bg-gray-50"
-                readOnly
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold mb-1">Principal</label>
-              <input
-                type="text"
-                value={formData.principal ?? ''}
-                onChange={(e) => setFormData({...formData, principal: e.target.value})}
-                className="w-full p-2 border rounded bg-gray-50"
-                placeholder="Auto-filled"
-                readOnly
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold mb-1">Brand</label>
-              <input
-                type="text"
-                value={formData.brand ?? ''}
-                onChange={(e) => setFormData({...formData, brand: e.target.value})}
-                className="w-full p-2 border rounded bg-gray-50"
-                placeholder="Auto-filled"
-                readOnly
-              />
-            </div>
-            
+            <div><label className="block text-sm font-semibold mb-1">Item Name</label><input type="text" value={formData.item_name ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
+            <div><label className="block text-sm font-semibold mb-1">Principal</label><input type="text" value={formData.principal ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
+            <div><label className="block text-sm font-semibold mb-1">Brand</label><input type="text" value={formData.brand ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
             <div>
               <label className="block text-sm font-semibold mb-1">UOM</label>
-              <select
-                value={formData.uom ?? ''}
-                onChange={(e) => setFormData({...formData, uom: e.target.value})}
-                className="w-full p-2 border rounded"
-              >
+              <select value={formData.uom ?? ''} onChange={(e) => setFormData({...formData, uom: e.target.value})} className="w-full p-2 border rounded">
                   <option value="">-- Select --</option>
-                  {refUOMs.map((u, i) => (
-                      <option key={i} value={u}>{u}</option>
-                  ))}
+                  {refUOMs.map((u, i) => (<option key={i} value={u}>{u}</option>))}
               </select>
             </div>
-
-            <div>
-              <label className="block text-sm font-semibold mb-1">Transportation Cost</label>
-              <input
-                type="number" 
-                step="any"    
-                value={formData.transportation_cost ?? ''}
-                onChange={(e) => setFormData({...formData, transportation_cost: e.target.value})}
-                className="w-full p-2 border rounded"
-                placeholder="Enter cost"
-              />
-            </div>
+            <div><label className="block text-sm font-semibold mb-1">Transportation Cost</label><input type="number" step="any" value={formData.transportation_cost ?? ''} onChange={(e) => setFormData({...formData, transportation_cost: e.target.value})} className="w-full p-2 border rounded" /></div>
           </div>
           <div className="flex gap-2 mt-6">
-            <button
-              onClick={handleSaveButton}
-              disabled={isValidating}
-              className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:bg-blue-400"
-            >
-              {isValidating ? "Validating..." : "Save"}
-            </button>
-            <button
-              onClick={onClose}
-              disabled={isValidating}
-              className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400"
-            >
-              Cancel
-            </button>
+            <button onClick={handleSaveButton} disabled={isValidating} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:bg-blue-400">{isValidating ? "Validating..." : "Save"}</button>
+            <button onClick={onClose} disabled={isValidating} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
           </div>
         </div>
       </div>
@@ -1308,44 +1145,17 @@ const PricingApp = () => {
   };
 
   const UserModal = ({ user, onSave, onClose }) => {
-    const [formData, setFormData] = useState(user ? { ...user, password: '' } : {
-        username: '',
-        password: '',
-        role: 'logistic' 
-    });
-
+    const [formData, setFormData] = useState(user ? { ...user, password: '' } : { username: '', password: '', role: 'logistic' });
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
                 <h2 className="text-2xl font-bold mb-4">{user ? 'Edit User' : 'Add New User'}</h2>
                 <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-semibold mb-1">Username</label>
-                        <input
-                            type="text"
-                            value={formData.username}
-                            onChange={(e) => setFormData({...formData, username: e.target.value})}
-                            className="w-full p-2 border rounded"
-                            disabled={!!user} 
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold mb-1">Password</label>
-                        <input
-                            type="password"
-                            value={formData.password}
-                            onChange={(e) => setFormData({...formData, password: e.target.value})}
-                            className="w-full p-2 border rounded"
-                            placeholder={user ? "Leave blank to keep existing" : "Required"}
-                        />
-                    </div>
+                    <div><label className="block text-sm font-semibold mb-1">Username</label><input type="text" value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} className="w-full p-2 border rounded" disabled={!!user} /></div>
+                    <div><label className="block text-sm font-semibold mb-1">Password</label><input type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full p-2 border rounded" placeholder={user ? "Leave blank to keep" : "Required"} /></div>
                     <div>
                         <label className="block text-sm font-semibold mb-1">Role</label>
-                        <select
-                            value={formData.role}
-                            onChange={(e) => setFormData({...formData, role: e.target.value})}
-                            className="w-full p-2 border rounded"
-                        >
+                        <select value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})} className="w-full p-2 border rounded">
                             <option value="logistic">Logistic (Read Only)</option>
                             <option value="account">Account (Manage Gates/Items)</option>
                             <option value="admin">Admin (Full Access)</option>
@@ -1353,19 +1163,8 @@ const PricingApp = () => {
                     </div>
                 </div>
                 <div className="flex gap-2 mt-6">
-                    <button
-                        onClick={() => onSave(formData)}
-                        className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-                        disabled={!user && !formData.password}
-                    >
-                        Save
-                    </button>
-                    <button
-                        onClick={onClose}
-                        className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400"
-                    >
-                        Cancel
-                    </button>
+                    <button onClick={() => onSave(formData)} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700" disabled={!user && !formData.password}>Save</button>
+                    <button onClick={onClose} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
                 </div>
             </div>
         </div>
@@ -1378,18 +1177,8 @@ const PricingApp = () => {
         <h2 className="text-xl font-bold mb-4">Confirm Action</h2>
         <p className="text-gray-700 mb-6">{message}</p>
         <div className="flex gap-2">
-          <button
-            onClick={onConfirm}
-            className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700"
-          >
-            Delete
-          </button>
-          <button
-            onClick={onCancel}
-            className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400"
-          >
-            Cancel
-          </button>
+          <button onClick={onConfirm} className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700">Delete</button>
+          <button onClick={onCancel} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
         </div>
       </div>
     </div>
@@ -1399,90 +1188,26 @@ const PricingApp = () => {
     <div className="bg-white shadow-md mb-6">
       <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
         <div className="flex gap-4">
-          <button
-            onClick={() => setCurrentPage('calculator')}
-            className={`flex items-center gap-2 px-4 py-2 rounded transition ${
-              currentPage === 'calculator' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            <Calculator size={20} />
-            Calculator
-          </button>
-          <button
-            onClick={() => setCurrentPage('gates')}
-            className={`flex items-center gap-2 px-4 py-2 rounded transition ${
-              currentPage === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            <Database size={20} />
-            Gates
-          </button>
-          <button
-            onClick={() => setCurrentPage('items')}
-            className={`flex items-center gap-2 px-4 py-2 rounded transition ${
-              currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            <FileText size={20} />
-            Items
-          </button>
-          <button
-            onClick={() => setCurrentPage('history')}
-            className={`flex items-center gap-2 px-4 py-2 rounded transition ${
-              currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            <History size={20} />
-            History
-          </button>
-          {['admin', 'account'].includes(userRole) && (
-              <button
-                onClick={() => setCurrentPage('references')}
-                className={`flex items-center gap-2 px-4 py-2 rounded transition ${
-                  currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <ListIcon size={20} />
-                References
-              </button>
-          )}
-          {userRole === 'admin' && (
-              <button
-                onClick={() => setCurrentPage('users')}
-                className={`flex items-center gap-2 px-4 py-2 rounded transition ${
-                  currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <Users size={20} />
-                Users
-              </button>
-          )}
+          <button onClick={() => setCurrentPage('calculator')} className={`flex items-center gap-2 px-4 py-2 rounded transition ${currentPage === 'calculator' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calculator size={20} /> Calculator</button>
+          <button onClick={() => setCurrentPage('gates')} className={`flex items-center gap-2 px-4 py-2 rounded transition ${currentPage === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={20} /> Gates</button>
+          <button onClick={() => setCurrentPage('items')} className={`flex items-center gap-2 px-4 py-2 rounded transition ${currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><FileText size={20} /> Items</button>
+          <button onClick={() => setCurrentPage('history')} className={`flex items-center gap-2 px-4 py-2 rounded transition ${currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><History size={20} /> History</button>
+          {['admin', 'account'].includes(userRole) && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-4 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={20} /> References</button>)}
+          {userRole === 'admin' && (<button onClick={() => setCurrentPage('users')} className={`flex items-center gap-2 px-4 py-2 rounded transition ${currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Users size={20} /> Users</button>)}
         </div>
-        
         <div className="flex items-center gap-4">
             <div className="text-right">
                 <p className="text-xs text-gray-500">Logged in as</p>
-                <div className="flex items-center gap-1">
-                    <User size={14} className="text-blue-600"/>
-                    <p className="font-bold text-sm text-blue-600 capitalize">{username} ({userRole})</p>
-                </div>
+                <div className="flex items-center gap-1"><User size={14} className="text-blue-600"/><p className="font-bold text-sm text-blue-600 capitalize">{username} ({userRole})</p></div>
             </div>
-            <button 
-                onClick={handleLogout}
-                className="text-gray-500 hover:text-red-500 transition p-2 hover:bg-red-50 rounded-full"
-                title="Logout"
-            >
-                <LogOut size={20} />
-            </button>
+            <button onClick={handleLogout} className="text-gray-500 hover:text-red-500 transition p-2 hover:bg-red-50 rounded-full" title="Logout"><LogOut size={20} /></button>
         </div>
       </div>
     </div>
   );
 
   // --- Auth Check ---
-  if (!token) {
-    return <LoginScreen onLogin={handleLogin} />;
-  }
+  if (!token) return <LoginScreen onLogin={handleLogin} />;
 
   // --- Views ---
 
@@ -1490,186 +1215,44 @@ const PricingApp = () => {
       return (
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-6xl mx-auto">
-                {notification && (
-                    <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${
-                    notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-                    } text-white z-50`}>
-                    {notification.message}
-                    </div>
-                )}
+                {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white z-50`}>{notification.message}</div>}
                 {renderNavigation()}
                 <div className="bg-white rounded-lg shadow-md p-6">
                     <div className="flex items-center justify-between mb-6">
                         <h1 className="text-3xl font-bold text-gray-800">User Management</h1>
-                        <button
-                            onClick={() => {
-                                setEditingUser(null);
-                                setShowUserModal(true);
-                            }}
-                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-                        >
-                            <Plus size={20} />
-                            Add User
-                        </button>
+                        <button onClick={() => { setEditingUser(null); setShowUserModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add User</button>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full border-collapse border">
-                            <thead className="bg-gray-100">
-                                <tr>
-                                    <th className="border p-3 text-left">Username</th>
-                                    <th className="border p-3 text-left">Role</th>
-                                    <th className="border p-3 text-center">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {usersList.map((u, index) => (
-                                    <tr key={index} className="hover:bg-gray-50">
-                                        <td className="border p-3 font-semibold text-gray-700">{u.username}</td>
-                                        <td className="border p-3">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
-                                                u.role === 'admin' ? 'bg-red-100 text-red-700' :
-                                                u.role === 'account' ? 'bg-blue-100 text-blue-700' :
-                                                'bg-gray-100 text-gray-700'
-                                            }`}>
-                                                {u.role}
-                                            </span>
-                                        </td>
-                                        <td className="border p-3 text-center">
-                                            <div className="flex justify-center gap-2">
-                                                <button
-                                                    onClick={() => {
-                                                        setEditingUser(u);
-                                                        setShowUserModal(true);
-                                                    }}
-                                                    className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
-                                                >
-                                                    <Edit2 size={16} />
-                                                </button>
-                                                {u.username !== username && (
-                                                    <button
-                                                        onClick={() => deleteUser(u.username)}
-                                                        className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
+                            <thead className="bg-gray-100"><tr><th className="border p-3 text-left">Username</th><th className="border p-3 text-left">Role</th><th className="border p-3 text-center">Actions</th></tr></thead>
+                            <tbody>{usersList.map((u, index) => (<tr key={index} className="hover:bg-gray-50"><td className="border p-3 font-semibold text-gray-700">{u.username}</td><td className="border p-3"><span className={`px-2 py-1 rounded text-xs font-bold uppercase ${u.role === 'admin' ? 'bg-red-100 text-red-700' : u.role === 'account' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>{u.role}</span></td><td className="border p-3 text-center"><div className="flex justify-center gap-2"><button onClick={() => { setEditingUser(u); setShowUserModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>{u.username !== username && (<button onClick={() => deleteUser(u.username)} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"><Trash2 size={16} /></button>)}</div></td></tr>))}</tbody>
                         </table>
                     </div>
                 </div>
             </div>
-            {showUserModal && (
-                <UserModal
-                    user={editingUser}
-                    onSave={saveUser}
-                    onClose={() => {
-                        setShowUserModal(false);
-                        setEditingUser(null);
-                    }}
-                />
-            )}
-            {confirmDialog && (
-                <ConfirmDialog
-                    message={confirmDialog.message}
-                    onConfirm={confirmDialog.onConfirm}
-                    onCancel={confirmDialog.onCancel}
-                />
-            )}
+            {showUserModal && <UserModal user={editingUser} onSave={saveUser} onClose={() => { setShowUserModal(false); setEditingUser(null); }} />}
+            {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} />}
         </div>
       );
   }
 
-  // --- Reference Management View ---
   if (currentPage === 'references' && ['admin', 'account'].includes(userRole)) {
       return (
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-6xl mx-auto">
-                {notification && (
-                    <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${
-                    notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-                    } text-white z-50`}>
-                    {notification.message}
-                    </div>
-                )}
+                {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white z-50`}>{notification.message}</div>}
                 {renderNavigation()}
-                
                 <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Reference Data</h1>
-                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Locations Panel */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-blue-700">Locations (From/To)</h2>
-                        <div className="flex gap-2 mb-4">
-                            <input 
-                                type="text" 
-                                placeholder="New Location (e.g., NPT)" 
-                                className="border p-2 rounded flex-1"
-                                id="new-loc"
-                            />
-                            <button 
-                                onClick={() => {
-                                    const val = document.getElementById('new-loc').value;
-                                    addReference('locations', val);
-                                    document.getElementById('new-loc').value = '';
-                                }}
-                                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                            >
-                                Add
-                            </button>
-                        </div>
-                        <div className="border rounded max-h-96 overflow-y-auto">
-                            {refLocations.map((loc, i) => (
-                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
-                                    <span>{loc}</span>
-                                    <button 
-                                        onClick={() => deleteReference('locations', loc)}
-                                        className="text-red-500 hover:text-red-700"
-                                    >
-                                        <X size={18} />
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
+                        <div className="flex gap-2 mb-4"><input type="text" placeholder="New Location (e.g., NPT)" className="border p-2 rounded flex-1" id="new-loc" /><button onClick={() => { const val = document.getElementById('new-loc').value; addReference('locations', val); document.getElementById('new-loc').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div>
+                        <div className="border rounded max-h-96 overflow-y-auto">{refLocations.map((loc, i) => (<div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50"><span>{loc}</span><button onClick={() => deleteReference('locations', loc)} className="text-red-500 hover:text-red-700"><X size={18} /></button></div>))}</div>
                     </div>
-
-                    {/* UOM Panel */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-purple-700">Units of Measure (UOM)</h2>
-                        <div className="flex gap-2 mb-4">
-                            <input 
-                                type="text" 
-                                placeholder="New UOM (e.g., Box)" 
-                                className="border p-2 rounded flex-1"
-                                id="new-uom"
-                            />
-                            <button 
-                                onClick={() => {
-                                    const val = document.getElementById('new-uom').value;
-                                    addReference('uoms', val);
-                                    document.getElementById('new-uom').value = '';
-                                }}
-                                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                            >
-                                Add
-                            </button>
-                        </div>
-                        <div className="border rounded max-h-96 overflow-y-auto">
-                            {refUOMs.map((u, i) => (
-                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
-                                    <span>{u}</span>
-                                    <button 
-                                        onClick={() => deleteReference('uoms', u)}
-                                        className="text-red-500 hover:text-red-700"
-                                    >
-                                        <X size={18} />
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
+                        <div className="flex gap-2 mb-4"><input type="text" placeholder="New UOM (e.g., Box)" className="border p-2 rounded flex-1" id="new-uom" /><button onClick={() => { const val = document.getElementById('new-uom').value; addReference('uoms', val); document.getElementById('new-uom').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div>
+                        <div className="border rounded max-h-96 overflow-y-auto">{refUOMs.map((u, i) => (<div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50"><span>{u}</span><button onClick={() => deleteReference('uoms', u)} className="text-red-500 hover:text-red-700"><X size={18} /></button></div>))}</div>
                     </div>
                 </div>
             </div>
@@ -1682,74 +1265,14 @@ const PricingApp = () => {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
-          {notification && (
-            <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${
-              notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-            } text-white z-50`}>
-              {notification.message}
-            </div>
-          )}
+          {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white z-50`}>{notification.message}</div>}
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h1 className="text-3xl font-bold text-gray-800 mb-6">Calculation History</h1>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse border">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="border p-3 text-left">ID</th> {/* Added ID Header */}
-                    <th className="border p-3 text-left">Date</th>
-                    <th className="border p-3 text-left">Route</th>
-                    <th className="border p-3 text-left">Pick IDs</th>
-                    <th className="border p-3 text-right">Total Cost (MMK)</th>
-                    <th className="border p-3 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {historyData.length === 0 ? (
-                    <tr><td colSpan="6" className="text-center p-4 text-gray-500">No saved calculations found.</td></tr>
-                  ) : (
-                    historyData.map((record) => (
-                      <tr key={record.id} className="hover:bg-gray-50">
-                        <td className="border p-3 text-sm text-gray-600">{record.id}</td> {/* Added ID Cell */}
-                        <td className="border p-3 text-sm text-gray-600">{record.created_at}</td>
-                        <td className="border p-3">
-                          <span className="font-bold text-gray-700">{record.gate_name}</span> <br/>
-                          <span className="text-xs text-gray-500">{record.from_loc} &rarr; {record.to_loc}</span>
-                        </td>
-                        <td className="border p-3 text-sm">
-                          {record.pick_ids.length} ID(s): {record.pick_ids.join(', ')}
-                        </td>
-                        <td className="border p-3 text-right font-bold text-blue-600">
-                          {formatNumber(record.final_total_cost)}
-                        </td>
-                        <td className="border p-3 text-center">
-                          <div className="flex justify-center gap-2">
-                            <button
-                              onClick={() => handleDownloadHistoryExcel(record)}
-                              className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1"
-                            >
-                                <FileDown size={16} />
-                            </button>
-                            <button
-                              onClick={() => loadSavedCalculation(record)}
-                              className="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm font-semibold"
-                            >
-                              Load
-                            </button>
-                            {userRole === 'admin' && (
-                                <button
-                                    onClick={() => deleteHistory(record.id)}
-                                    className="p-1 text-red-500 hover:bg-red-50 rounded"
-                                >
-                                    <Trash2 size={18} />
-                                </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
+                <thead className="bg-gray-100"><tr><th className="border p-3 text-left">ID</th><th className="border p-3 text-left">Date</th><th className="border p-3 text-left">Route</th><th className="border p-3 text-left">Doc Nums</th><th className="border p-3 text-right">Total Cost (MMK)</th><th className="border p-3 text-center">Actions</th></tr></thead>
+                <tbody>{historyData.length === 0 ? (<tr><td colSpan="6" className="text-center p-4 text-gray-500">No saved calculations found.</td></tr>) : (historyData.map((record) => (<tr key={record.id} className="hover:bg-gray-50"><td className="border p-3 text-sm text-gray-600">{record.id}</td><td className="border p-3 text-sm text-gray-600">{record.created_at}</td><td className="border p-3"><span className="font-bold text-gray-700">{record.gate_name}</span> <br/><span className="text-xs text-gray-500">{record.from_loc} &rarr; {record.to_loc}</span></td><td className="border p-3 text-sm">{record.doc_nums.length} Doc(s): {record.doc_nums.join(', ')}</td><td className="border p-3 text-right font-bold text-blue-600">{formatNumber(record.final_total_cost)}</td><td className="border p-3 text-center"><div className="flex justify-center gap-2"><button onClick={() => handleDownloadHistoryExcel(record)} className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1"><FileDown size={16} /></button><button onClick={() => loadSavedCalculation(record)} className="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm font-semibold">Load</button>{userRole === 'admin' && (<button onClick={() => deleteHistory(record.id)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 size={18} /></button>)}</div></td></tr>)))}</tbody>
               </table>
             </div>
           </div>
@@ -1762,121 +1285,26 @@ const PricingApp = () => {
   if (currentPage === 'gates') {
     const canEdit = ['account', 'admin'].includes(userRole);
     const canDelete = userRole === 'admin'; 
-
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
-          {notification && (
-            <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${
-              notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-            } text-white z-50`}>
-              {notification.message}
-            </div>
-          )}
+          {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white z-50`}>{notification.message}</div>}
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-3xl font-bold text-gray-800">Transportation Cost by Gate</h1>
-              {canEdit && (
-                <button
-                  onClick={() => setShowAddGateModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-                >
-                  <Plus size={20} />
-                  Add Gate
-                </button>
-              )}
+              {canEdit && (<button onClick={() => setShowAddGateModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Gate</button>)}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse border">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="border p-3 text-left">Gate Name</th>
-                    <th className="border p-3 text-left">From</th>
-                    <th className="border p-3 text-left">To</th>
-                    <th className="border p-3 text-left">UOM</th>
-                    <th className="border p-3 text-left">Unit</th>
-                    <th className="border p-3 text-left">Cost</th>
-                    <th className="border p-3 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {gateData.map((gate, index) => (
-                    <tr key={index}>
-                      <td className="border p-3">{gate.gate_name}</td>
-                      <td className="border p-3">{gate.from_loc}</td>
-                      <td className="border p-3">{gate.to_loc}</td>
-                      <td className="border p-3">{gate.uom || '-'}</td>
-                      <td className="border p-3">{gate.unit || '-'}</td>
-                      <td className="border p-3">{formatNumber(gate.cost)}</td>
-                      <td className="border p-3 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                            {/* UPDATED: Add History Button */}
-                            <button
-                                onClick={() => fetchGateLogs(gate)}
-                                className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
-                                title="View Change Logs"
-                            >
-                                <Clock size={16} />
-                            </button>
-
-                            {canEdit ? (
-                                <>
-                                    <button
-                                        onClick={() => {
-                                        setOriginalGateName(gate.gate_name);
-                                        setEditingGate(gate);
-                                        setShowAddGateModal(true);
-                                        }}
-                                        className="p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                                    >
-                                        <Edit2 size={16} />
-                                    </button>
-                                    {canDelete && (
-                                        <button
-                                            onClick={() => deleteGate(gate.gate_id)}
-                                            className="p-2 bg-red-500 text-white rounded hover:bg-red-600"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    )}
-                                </>
-                            ) : (
-                                <span className="text-gray-400 text-sm ml-2">Read Only</span>
-                            )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
+                <thead className="bg-gray-100"><tr><th className="border p-3 text-left">Gate Name</th><th className="border p-3 text-left">From</th><th className="border p-3 text-left">To</th><th className="border p-3 text-left">UOM</th><th className="border p-3 text-left">Unit</th><th className="border p-3 text-left">Cost</th><th className="border p-3 text-center">Actions</th></tr></thead>
+                <tbody>{gateData.map((gate, index) => (<tr key={index}><td className="border p-3">{gate.gate_name}</td><td className="border p-3">{gate.from_loc}</td><td className="border p-3">{gate.to_loc}</td><td className="border p-3">{gate.uom || '-'}</td><td className="border p-3">{gate.unit || '-'}</td><td className="border p-3">{formatNumber(gate.cost)}</td><td className="border p-3 text-center"><div className="flex items-center justify-center gap-2"><button onClick={() => fetchGateLogs(gate)} className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={16} /></button>{canEdit ? (<><button onClick={() => { setOriginalGateName(gate.gate_name); setEditingGate(gate); setShowAddGateModal(true); }} className="p-2 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={16} /></button>{canDelete && (<button onClick={() => deleteGate(gate.gate_id)} className="p-2 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={16} /></button>)}</>) : (<span className="text-gray-400 text-sm ml-2">Read Only</span>)}</div></td></tr>))}</tbody>
               </table>
             </div>
           </div>
-          {showAddGateModal && (
-            <GateModal
-              gate={editingGate}
-              onSave={saveGate}
-              onClose={() => {
-                setShowAddGateModal(false);
-                setEditingGate(null);
-                setOriginalGateName(null);
-              }}
-            />
-          )}
-          {showLogModal && (
-              <GateLogModal 
-                logs={logsData}
-                gateName={currentLogGateName}
-                onClose={() => setShowLogModal(false)}
-              />
-          )}
-          {confirmDialog && (
-            <ConfirmDialog
-              message={confirmDialog.message}
-              onConfirm={confirmDialog.onConfirm}
-              onCancel={confirmDialog.onCancel}
-            />
-          )}
+          {showAddGateModal && <GateModal gate={editingGate} onSave={saveGate} onClose={() => { setShowAddGateModal(false); setEditingGate(null); setOriginalGateName(null); }} />}
+          {showLogModal && <GateLogModal logs={logsData} gateName={currentLogGateName} onClose={() => setShowLogModal(false)} />}
+          {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} />}
         </div>
       </div>
     );
@@ -1886,8 +1314,6 @@ const PricingApp = () => {
   if (currentPage === 'items') {
     const canEdit = ['account', 'admin'].includes(userRole);
     const canDelete = userRole === 'admin'; 
-    
-    // Filter Logic
     const filteredItems = itemPricingData.filter(item => {
       const matchCode = (item.item_code || '').toLowerCase().includes(itemFilters.item_code.toLowerCase());
       const matchName = (item.item_name || '').toLowerCase().includes(itemFilters.item_name.toLowerCase());
@@ -1895,55 +1321,21 @@ const PricingApp = () => {
       const matchBrand = (item.brand || '').toLowerCase().includes(itemFilters.brand.toLowerCase());
       const matchUom = (item.uom || '').toLowerCase().includes(itemFilters.uom.toLowerCase());
       const matchCost = (String(item.transportation_cost) || '').toLowerCase().includes(itemFilters.transportation_cost.toLowerCase());
-      
       return matchCode && matchName && matchPrincipal && matchBrand && matchUom && matchCost;
     });
 
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
-          {notification && (
-            <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${
-              notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-            } text-white z-50`}>
-              {notification.message}
-            </div>
-          )}
+          {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white z-50`}>{notification.message}</div>}
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-3xl font-bold text-gray-800">Transportation Cost by Item</h1>
               <div className="flex gap-2">
                 {selectedGateForPricing && (
-                  <>
-                    <button
-                      onClick={handleExportExcel}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                    >
-                      <Download size={20} />
-                      Download Excel
-                    </button>
-                    {canEdit && (
-                        <>
-                            <label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer">
-                            <Upload size={20} />
-                            Upload Excel
-                            <input
-                                type="file"
-                                accept=".xlsx,.xls"
-                                onChange={handleImportExcel}
-                                className="hidden"
-                            />
-                            </label>
-                            <button
-                            onClick={() => setShowAddItemModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-                            >
-                            <Plus size={20} />
-                            Add Item
-                            </button>
-                        </>
-                    )}
+                  <><button onClick={handleExportExcel} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"><Download size={20} /> Download Excel</button>
+                    {canEdit && (<><label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer"><Upload size={20} /> Upload Excel <input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" /></label><button onClick={() => setShowAddItemModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Item</button></>)}
                   </>
                 )}
               </div>
@@ -1951,17 +1343,9 @@ const PricingApp = () => {
 
             <div className="mb-6">
               <label className="block text-sm font-semibold mb-2">Select Gate</label>
-              <select
-                value={selectedGateForPricing}
-                onChange={(e) => setSelectedGateForPricing(e.target.value)}
-                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
+              <select value={selectedGateForPricing} onChange={(e) => setSelectedGateForPricing(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
                 <option value="">-- Select a Gate --</option>
-                {gates.map((gate) => (
-                  <option key={gate.gate_id} value={gate.gate_id}>
-                    {gate.gate_name} ({gate.from_loc} &rarr; {gate.to_loc})
-                  </option>
-                ))}
+                {gates.map((gate) => (<option key={gate.gate_id} value={gate.gate_id}>{gate.gate_name} ({gate.from_loc} &rarr; {gate.to_loc})</option>))}
               </select>
             </div>
 
@@ -1970,151 +1354,36 @@ const PricingApp = () => {
                 <table className="w-full border-collapse border text-sm">
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="border p-2 text-left">
-                        <div>Item Code</div>
-                        <input 
-                            type="text" 
-                            placeholder="Filter..." 
-                            className="w-full mt-1 p-1 border rounded text-xs font-normal"
-                            value={itemFilters.item_code}
-                            onChange={(e) => setItemFilters({...itemFilters, item_code: e.target.value})}
-                        />
-                      </th>
-                      <th className="border p-2 text-left">
-                        <div>Item Name</div>
-                        <input 
-                            type="text" 
-                            placeholder="Filter..." 
-                            className="w-full mt-1 p-1 border rounded text-xs font-normal"
-                            value={itemFilters.item_name}
-                            onChange={(e) => setItemFilters({...itemFilters, item_name: e.target.value})}
-                        />
-                      </th>
-                      <th className="border p-2 text-left">
-                        <div>Principal</div>
-                        <input 
-                            type="text" 
-                            placeholder="Filter..." 
-                            className="w-full mt-1 p-1 border rounded text-xs font-normal"
-                            value={itemFilters.principal}
-                            onChange={(e) => setItemFilters({...itemFilters, principal: e.target.value})}
-                        />
-                      </th>
-                      <th className="border p-2 text-left">
-                        <div>Brand</div>
-                        <input 
-                            type="text" 
-                            placeholder="Filter..." 
-                            className="w-full mt-1 p-1 border rounded text-xs font-normal"
-                            value={itemFilters.brand}
-                            onChange={(e) => setItemFilters({...itemFilters, brand: e.target.value})}
-                        />
-                      </th>
-                      {/* Added UOM Filter */}
-                      <th className="border p-2 text-left">
-                        <div>UOM</div>
-                        <input 
-                            type="text" 
-                            placeholder="Filter..." 
-                            className="w-full mt-1 p-1 border rounded text-xs font-normal"
-                            value={itemFilters.uom}
-                            onChange={(e) => setItemFilters({...itemFilters, uom: e.target.value})}
-                        />
-                      </th>
-                      <th className="border p-2 text-left">
-                        <div>Transport Cost</div>
-                        <input 
-                            type="text" 
-                            placeholder="Filter..." 
-                            className="w-full mt-1 p-1 border rounded text-xs font-normal"
-                            value={itemFilters.transportation_cost}
-                            onChange={(e) => setItemFilters({...itemFilters, transportation_cost: e.target.value})}
-                        />
-                      </th>
+                      <th className="border p-2 text-left"><div>Item Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_code} onChange={(e) => setItemFilters({...itemFilters, item_code: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Item Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_name} onChange={(e) => setItemFilters({...itemFilters, item_name: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.principal} onChange={(e) => setItemFilters({...itemFilters, principal: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Brand</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.brand} onChange={(e) => setItemFilters({...itemFilters, brand: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>UOM</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.uom} onChange={(e) => setItemFilters({...itemFilters, uom: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Transport Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.transportation_cost} onChange={(e) => setItemFilters({...itemFilters, transportation_cost: e.target.value})} /></th>
                       <th className="border p-2 text-left">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredItems.map((item, index) => (
                       <tr key={index}>
-                        <td className="border p-2">{item.item_code}</td>
-                        <td className="border p-2">{item.item_name}</td>
-                        <td className="border p-2">{item.principal}</td>
-                        <td className="border p-2">{item.brand}</td>
-                        <td className="border p-2">{item.uom || '-'}</td>
-                        <td className="border p-2">{formatNumber(item.transportation_cost)}</td>
+                        <td className="border p-2">{item.item_code}</td><td className="border p-2">{item.item_name}</td><td className="border p-2">{item.principal}</td><td className="border p-2">{item.brand}</td><td className="border p-2">{item.uom || '-'}</td><td className="border p-2">{formatNumber(item.transportation_cost)}</td>
                         <td className="border p-2">
                           <div className="flex gap-2">
-                                <button
-                                    onClick={() => fetchItemLogs(item)}
-                                    className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
-                                    title="View Change Logs"
-                                >
-                                    <Clock size={14} />
-                                </button>
-                                {canEdit && (
-                                    <>
-                                        <button
-                                            onClick={() => {
-                                                setOriginalItemCode(item.item_code);
-                                                setEditingItem(item);
-                                                setShowAddItemModal(true);
-                                            }}
-                                            className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                                        >
-                                            <Edit2 size={14} />
-                                        </button>
-                                        {canDelete && (
-                                            <button
-                                                onClick={() => deleteItem(item.item_code)}
-                                                className="p-1 bg-red-500 text-white rounded hover:bg-red-600"
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
-                                        )}
-                                    </>
-                                )}
+                                <button onClick={() => fetchItemLogs(item)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
+                                {canEdit && (<><button onClick={() => { setOriginalItemCode(item.item_code); setEditingItem(item); setShowAddItemModal(true); }} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={14} /></button>{canDelete && (<button onClick={() => deleteItem(item.item_code)} className="p-1 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={14} /></button>)}</>)}
                           </div>
                         </td>
                       </tr>
                     ))}
-                    {filteredItems.length === 0 && (
-                        <tr>
-                            <td colSpan="7" className="text-center p-4 text-gray-500 italic">
-                                No items found matching your filters.
-                            </td>
-                        </tr>
-                    )}
+                    {filteredItems.length === 0 && (<tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No items found matching your filters.</td></tr>)}
                   </tbody>
                 </table>
               </div>
             )}
           </div>
-          {showAddItemModal && (
-            <ItemModal
-              item={editingItem}
-              onSave={saveItem}
-              onClose={() => {
-                setShowAddItemModal(false);
-                setEditingItem(null);
-                setOriginalItemCode(null);
-              }}
-            />
-          )}
-          {showItemLogModal && (
-              <ItemLogModal 
-                logs={itemLogsData}
-                itemName={currentLogItemName}
-                onClose={() => setShowItemLogModal(false)}
-              />
-          )}
-          {confirmDialog && (
-            <ConfirmDialog
-              message={confirmDialog.message}
-              onConfirm={confirmDialog.onConfirm}
-              onCancel={confirmDialog.onCancel}
-            />
-          )}
+          {showAddItemModal && <ItemModal item={editingItem} onSave={saveItem} onClose={() => { setShowAddItemModal(false); setEditingItem(null); setOriginalItemCode(null); }} />}
+          {showItemLogModal && <ItemLogModal logs={itemLogsData} itemName={currentLogItemName} onClose={() => setShowItemLogModal(false)} />}
+          {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} />}
         </div>
       </div>
     );
@@ -2127,43 +1396,21 @@ const PricingApp = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto">
-        {notification && (
-          <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${
-            notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-          } text-white z-50`}>
-            {notification.message}
-          </div>
-        )}
+        {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white z-50`}>{notification.message}</div>}
         {renderNavigation()}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h1 className="text-3xl font-bold text-gray-800 mb-6">Logistic Cost Calculator</h1>
-          
           <div className="bg-white rounded-lg border p-6 mb-6">
-            <h2 className="text-xl font-bold mb-4">Select Pick IDs</h2>
+            <h2 className="text-xl font-bold mb-4">Select Doc Nums (Transfer IDs)</h2>
             <div className="mb-4">
-               <select
-                onChange={(e) => handleAddPickId(e.target.value)}
-                value=""
-                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- Add a Pick ID --</option>
-                {pickIds
-                  .filter(id => !selectedPickIds.includes(id)) 
-                  .map((pickId) => (
-                    <option key={pickId} value={pickId}>{pickId}</option>
-                  ))}
+               <select onChange={(e) => handleAddDocNum(e.target.value)} value="" className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                <option value="">-- Add a Doc Num --</option>
+                {docNums.filter(id => !selectedDocNums.includes(id)).map((id) => (<option key={id} value={id}>{id}</option>))}
               </select>
             </div>
             <div className="flex flex-wrap gap-2">
-              {selectedPickIds.length === 0 && (
-                <p className="text-gray-500 text-sm italic">No Pick IDs selected</p>
-              )}
-              {selectedPickIds.map(id => (
-                <div key={id} className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full border border-blue-200">
-                  <span className="font-semibold">{id}</span>
-                  <button onClick={() => handleRemovePickId(id)} className="hover:text-red-600 transition"><X size={16} /></button>
-                </div>
-              ))}
+              {selectedDocNums.length === 0 && (<p className="text-gray-500 text-sm italic">No Doc Nums selected</p>)}
+              {selectedDocNums.map(id => (<div key={id} className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full border border-blue-200"><span className="font-semibold">{id}</span><button onClick={() => handleRemoveDocNum(id)} className="hover:text-red-600 transition"><X size={16} /></button></div>))}
             </div>
           </div>
           
@@ -2171,54 +1418,26 @@ const PricingApp = () => {
             <>
               <div className="bg-white rounded-lg border p-6 mb-6">
                 <h2 className="text-xl font-bold mb-4">Select From</h2>
-                <select
-                  value={selectedFrom}
-                  onChange={(e) => handleFromChange(e.target.value)}
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
+                <select value={selectedFrom} onChange={(e) => handleFromChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
                   <option value="">-- Select Origin --</option>
-                  {fromLocations.map((loc) => (
-                    <option key={loc} value={loc}>
-                      {loc}
-                    </option>
-                  ))}
+                  {fromLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}
                 </select>
               </div>
-
               {selectedFrom && (
                 <div className="bg-white rounded-lg border p-6 mb-6">
                   <h2 className="text-xl font-bold mb-4">Select To</h2>
-                  <select
-                    value={selectedTo}
-                    onChange={(e) => handleToChange(e.target.value)}
-                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
+                  <select value={selectedTo} onChange={(e) => handleToChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option value="">-- Select Destination --</option>
-                    {toLocations.map((loc) => (
-                      <option key={loc} value={loc}>
-                        {loc}
-                      </option>
-                    ))}
+                    {toLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}
                   </select>
                 </div>
               )}
-
               {selectedTo && (
                 <div className="bg-white rounded-lg border p-6 mb-6">
                   <h2 className="text-xl font-bold mb-4">Select Gate</h2>
-                  <select
-                    value={selectedGate}
-                    onChange={(e) => handleGateChange(e.target.value)}
-                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
+                  <select value={selectedGate} onChange={(e) => handleGateChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option value="">-- Select a Gate --</option>
-                    {gates
-                      .filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo)
-                      .map((gate) => (
-                        <option key={gate.gate_name} value={gate.gate_name}>
-                          {gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}
-                        </option>
-                      ))}
+                    {gates.filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo).map((gate) => (<option key={gate.gate_name} value={gate.gate_name}>{gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}</option>))}
                   </select>
                 </div>
               )}
@@ -2228,18 +1447,8 @@ const PricingApp = () => {
           {selectedGate && (
               <div className="bg-blue-50 rounded-lg border-2 border-blue-300 p-6 mb-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800">Calculation Type</h3>
-                  <p className="text-gray-600 mt-1">
-                    {calculationType === 'gate_pricing' ? 'Gate Pricing Calculation' : 
-                     calculationType === 'direct_pricing' ? 'Direct Pricing Calculation' : 
-                     'Unknown Type'}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm text-gray-600">Route</p>
-                  <p className="text-xl font-bold text-blue-600">{selectedFrom} &rarr; {selectedTo}</p>
-                </div>
+                <div><h3 className="text-lg font-semibold text-gray-800">Calculation Type</h3><p className="text-gray-600 mt-1">{calculationType === 'gate_pricing' ? 'Gate Pricing Calculation' : calculationType === 'direct_pricing' ? 'Direct Pricing Calculation' : 'Unknown Type'}</p></div>
+                <div className="text-right"><p className="text-sm text-gray-600">Route</p><p className="text-xl font-bold text-blue-600">{selectedFrom} &rarr; {selectedTo}</p></div>
               </div>
             </div>
           )}
@@ -2247,106 +1456,42 @@ const PricingApp = () => {
           {products.length > 0 && (
             <>
               <div className="bg-white rounded-lg border p-6 mb-6">
-                <h2 className="text-xl font-bold mb-4">
-                    {hasCalculated ? "Calculated Results" : "Product Details"}
-                </h2>
+                <h2 className="text-xl font-bold mb-4">{hasCalculated ? "Calculated Results" : "Product Details"}</h2>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse border">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="border p-2 text-left">Item Code</th>
-                        <th className="border p-2 text-left">Description</th>
-                        <th className="border p-2 text-left">Quantity</th>
-                        <th className="border p-2 text-left">Weight</th>
-                        {hasCalculated && (
-                            <th className="border p-2 text-left">Cost (MMK)</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tableData.map((product, index) => (
-                        <tr key={index}>
-                          <td className="border p-2">{product.code}</td>
-                          <td className="border p-2">{product.name}</td>
-                          <td className="border p-2">{product.quantity}</td>
-                          <td className="border p-2">{formatNumber(product.weight)}</td>
-                          {hasCalculated && (
-                            <td className="border p-2 font-semibold">
-                                {product.total_cost !== undefined ? formatNumber(product.total_cost) : '-'}
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
+                    <thead className="bg-gray-100"><tr><th className="border p-2 text-left">Item Code</th><th className="border p-2 text-left">Description</th><th className="border p-2 text-left">Quantity</th><th className="border p-2 text-left">Weight</th>{hasCalculated && (<th className="border p-2 text-left">Cost (MMK)</th>)}</tr></thead>
+                    <tbody>{tableData.map((product, index) => (<tr key={index}><td className="border p-2">{product.code}</td><td className="border p-2">{product.name}</td><td className="border p-2">{product.quantity}</td><td className="border p-2">{formatNumber(product.weight)}</td>{hasCalculated && (<td className="border p-2 font-semibold">{product.total_cost !== undefined ? formatNumber(product.total_cost) : '-'}</td>)}</tr>))}</tbody>
                   </table>
                 </div>
               </div>
               
               <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border-2 border-purple-300 p-6 mb-6">
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-semibold text-gray-700">Total Weight:</span>
-                  <span className="text-3xl font-bold text-purple-600">{formatNumber(totalWeight)}</span>
-                </div>
+                <div className="flex items-center justify-between"><span className="text-lg font-semibold text-gray-700">Total Weight:</span><span className="text-3xl font-bold text-purple-600">{formatNumber(totalWeight)}</span></div>
               </div>
               <div className="bg-white rounded-lg border p-6 mb-6">
-                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Total Cost (Manual Override)</label>
-                    <input
-                      type="number"
-                      value={manualTotalCost}
-                      onChange={(e) => setManualTotalCost(e.target.value)}
-                      placeholder="Enter base transport amount..."
-                      className="w-full p-3 border rounded-lg"
-                    />
+                    <input type="number" value={manualTotalCost} onChange={(e) => setManualTotalCost(e.target.value)} placeholder="Enter base transport amount..." className="w-full p-3 border rounded-lg" />
                     <p className="text-xs text-gray-500 mt-1">Overrides calculated item costs.</p>
                   </div>
-                  
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Additional Charges (Optional)</label>
-                    <input
-                      type="number"
-                      value={additionalCharges}
-                      onChange={(e) => setAdditionalCharges(e.target.value)}
-                      placeholder="e.g. Labor, Toll fees..."
-                      className="w-full p-3 border rounded-lg"
-                    />
+                    <input type="number" value={additionalCharges} onChange={(e) => setAdditionalCharges(e.target.value)} placeholder="e.g. Labor, Toll fees..." className="w-full p-3 border rounded-lg" />
                     <p className="text-xs text-gray-500 mt-1">Added to the final total.</p>
                   </div>
-
                   {estimatedTotalCost !== null && (manualTotalCost || additionalCharges) && (
                     <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col justify-center col-span-1 md:col-span-2">
                       <span className="text-sm text-gray-600">Standard Estimated Total Cost (Inc. Extras):</span>
-                      <span className="text-xl font-bold text-gray-700">
-                        {formatNumber(estimatedTotalCost)} MMK
-                      </span>
+                      <span className="text-xl font-bold text-gray-700">{formatNumber(estimatedTotalCost)} MMK</span>
                     </div>
                   )}
                 </div>
               </div>
-
                <div className="flex gap-4 mb-6">
-                  <button
-                    onClick={calculateCosts}
-                    disabled={isLoading}
-                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"
-                  >
-                    <Calculator size={20} />
-                    {isLoading ? 'Calculating...' : 'Calculate Costs'}
-                  </button>
-                  
-                  {calculatedTotalCost !== null && (
-                    <button
-                      onClick={handleSaveButtonClick}
-                      className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-                    >
-                      <Save size={20} />
-                      Save as New
-                    </button>
-                  )}
+                  <button onClick={calculateCosts} disabled={isLoading} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"><Calculator size={20} /> {isLoading ? 'Calculating...' : 'Calculate Costs'}</button>
+                  {calculatedTotalCost !== null && (<button onClick={handleSaveButtonClick} className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"><Save size={20} /> Save as New</button>)}
               </div>
-
               </>
             )}
 
@@ -2356,37 +1501,15 @@ const PricingApp = () => {
                    <div className="mt-4 p-4 bg-blue-50 rounded-lg">
                       <div className="flex flex-col gap-2 items-end">
                         {additionalCharges && (
-                          <>
-                            <div className="flex justify-between w-full md:w-1/3 text-gray-600">
-                              <span>Subtotal (Transport):</span>
-                              <span>{formatNumber(calculatedTotalCost - (parseFloat(additionalCharges) || 0))} MMK</span>
-                            </div>
-                            <div className="flex justify-between w-full md:w-1/3 text-gray-600">
-                              <span>Additional Charges:</span>
-                              <span>{formatNumber(additionalCharges)} MMK</span>
-                            </div>
-                            <div className="w-full md:w-1/3 border-b border-gray-300 my-1"></div>
-                          </>
+                          <><div className="flex justify-between w-full md:w-1/3 text-gray-600"><span>Subtotal (Transport):</span><span>{formatNumber(calculatedTotalCost - (parseFloat(additionalCharges) || 0))} MMK</span></div><div className="flex justify-between w-full md:w-1/3 text-gray-600"><span>Additional Charges:</span><span>{formatNumber(additionalCharges)} MMK</span></div><div className="w-full md:w-1/3 border-b border-gray-300 my-1"></div></>
                         )}
-                        <div className="flex justify-between w-full md:w-1/3 items-center">
-                          <span className="text-lg font-bold">Total Cost:</span>
-                          <span className="text-2xl font-bold text-blue-600">
-                            {formatNumber(calculatedTotalCost)} MMK
-                          </span>
-                        </div>
+                        <div className="flex justify-between w-full md:w-1/3 items-center"><span className="text-lg font-bold">Total Cost:</span><span className="text-2xl font-bold text-blue-600">{formatNumber(calculatedTotalCost)} MMK</span></div>
                       </div>
                     </div>
                 </div>
              )}
         </div>
-        
-        {confirmDialog && (
-            <ConfirmDialog
-              message={confirmDialog.message}
-              onConfirm={confirmDialog.onConfirm}
-              onCancel={confirmDialog.onCancel}
-            />
-        )}
+        {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} />}
       </div>
     </div>
   );
