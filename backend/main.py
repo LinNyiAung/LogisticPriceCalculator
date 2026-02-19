@@ -924,7 +924,7 @@ def download_history_excel(record_id: int):
         headers = [
             "No", "Claim Date", "Delivery Date", "SIN No", "Area", 
             "Code", "Name", "Principal", "Ctns", "Item", "Quantity", 
-            "Price", "Total Amount", "Ton", "Gate", "Month", "Year", 
+            "Price", "Total Amount", "Ton", "Gate", "Channel", "Month", "Year", 
             "Description for Account", "Description with cnts and price", 
             "Branch", "B-Dept", "B-Principal", "S-Dept", "S-Principal", "Calculation ID"
         ]
@@ -996,16 +996,17 @@ def download_history_excel(record_id: int):
             weight_cell.border = border
 
             ws.cell(row=row_num, column=15, value=record['gate_name']).border = border # Gate
-            ws.cell(row=row_num, column=16, value=claim_month).border = border # Month
-            ws.cell(row=row_num, column=17, value=claim_year).border = border # Year
-            ws.cell(row=row_num, column=18, value=b_desc).border = border # Description for Account
-            ws.cell(row=row_num, column=19, value=concat_desc).border = border # Description with cnts and price
-            ws.cell(row=row_num, column=20, value=record['to_loc']).border = border # Branch
-            ws.cell(row=row_num, column=21, value=item.get('b_dept', '')).border = border # B-Dept
-            ws.cell(row=row_num, column=22, value=item.get('b_principal', '')).border = border # B-Principal
-            ws.cell(row=row_num, column=23, value=item.get('s_dept', '')).border = border # S-Dept
-            ws.cell(row=row_num, column=24, value=item.get('s_principal', '')).border = border # S-Principal
-            ws.cell(row=row_num, column=25, value=record['id']).border = border # Calculation ID
+            ws.cell(row=row_num, column=16, value="").border = border # Channel (Blank for now)
+            ws.cell(row=row_num, column=17, value=claim_month).border = border # Month
+            ws.cell(row=row_num, column=18, value=claim_year).border = border # Year
+            ws.cell(row=row_num, column=19, value=b_desc).border = border # Description for Account
+            ws.cell(row=row_num, column=20, value=concat_desc).border = border # Description with cnts and price
+            ws.cell(row=row_num, column=21, value=record['to_loc']).border = border # Branch
+            ws.cell(row=row_num, column=22, value=item.get('b_dept', '')).border = border # B-Dept
+            ws.cell(row=row_num, column=23, value=item.get('b_principal', '')).border = border # B-Principal
+            ws.cell(row=row_num, column=24, value=item.get('s_dept', '')).border = border # S-Dept
+            ws.cell(row=row_num, column=25, value=item.get('s_principal', '')).border = border # S-Principal
+            ws.cell(row=row_num, column=26, value=record['id']).border = border # Calculation ID
 
         for col in ws.columns:
             max_length = 0
