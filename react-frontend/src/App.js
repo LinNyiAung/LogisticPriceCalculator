@@ -85,9 +85,9 @@ const PricingApp = () => {
 
   // App State
   const [currentPage, setCurrentPage] = useState('calculator');
-  const [docNums, setDocNums] = useState([]); // CHANGED from pickIds
+  const [docNums, setDocNums] = useState([]); 
   
-  const [selectedDocNums, setSelectedDocNums] = useState([]); // CHANGED from selectedPickIds
+  const [selectedDocNums, setSelectedDocNums] = useState([]); 
   
   const [fromLocations, setFromLocations] = useState([]);
   const [toLocations, setToLocations] = useState([]);
@@ -226,7 +226,6 @@ const PricingApp = () => {
   // --- Data Loading Functions ---
   const loadDocNums = async () => {
     try {
-      // CHANGED: Endpoint
       const response = await authFetch(`${API_URL}/doc-nums`);
       if (response.ok) {
         const data = await response.json();
@@ -413,7 +412,7 @@ const PricingApp = () => {
         gate_name: selectedGate,
         from_loc: selectedFrom,
         to_loc: selectedTo,
-        doc_nums: selectedDocNums, // Kept key as doc_nums to match backend Pydantic alias
+        doc_nums: selectedDocNums, 
         manual_total_cost: manualTotalCost ? parseFloat(manualTotalCost) : null,
         additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0,
         final_total_cost: calculatedTotalCost
@@ -445,7 +444,7 @@ const PricingApp = () => {
     try {
       setCurrentPage('calculator');
       setCurrentHistoryId(record.id);
-      setSelectedDocNums(record.doc_nums); // Note: record.doc_nums now contains DocNums
+      setSelectedDocNums(record.doc_nums); 
       await fetchAggregatedProducts(record.doc_nums);
       setSelectedFrom(record.from_loc);
       await loadToLocations(record.from_loc);
@@ -561,10 +560,9 @@ const PricingApp = () => {
         await loadItemPricing(selectedGateForPricing);
       } else {
         const error = await response.json();
-        // Handle array of error messages from strict validation
         if(Array.isArray(error.detail)) {
             const msg = error.detail.join('\n');
-            alert(`Import Errors:\n${msg}`); // Alert is better for long error lists
+            alert(`Import Errors:\n${msg}`); 
         } else {
             showNotification(getErrorMessage(error), 'error');
         }
@@ -583,9 +581,7 @@ const PricingApp = () => {
       return;
     }
     try {
-      // CHANGED: Query Param doc_nums -> doc_nums technically, but keeping 'doc_nums' param for backend alias
       const queryString = ids.map(id => `doc_nums=${encodeURIComponent(id)}`).join('&');
-      // CHANGED: Endpoint
       const response = await authFetch(`${API_URL}/products-by-doc-nums?${queryString}`);
       if (response.ok) {
         const data = await response.json();
@@ -672,7 +668,6 @@ const PricingApp = () => {
     setIsLoading(true);
     try {
       let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(selectedGate)}`;
-      // CHANGED: param doc_nums is used for doc_nums alias
       selectedDocNums.forEach(id => {
         url += `&doc_nums=${encodeURIComponent(id)}`;
       });
@@ -872,7 +867,7 @@ const PricingApp = () => {
 
   useEffect(() => {
     if (token) {
-        loadDocNums(); // CHANGED
+        loadDocNums(); 
         loadGates();
         loadFromLocations();
         loadReferenceData();
@@ -900,11 +895,6 @@ const PricingApp = () => {
   }, [currentPage, token, userRole]);
 
   // --- Sub-Components ---
-  // (LogModal, GateModal, ItemModal, UserModal, ConfirmDialog are identical, just skipping repetitive paste, assume standard react components)
-
-  // NOTE: For brevity, I am not repeating the Modal component codes here as they are largely unchanged except for variable names in state logic if any. 
-  // However, since the user asked for "Complete Codes", I will include them to be safe.
-
   const GateLogModal = ({ logs, gateName, onClose }) => {
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1391,7 +1381,21 @@ const PricingApp = () => {
 
   // Calculator View (Default)
   const hasCalculated = calculatedProducts.length > 0;
-  const tableData = hasCalculated ? calculatedProducts : products;
+  const rawTableData = hasCalculated ? calculatedProducts : products;
+
+  // Aggregate items by item code for the frontend UI view only
+  const tableData = Object.values(rawTableData.reduce((acc, curr) => {
+    if (!acc[curr.code]) {
+      acc[curr.code] = { ...curr };
+    } else {
+      acc[curr.code].quantity += curr.quantity || 0;
+      acc[curr.code].weight += curr.weight || 0;
+      if (curr.total_cost !== undefined) {
+        acc[curr.code].total_cost = (acc[curr.code].total_cost || 0) + curr.total_cost;
+      }
+    }
+    return acc;
+  }, {})).sort((a, b) => a.code.localeCompare(b.code));
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
