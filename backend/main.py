@@ -153,6 +153,18 @@ def startup_db():
             )
         """)
 
+        # --- SD Code Mapping Table ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS SD_Code (
+                [Channel] TEXT,
+                [Code] TEXT,
+                [Name] TEXT,
+                [Dept] TEXT,
+                [Principal] TEXT,
+                [Log-Pric] TEXT
+            )
+        """)
+
         # --- Gate Change Log Table ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Gate_Change_Log (
@@ -369,7 +381,6 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         
         placeholders = ','.join('?' * len(doc_nums))
         
-        # Added SUM(BatchQtyByCtn) to the query
         query = f"""
             SELECT ItemCode, MAX(Dscription), SUM(BatchQty), MAX(UoM), SUM(ItemWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(BatchQtyByCtn)
             FROM PG_TransferDetails 
@@ -386,7 +397,7 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
     if not pick_rows:
         raise Exception("No products found for the selected Doc Nums")
     
-    # 2. Get Gate Data and Branch_Code mapping
+    # 2. Get Gate Data, Branch_Code, and SD_Code mapping
     try:
         conn_log = get_logistic_connection()
         cursor_log = conn_log.cursor()
@@ -395,14 +406,21 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         gate_row = cursor_log.fetchone()
         
         # Fetch Branch_Code mapping
-        cursor_log.execute("SELECT [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code")
-        branch_code_map = {row[3].strip().lower(): {
-            "Code": row[0],
-            "Name": row[1],
-            "Dept": row[2],
-            "Principal": row[3],
-            "Description": row[4]
+        cursor_log.execute("SELECT [Log-Pric], [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code")
+        branch_code_map = {row[0].strip().lower(): {
+            "Code": row[1],
+            "Name": row[2],
+            "Dept": row[3],
+            "Principal": row[4],
+            "Description": row[5]
         } for row in cursor_log.fetchall() if row[3]}
+
+        # Fetch SD_Code mapping (Mapped by Log-Pric)
+        cursor_log.execute("SELECT [Dept], [Principal], [Log-Pric] FROM SD_Code")
+        sd_code_map = {row[2].strip().lower(): {
+            "Dept": row[0],
+            "Principal": row[1]
+        } for row in cursor_log.fetchall() if row[2]}
 
     except Exception as e:
         raise Exception(f"Error fetching local configs: {str(e)}")
@@ -456,6 +474,7 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         for row in pick_rows:
             principal_val = row[7] or ""
             bc_info = branch_code_map.get(principal_val.strip().lower(), {})
+            sd_info = sd_code_map.get(principal_val.strip().lower(), {})
 
             item_data = {
                 "code": row[0] if row[0] else "",
@@ -471,7 +490,9 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
                 "b_name": bc_info.get("Name", ""),
                 "b_dept": bc_info.get("Dept", ""),
                 "b_principal": bc_info.get("Principal", ""),
-                "b_desc": bc_info.get("Description", "")
+                "b_desc": bc_info.get("Description", ""),
+                "s_dept": sd_info.get("Dept", ""),
+                "s_principal": sd_info.get("Principal", "")
             }
             
             p_info = item_pricing.get(item_data['code'], {})
@@ -531,6 +552,7 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
             weight = float(row[4]) if row[4] else 0.0
             principal_val = row[7] or ""
             bc_info = branch_code_map.get(principal_val.strip().lower(), {})
+            sd_info = sd_code_map.get(principal_val.strip().lower(), {})
 
             unit_cost = pricing_info.get('value', 0.0) or 0.0
             item_cost = quantity * unit_cost
@@ -553,12 +575,13 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
                 "b_dept": bc_info.get("Dept", ""),
                 "b_principal": bc_info.get("Principal", ""),
                 "b_desc": bc_info.get("Description", ""),
+                "s_dept": sd_info.get("Dept", ""),
+                "s_principal": sd_info.get("Principal", ""),
                 "calculation_type": "direct",
                 "unit_cost": unit_cost,
                 "total_cost": item_cost
             })
 
-    # Sort primarily by Document Number, then by Item Code to keep them neatly organized
     calculated_products.sort(key=lambda x: (x.get('sin_no', ''), x['code']))
     
     total_cost += add_charges
@@ -770,7 +793,6 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # Save DocNums as JSON in the doc_nums column
         doc_nums_json = json.dumps(data.doc_nums)
         created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -832,7 +854,7 @@ def get_history(user: dict = Depends(get_current_user)):
                 "gate_name": row[2],
                 "from_loc": row[3],
                 "to_loc": row[4],
-                "doc_nums": json.loads(row[5]), # Returns DocNums
+                "doc_nums": json.loads(row[5]),
                 "manual_total_cost": row[6],
                 "additional_charges": row[7],
                 "final_total_cost": row[8]
@@ -904,7 +926,7 @@ def download_history_excel(record_id: int):
             "Code", "Name", "Principal", "Ctns", "Item", "Quantity", 
             "Price", "Total Amount", "Ton", "Gate", "Month", "Year", 
             "Description for Account", "Description with cnts and price", 
-            "Branch", "B-Dept", "B-Principal", "Calculation ID"
+            "Branch", "B-Dept", "B-Principal", "S-Dept", "S-Principal", "Calculation ID"
         ]
         
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
@@ -981,7 +1003,9 @@ def download_history_excel(record_id: int):
             ws.cell(row=row_num, column=20, value=record['to_loc']).border = border # Branch
             ws.cell(row=row_num, column=21, value=item.get('b_dept', '')).border = border # B-Dept
             ws.cell(row=row_num, column=22, value=item.get('b_principal', '')).border = border # B-Principal
-            ws.cell(row=row_num, column=23, value=record['id']).border = border # Calculation ID
+            ws.cell(row=row_num, column=23, value=item.get('s_dept', '')).border = border # S-Dept
+            ws.cell(row=row_num, column=24, value=item.get('s_principal', '')).border = border # S-Principal
+            ws.cell(row=row_num, column=25, value=record['id']).border = border # Calculation ID
 
         for col in ws.columns:
             max_length = 0

@@ -68,14 +68,46 @@ def generate_sql():
         sql_statements.append(f"-- Error processing 'Branch Code.csv': {e}")
 
     # ---------------------------------------------------------
-    # 2. Process Gate Data and Item Pricing
+    # 2. Process SD Code Data
+    # ---------------------------------------------------------
+    print("Processing SD Code.csv...")
+    try:
+        # Read SD Code file with robust reader
+        # Force 'Code' to be string to preserve leading zeros if any
+        sd_df = read_csv_robust("SD Code.csv", dtype={'Code': str})
+        
+        # Create Table Definition for SD_Code
+        sql_statements.append("CREATE TABLE SD_Code ([Channel] VARCHAR(255), [Code] VARCHAR(50), [Name] VARCHAR(255), [Dept] VARCHAR(255), [Principal] VARCHAR(255), [Log-Pric] VARCHAR(255));")
+        
+        # Iterate through rows and generate INSERT statements
+        for index, row in sd_df.iterrows():
+            val_channel = clean_sql_string(row.get('Channel'))
+            val_code = clean_sql_string(row.get('Code'))
+            val_name = clean_sql_string(row.get('Name'))
+            val_dept = clean_sql_string(row.get('Dept'))
+            val_principal = clean_sql_string(row.get('Principal'))
+            val_log_pric = clean_sql_string(row.get('Log-Pric'))
+            
+            sql_statements.append(f"INSERT INTO SD_Code ([Channel], [Code], [Name], [Dept], [Principal], [Log-Pric]) VALUES ({val_channel}, {val_code}, {val_name}, {val_dept}, {val_principal}, {val_log_pric});")
+            
+        sql_statements.append("") # Add a blank line for separation
+
+    except FileNotFoundError:
+        print("Error: 'SD Code.csv' not found. Skipping SD Code table.")
+        sql_statements.append("-- Error: 'SD Code.csv' not found.")
+    except Exception as e:
+        print(f"Error processing 'SD Code.csv': {e}")
+        sql_statements.append(f"-- Error processing 'SD Code.csv': {e}")
+
+    # ---------------------------------------------------------
+    # 3. Process Gate Data and Item Pricing
     # ---------------------------------------------------------
     print("Processing Gate Data.csv...")
     try:
         gate_df = read_csv_robust("Gate Data.csv")
     except FileNotFoundError:
         print("Error: 'Gate Data.csv' not found.")
-        # We can still save whatever we have (e.g. Branch Code)
+        # We can still save whatever we have (e.g. Branch Code and SD Code)
         with open('output_script.sql', 'w', encoding='utf-8') as f:
             f.write('\n'.join(sql_statements))
         return
@@ -155,7 +187,7 @@ def generate_sql():
                 sql_statements.append(f"-- File not found: {file_name}")
 
     # ---------------------------------------------------------
-    # 3. Save to a SQL file
+    # 4. Save to a SQL file
     # ---------------------------------------------------------
     output_filename = 'output_script.sql'
     with open(output_filename, 'w', encoding='utf-8') as f:
