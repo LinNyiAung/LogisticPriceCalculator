@@ -1467,7 +1467,7 @@ const PricingApp = () => {
                       <tr>
                         <th className="border p-2 text-left">Item Code</th>
                         <th className="border p-2 text-left">Description</th>
-                        <th className="border p-2 text-left">Quantity</th>
+                        <th className="border p-2 text-left">Quantity (pcs)</th>
                         <th className="border p-2 text-left">Weight</th>
                         <th className="border p-2 text-left">UOM</th>
                         {hasCalculated && (<th className="border p-2 text-left">Cost (MMK)</th>)}

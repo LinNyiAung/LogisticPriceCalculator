@@ -926,11 +926,10 @@ def download_history_excel(record_id: int):
         ws = wb.active
         ws.title = "Cost Details"
 
-        # Expanded Headers according to the exact requested order
         headers = [
             "No", "Claim Date", "Delivery Date", "SIN No", "Area", 
-            "Code", "Name", "Principal", "Ctns", "Item", "Quantity", 
-            "Price", "Total Amount", "Ton", "Gate", "Channel", "Month", "Year", 
+            "Code", "Name", "Principal", "Ctns", "Item Code", "Item", "Quantity", 
+            "Price", "Total Amount", "Weight", "UOM", "Gate", "Channel", "Month", "Year", 
             "Description for Account", "Description with cnts and price", 
             "Branch", "B-Dept", "B-Principal", "S-Dept", "S-Principal", "Calculation ID"
         ]
@@ -948,19 +947,26 @@ def download_history_excel(record_id: int):
             cell.alignment = Alignment(horizontal='center')
             cell.border = border
 
-        # Claim Date Logic
+        # Claim Date Logic - Updated to DD/MM/YYYY format
         now = datetime.datetime.now()
-        claim_date_str = now.strftime("%Y-%m-%d")
+        claim_date_str = now.strftime("%d/%m/%Y") 
         claim_month = now.strftime("%B") 
         claim_year = now.year
         
         for idx, item in enumerate(products, 1):
             row_num = idx + 1
             
-            # Formatting Date if possible
+            # Delivery Date (Doc Date) Logic - Updated to DD/MM/YYYY format
             doc_date_val = item.get('doc_date')
             if isinstance(doc_date_val, datetime.datetime):
-                doc_date_str = doc_date_val.strftime("%Y-%m-%d")
+                doc_date_str = doc_date_val.strftime("%d/%m/%Y")
+            elif isinstance(doc_date_val, str) and len(doc_date_val) >= 10:
+                # Fallback if DB returns date as string "YYYY-MM-DD"
+                try:
+                    parsed_date = datetime.datetime.strptime(doc_date_val[:10], "%Y-%m-%d")
+                    doc_date_str = parsed_date.strftime("%d/%m/%Y")
+                except ValueError:
+                    doc_date_str = doc_date_val
             else:
                 doc_date_str = str(doc_date_val) if doc_date_val else ""
 
@@ -986,33 +992,36 @@ def download_history_excel(record_id: int):
             ws.cell(row=row_num, column=8, value=item.get('principal', '')).border = border # Principal
             ws.cell(row=row_num, column=9, value=ctns_formatted).border = border # Ctns
             
-            ws.cell(row=row_num, column=10, value=item['name']).border = border # Item
-            ws.cell(row=row_num, column=11, value=item['quantity']).border = border # Quantity
+            ws.cell(row=row_num, column=10, value=item['code']).border = border # Item Code
+            ws.cell(row=row_num, column=11, value=item['name']).border = border # Item
+            ws.cell(row=row_num, column=12, value=item['quantity']).border = border # Quantity
             
-            price_cell = ws.cell(row=row_num, column=12, value=price_val) # Price
+            price_cell = ws.cell(row=row_num, column=13, value=price_val) # Price
             price_cell.number_format = '#,##0.00'
             price_cell.border = border
 
-            amt_cell = ws.cell(row=row_num, column=13, value=item['total_cost']) # Total Amount
+            amt_cell = ws.cell(row=row_num, column=14, value=item['total_cost']) # Total Amount
             amt_cell.number_format = '#,##0.00'
             amt_cell.border = border
 
-            weight_cell = ws.cell(row=row_num, column=14, value=item['weight']) # Ton
+            weight_cell = ws.cell(row=row_num, column=15, value=item['weight']) # Weight
             weight_cell.number_format = '#,##0.00'
             weight_cell.border = border
 
-            ws.cell(row=row_num, column=15, value=record['gate_name']).border = border # Gate
-            ws.cell(row=row_num, column=16, value="").border = border # Channel (Blank for now)
-            ws.cell(row=row_num, column=17, value=claim_month).border = border # Month
-            ws.cell(row=row_num, column=18, value=claim_year).border = border # Year
-            ws.cell(row=row_num, column=19, value=b_desc).border = border # Description for Account
-            ws.cell(row=row_num, column=20, value=concat_desc).border = border # Description with cnts and price
-            ws.cell(row=row_num, column=21, value=record['to_loc']).border = border # Branch
-            ws.cell(row=row_num, column=22, value=item.get('b_dept', '')).border = border # B-Dept
-            ws.cell(row=row_num, column=23, value=item.get('b_principal', '')).border = border # B-Principal
-            ws.cell(row=row_num, column=24, value=item.get('s_dept', '')).border = border # S-Dept
-            ws.cell(row=row_num, column=25, value=item.get('s_principal', '')).border = border # S-Principal
-            ws.cell(row=row_num, column=26, value=record['id']).border = border # Calculation ID
+            ws.cell(row=row_num, column=16, value="Kg").border = border # UOM hardcoded to "Kg"
+            
+            ws.cell(row=row_num, column=17, value=record['gate_name']).border = border # Gate
+            ws.cell(row=row_num, column=18, value="").border = border # Channel (Blank for now)
+            ws.cell(row=row_num, column=19, value=claim_month).border = border # Month
+            ws.cell(row=row_num, column=20, value=claim_year).border = border # Year
+            ws.cell(row=row_num, column=21, value=b_desc).border = border # Description for Account
+            ws.cell(row=row_num, column=22, value=concat_desc).border = border # Description with cnts and price
+            ws.cell(row=row_num, column=23, value=record['to_loc']).border = border # Branch
+            ws.cell(row=row_num, column=24, value=item.get('b_dept', '')).border = border # B-Dept
+            ws.cell(row=row_num, column=25, value=item.get('b_principal', '')).border = border # B-Principal
+            ws.cell(row=row_num, column=26, value=item.get('s_dept', '')).border = border # S-Dept
+            ws.cell(row=row_num, column=27, value=item.get('s_principal', '')).border = border # S-Principal
+            ws.cell(row=row_num, column=28, value=record['id']).border = border # Calculation ID
 
         for col in ws.columns:
             max_length = 0
