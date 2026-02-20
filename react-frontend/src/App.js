@@ -1463,14 +1463,34 @@ const PricingApp = () => {
                 <h2 className="text-xl font-bold mb-4">{hasCalculated ? "Calculated Results" : "Product Details"}</h2>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse border">
-                    <thead className="bg-gray-100"><tr><th className="border p-2 text-left">Item Code</th><th className="border p-2 text-left">Description</th><th className="border p-2 text-left">Quantity</th><th className="border p-2 text-left">Weight</th>{hasCalculated && (<th className="border p-2 text-left">Cost (MMK)</th>)}</tr></thead>
-                    <tbody>{tableData.map((product, index) => (<tr key={index}><td className="border p-2">{product.code}</td><td className="border p-2">{product.name}</td><td className="border p-2">{product.quantity}</td><td className="border p-2">{formatNumber(product.weight)}</td>{hasCalculated && (<td className="border p-2 font-semibold">{product.total_cost !== undefined ? formatNumber(product.total_cost) : '-'}</td>)}</tr>))}</tbody>
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="border p-2 text-left">Item Code</th>
+                        <th className="border p-2 text-left">Description</th>
+                        <th className="border p-2 text-left">Quantity</th>
+                        <th className="border p-2 text-left">Weight</th>
+                        <th className="border p-2 text-left">UOM</th>
+                        {hasCalculated && (<th className="border p-2 text-left">Cost (MMK)</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tableData.map((product, index) => (
+                        <tr key={index}>
+                          <td className="border p-2">{product.code}</td>
+                          <td className="border p-2">{product.name}</td>
+                          <td className="border p-2">{product.quantity}</td>
+                          <td className="border p-2">{formatNumber(product.weight)}</td>
+                          <td className="border p-2">Kg</td>
+                          {hasCalculated && (<td className="border p-2 font-semibold">{product.total_cost !== undefined ? formatNumber(product.total_cost) : '-'}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
                   </table>
                 </div>
               </div>
               
               <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border-2 border-purple-300 p-6 mb-6">
-                <div className="flex items-center justify-between"><span className="text-lg font-semibold text-gray-700">Total Weight:</span><span className="text-3xl font-bold text-purple-600">{formatNumber(totalWeight)}</span></div>
+                <div className="flex items-center justify-between"><span className="text-lg font-semibold text-gray-700">Total Weight:</span><span className="text-3xl font-bold text-purple-600">{formatNumber(totalWeight)} Kg</span></div>
               </div>
               <div className="bg-white rounded-lg border p-6 mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
