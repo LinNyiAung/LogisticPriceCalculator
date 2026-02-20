@@ -67,7 +67,7 @@ def startup_db():
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # Gate table uses "Cost"
+        # Gate table 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Gate (
                 [Gate ID] INTEGER PRIMARY KEY,
@@ -80,7 +80,7 @@ def startup_db():
             )
         """)
         
-        # Item_Pricing table
+        # Item_Pricing table (UOM Removed)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Item_Pricing (
                 [Pricing ID] INTEGER PRIMARY KEY,
@@ -89,18 +89,10 @@ def startup_db():
                 [Item Name] TEXT,
                 [Principal] TEXT,
                 [Brand] TEXT,
-                [UOM] TEXT,
                 [Transportation Cost] TEXT,
                 FOREIGN KEY([Gate ID]) REFERENCES Gate([Gate ID])
             )
         """)
-
-        # Migration: Add UOM column if it doesn't exist in Item_Pricing
-        try:
-            cursor.execute("SELECT [UOM] FROM Item_Pricing LIMIT 1")
-        except sqlite3.OperationalError:
-            logger.info("Adding UOM column to Item_Pricing table...")
-            cursor.execute("ALTER TABLE Item_Pricing ADD COLUMN [UOM] TEXT")
 
         # Calculation History Table
         cursor.execute("""
@@ -268,7 +260,6 @@ class ItemPricingData(BaseModel):
     item_name: str
     principal: Optional[str] = ""
     brand: Optional[str] = ""
-    uom: Optional[str] = None 
     transportation_cost: str
     original_item_code: Optional[str] = None
 
@@ -402,8 +393,7 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         conn_log = get_logistic_connection()
         cursor_log = conn_log.cursor()
         
-        # NOW FETCHING Unit AND UOM AS WELL
-        cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit], [UOM] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
+        cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
         gate_row = cursor_log.fetchone()
         
         # Fetch Branch_Code mapping
@@ -435,11 +425,10 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
     to_loc = gate_row[2]
     cost = float(gate_row[3] or 0)
     gate_unit = float(gate_row[4]) if gate_row[4] else 1.0 # default to 1 if Unit is missing
-    gate_uom = gate_row[5]
     
-    # 3. Get Item Pricing
+    # 3. Get Item Pricing (UOM removed)
     cursor_log.execute("""
-        SELECT [Item ID], [UOM], [Transportation Cost] 
+        SELECT [Item ID], [Transportation Cost] 
         FROM Item_Pricing 
         WHERE [Gate ID] = ?
     """, (gate_id,))
@@ -449,7 +438,7 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
     item_pricing = {}
     for row in pricing_rows:
         i_code = row[0]
-        t_cost = str(row[2]).strip() if row[2] else ""
+        t_cost = str(row[1]).strip() if row[1] else ""
         
         if not t_cost or t_cost.lower() == 'nan' or t_cost.lower() == 'none' or t_cost == '':
             item_pricing[i_code] = {'type': 'ton', 'value': None}
@@ -947,7 +936,7 @@ def download_history_excel(record_id: int):
             cell.alignment = Alignment(horizontal='center')
             cell.border = border
 
-        # Claim Date Logic - Updated to DD/MM/YYYY format
+        # Claim Date Logic
         now = datetime.datetime.now()
         claim_date_str = now.strftime("%d/%m/%Y") 
         claim_month = now.strftime("%B") 
@@ -956,12 +945,11 @@ def download_history_excel(record_id: int):
         for idx, item in enumerate(products, 1):
             row_num = idx + 1
             
-            # Delivery Date (Doc Date) Logic - Updated to DD/MM/YYYY format
+            # Delivery Date (Doc Date) Logic
             doc_date_val = item.get('doc_date')
             if isinstance(doc_date_val, datetime.datetime):
                 doc_date_str = doc_date_val.strftime("%d/%m/%Y")
             elif isinstance(doc_date_val, str) and len(doc_date_val) >= 10:
-                # Fallback if DB returns date as string "YYYY-MM-DD"
                 try:
                     parsed_date = datetime.datetime.strptime(doc_date_val[:10], "%Y-%m-%d")
                     doc_date_str = parsed_date.strftime("%d/%m/%Y")
@@ -975,13 +963,13 @@ def download_history_excel(record_id: int):
             ctns_val = item.get('ctns', 0)
             price_val = item.get('unit_cost', 0)
             
-            # Formatting variables so decimals like 10.0 appear clean as 10
+            # Formatting variables
             ctns_formatted = int(ctns_val) if float(ctns_val).is_integer() else ctns_val
             price_formatted = int(price_val) if float(price_val).is_integer() else round(price_val, 2)
             
             concat_desc = f"{b_desc.strip()} - {ctns_formatted} ctns @{price_formatted} kyats"
 
-            # Populating columns strictly matching the header index mapping
+            # Populating columns strictly matching the header index mapping (UOM removed)
             ws.cell(row=row_num, column=1, value=idx).border = border # No
             ws.cell(row=row_num, column=2, value=claim_date_str).border = border # Claim Date
             ws.cell(row=row_num, column=3, value=doc_date_str).border = border # Delivery Date
@@ -1065,8 +1053,9 @@ def export_item_pricing_excel(gate_id: int):
         from_loc = gate_row[1] or ""
         to_loc = gate_row[2] or ""
         
+        # UOM Removed
         query = """
-            SELECT [Item ID], [Item Name], [Principal], [Brand], [UOM], [Transportation Cost]
+            SELECT [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]
             FROM Item_Pricing 
             WHERE [Gate ID] = ?
             ORDER BY [Item ID]
@@ -1081,7 +1070,8 @@ def export_item_pricing_excel(gate_id: int):
         ws['A1'] = f"Gate: {gate_name} ({from_loc} -> {to_loc})"
         ws['A1'].font = Font(bold=True, size=14)
         
-        headers = ['Item Code', 'Item Name', 'Principal', 'Brand', 'UOM', 'Transportation Cost']
+        # UOM Removed
+        headers = ['Item Code', 'Item Name', 'Principal', 'Brand', 'Transportation Cost']
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
         header_font = Font(bold=True, color='FFFFFF')
         
@@ -1132,6 +1122,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         excel_rows = []
         item_codes_to_check = set()
         
+        # Updated indices for UOM removal
         for row_idx, row in enumerate(ws.iter_rows(min_row=4, values_only=True), start=4):
             if not row[0]: continue
             
@@ -1139,8 +1130,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
             item_name = str(row[1]).strip() if row[1] else ""
             principal = str(row[2]).strip() if row[2] else ""
             brand = str(row[3]).strip() if row[3] else ""
-            uom = str(row[4]).strip() if len(row) > 4 and row[4] else ""
-            transport_cost = str(row[5]).strip() if len(row) > 5 and row[5] else ""
+            transport_cost = str(row[4]).strip() if len(row) > 4 and row[4] else ""
             
             excel_rows.append({
                 "row_num": row_idx,
@@ -1148,7 +1138,6 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                 "name": item_name,
                 "principal": principal,
                 "brand": brand,
-                "uom": uom,
                 "cost": transport_cost
             })
             item_codes_to_check.add(item_code)
@@ -1219,12 +1208,13 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
             item_code = row["code"]
             updated_items_set.add(item_code)
             
+            # Update query modified (UOM removed)
             if item_code in existing_items:
                 cursor.execute("""
                     UPDATE Item_Pricing
-                    SET [Item Name] = ?, [Principal] = ?, [Brand] = ?, [UOM] = ?, [Transportation Cost] = ?
+                    SET [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ?
                     WHERE [Gate ID] = ? AND [Item ID] = ?
-                """, (row["name"], row["principal"], row["brand"], row["uom"], row["cost"], gate_id, item_code))
+                """, (row["name"], row["principal"], row["brand"], row["cost"], gate_id, item_code))
                 updates_made += 1
             else:
                 while True:
@@ -1232,11 +1222,12 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                     if new_id not in used_ids:
                         used_ids.add(new_id)
                         break
+                # Insert query modified (UOM removed)
                 cursor.execute("""
                     INSERT INTO Item_Pricing 
-                    ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [UOM], [Transportation Cost])
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (new_id, gate_id, item_code, row["name"], row["principal"], row["brand"], row["uom"], row["cost"]))
+                    ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost])
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (new_id, gate_id, item_code, row["name"], row["principal"], row["brand"], row["cost"]))
                 inserts_made += 1
         
         items_to_delete = existing_items - updated_items_set
@@ -1401,7 +1392,6 @@ def delete_gate(gate_id: int, user: dict = Depends(get_admin_user)):
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # Delete logs first (FK constraint usually handles this if cascade is on, but doing manually for safety in sqlite)
         cursor.execute("DELETE FROM Gate_Change_Log WHERE gate_id = ?", (gate_id,))
         cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
         cursor.execute("DELETE FROM Gate WHERE [Gate ID] = ?", (gate_id,))
@@ -1424,9 +1414,10 @@ def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
+        # UOM Removed
         query = """
             SELECT [Pricing ID], [Item ID], [Item Name], [Principal], 
-                   [Brand], [UOM], [Transportation Cost]
+                   [Brand], [Transportation Cost]
             FROM Item_Pricing 
             WHERE [Gate ID] = ?
         """
@@ -1440,8 +1431,7 @@ def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
                 "item_name": row[2],
                 "principal": row[3],
                 "brand": row[4],
-                "uom": row[5], 
-                "transportation_cost": row[6]
+                "transportation_cost": row[5]
             })
         conn.close()
         return {"items": items, "gate_id": gate_id}
@@ -1454,16 +1444,13 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
         conn = get_logistic_connection()
         cursor = conn.cursor()
 
-        query_check = "SELECT [Pricing ID], [UOM], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?"
+        # UOM Removed from check
+        query_check = "SELECT [Pricing ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?"
         cursor.execute(query_check, (item_data.gate_id, item_data.original_item_code or item_data.item_code))
         existing = cursor.fetchone()
 
         if existing:
-            pricing_id, old_uom, old_cost = existing
-            
-            # Change Log Logic
-            old_uom = old_uom if old_uom else None
-            new_uom = item_data.uom if item_data.uom else None
+            pricing_id, old_cost = existing
             
             old_cost_str = str(old_cost).strip() if old_cost else ""
             new_cost_str = str(item_data.transportation_cost).strip() if item_data.transportation_cost else ""
@@ -1471,9 +1458,6 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
             change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             username = user['username']
             changes = []
-            
-            if old_uom != new_uom:
-                 changes.append((pricing_id, username, change_date, 'UOM', str(old_uom or ''), str(new_uom or '')))
             
             if old_cost_str != new_cost_str:
                  changes.append((pricing_id, username, change_date, 'Transportation Cost', old_cost_str, new_cost_str))
@@ -1487,13 +1471,13 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
             update_query = """
                 UPDATE Item_Pricing
                 SET [Item ID] = ?, [Item Name] = ?, [Principal] = ?,
-                    [Brand] = ?, [UOM] = ?, [Transportation Cost] = ?
+                    [Brand] = ?, [Transportation Cost] = ?
                 WHERE [Pricing ID] = ?
             """
             cursor.execute(update_query, (
                 item_data.item_code, item_data.item_name,
                 item_data.principal, item_data.brand,
-                item_data.uom, item_data.transportation_cost,
+                item_data.transportation_cost,
                 pricing_id
             ))
         else:
@@ -1505,12 +1489,12 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
             insert_query = """
                 INSERT INTO Item_Pricing 
                 ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal],
-                 [Brand], [UOM], [Transportation Cost])
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 [Brand], [Transportation Cost])
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """
             cursor.execute(insert_query, (
                 new_id, item_data.gate_id, item_data.item_code, item_data.item_name,
-                item_data.principal, item_data.brand, item_data.uom, item_data.transportation_cost
+                item_data.principal, item_data.brand, item_data.transportation_cost
             ))
 
         conn.commit()
@@ -1555,7 +1539,6 @@ def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(get_a
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # Get Pricing ID for log deletion (optional cleanup)
         cursor.execute("SELECT [Pricing ID] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
         row = cursor.fetchone()
         if row:

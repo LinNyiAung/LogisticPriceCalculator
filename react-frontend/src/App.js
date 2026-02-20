@@ -110,13 +110,12 @@ const PricingApp = () => {
   const [selectedGateForPricing, setSelectedGateForPricing] = useState('');
   const [itemPricingData, setItemPricingData] = useState([]);
   
-  // Filter State for Items
+  // Filter State for Items (UOM Removed)
   const [itemFilters, setItemFilters] = useState({
     item_code: '',
     item_name: '',
     principal: '',
     brand: '',
-    uom: '',
     transportation_cost: ''
   });
 
@@ -158,7 +157,6 @@ const PricingApp = () => {
   // --- Formatting Helper ---
   const formatNumber = (num) => {
     if (num === null || num === undefined || num === '') return '-';
-    // If it's a string like "Ton", return as is
     if (isNaN(num)) return num;
     
     return Number(num).toLocaleString(undefined, { 
@@ -285,7 +283,6 @@ const PricingApp = () => {
         item_name: '',
         principal: '',
         brand: '',
-        uom: '',
         transportation_cost: ''
       });
       
@@ -1047,8 +1044,9 @@ const PricingApp = () => {
   };
 
   const ItemModal = ({ item, onSave, onClose }) => {
+    // UOM Removed
     const [formData, setFormData] = useState(item || {
-      item_code: '', item_name: '', principal: '', brand: '', uom: '', transportation_cost: '' 
+      item_code: '', item_name: '', principal: '', brand: '', transportation_cost: '' 
     });
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
@@ -1116,13 +1114,6 @@ const PricingApp = () => {
             <div><label className="block text-sm font-semibold mb-1">Item Name</label><input type="text" value={formData.item_name ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
             <div><label className="block text-sm font-semibold mb-1">Principal</label><input type="text" value={formData.principal ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
             <div><label className="block text-sm font-semibold mb-1">Brand</label><input type="text" value={formData.brand ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
-            <div>
-              <label className="block text-sm font-semibold mb-1">UOM</label>
-              <select value={formData.uom ?? ''} onChange={(e) => setFormData({...formData, uom: e.target.value})} className="w-full p-2 border rounded">
-                  <option value="">-- Select --</option>
-                  {refUOMs.map((u, i) => (<option key={i} value={u}>{u}</option>))}
-              </select>
-            </div>
             <div><label className="block text-sm font-semibold mb-1">Transportation Cost</label><input type="number" step="any" value={formData.transportation_cost ?? ''} onChange={(e) => setFormData({...formData, transportation_cost: e.target.value})} className="w-full p-2 border rounded" /></div>
           </div>
           <div className="flex gap-2 mt-6">
@@ -1304,14 +1295,14 @@ const PricingApp = () => {
   if (currentPage === 'items') {
     const canEdit = ['account', 'admin'].includes(userRole);
     const canDelete = userRole === 'admin'; 
+    // UOM removed from filters
     const filteredItems = itemPricingData.filter(item => {
       const matchCode = (item.item_code || '').toLowerCase().includes(itemFilters.item_code.toLowerCase());
       const matchName = (item.item_name || '').toLowerCase().includes(itemFilters.item_name.toLowerCase());
       const matchPrincipal = (item.principal || '').toLowerCase().includes(itemFilters.principal.toLowerCase());
       const matchBrand = (item.brand || '').toLowerCase().includes(itemFilters.brand.toLowerCase());
-      const matchUom = (item.uom || '').toLowerCase().includes(itemFilters.uom.toLowerCase());
       const matchCost = (String(item.transportation_cost) || '').toLowerCase().includes(itemFilters.transportation_cost.toLowerCase());
-      return matchCode && matchName && matchPrincipal && matchBrand && matchUom && matchCost;
+      return matchCode && matchName && matchPrincipal && matchBrand && matchCost;
     });
 
     return (
@@ -1343,12 +1334,12 @@ const PricingApp = () => {
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse border text-sm">
                   <thead className="bg-gray-100">
+                    {/* UOM column removed */}
                     <tr>
                       <th className="border p-2 text-left"><div>Item Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_code} onChange={(e) => setItemFilters({...itemFilters, item_code: e.target.value})} /></th>
                       <th className="border p-2 text-left"><div>Item Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_name} onChange={(e) => setItemFilters({...itemFilters, item_name: e.target.value})} /></th>
                       <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.principal} onChange={(e) => setItemFilters({...itemFilters, principal: e.target.value})} /></th>
                       <th className="border p-2 text-left"><div>Brand</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.brand} onChange={(e) => setItemFilters({...itemFilters, brand: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>UOM</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.uom} onChange={(e) => setItemFilters({...itemFilters, uom: e.target.value})} /></th>
                       <th className="border p-2 text-left"><div>Transport Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.transportation_cost} onChange={(e) => setItemFilters({...itemFilters, transportation_cost: e.target.value})} /></th>
                       <th className="border p-2 text-left">Actions</th>
                     </tr>
@@ -1356,7 +1347,7 @@ const PricingApp = () => {
                   <tbody>
                     {filteredItems.map((item, index) => (
                       <tr key={index}>
-                        <td className="border p-2">{item.item_code}</td><td className="border p-2">{item.item_name}</td><td className="border p-2">{item.principal}</td><td className="border p-2">{item.brand}</td><td className="border p-2">{item.uom || '-'}</td><td className="border p-2">{formatNumber(item.transportation_cost)}</td>
+                        <td className="border p-2">{item.item_code}</td><td className="border p-2">{item.item_name}</td><td className="border p-2">{item.principal}</td><td className="border p-2">{item.brand}</td><td className="border p-2">{formatNumber(item.transportation_cost)}</td>
                         <td className="border p-2">
                           <div className="flex gap-2">
                                 <button onClick={() => fetchItemLogs(item)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
@@ -1365,7 +1356,7 @@ const PricingApp = () => {
                         </td>
                       </tr>
                     ))}
-                    {filteredItems.length === 0 && (<tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No items found matching your filters.</td></tr>)}
+                    {filteredItems.length === 0 && (<tr><td colSpan="6" className="text-center p-4 text-gray-500 italic">No items found matching your filters.</td></tr>)}
                   </tbody>
                 </table>
               </div>
