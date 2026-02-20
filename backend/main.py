@@ -402,7 +402,8 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         conn_log = get_logistic_connection()
         cursor_log = conn_log.cursor()
         
-        cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
+        # NOW FETCHING Unit AND UOM AS WELL
+        cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit], [UOM] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
         gate_row = cursor_log.fetchone()
         
         # Fetch Branch_Code mapping
@@ -433,6 +434,8 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
     from_loc = gate_row[1]
     to_loc = gate_row[2]
     cost = float(gate_row[3] or 0)
+    gate_unit = float(gate_row[4]) if gate_row[4] else 1.0 # default to 1 if Unit is missing
+    gate_uom = gate_row[5]
     
     # 3. Get Item Pricing
     cursor_log.execute("""
@@ -504,7 +507,10 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
                 item_data['standard_unit_cost'] = p_val
                 direct_items.append(item_data)
             else:
-                cost_item = item_data['weight'] * cost
+                # Calculate cost based on Unit (e.g. cost per 1000 kg vs cost per 1 kg)
+                effective_rate = cost / gate_unit if gate_unit > 0 else cost
+                cost_item = item_data['weight'] * effective_rate
+                
                 estimated_total_cost += cost_item
                 ton_cost_total += cost_item
                 item_data['total_cost'] = cost_item
