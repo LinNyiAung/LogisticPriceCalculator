@@ -214,7 +214,7 @@ def startup_db():
 
         cursor.execute("SELECT COUNT(*) FROM UOMs")
         if cursor.fetchone()[0] == 0:
-            default_uoms = [('Kg',), ('Ton',), ('Viss',)]
+            default_uoms = [('Kg',), ('Ton',)]
             cursor.executemany("INSERT INTO UOMs (name) VALUES (?)", default_uoms)
         
         conn.commit()
