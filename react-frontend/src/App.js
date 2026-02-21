@@ -154,7 +154,7 @@ const PricingApp = () => {
   const [itemLogsData, setItemLogsData] = useState([]);
   const [currentLogItemName, setCurrentLogItemName] = useState('');
 
-  // --- Formatting Helper ---
+  // --- Formatting & UI Helpers ---
   const formatNumber = (num) => {
     if (num === null || num === undefined || num === '') return '-';
     if (isNaN(num)) return num;
@@ -163,6 +163,21 @@ const PricingApp = () => {
       minimumFractionDigits: 2, 
       maximumFractionDigits: 2 
     });
+  };
+
+  const getNotificationColor = (type) => {
+    switch (type) {
+      case 'success': return 'bg-green-500';
+      case 'error': return 'bg-red-500';
+      case 'info': return 'bg-blue-500';
+      case 'warning': return 'bg-yellow-500';
+      default: return 'bg-gray-800';
+    }
+  };
+
+  const showNotification = (message, type = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 5000); 
   };
 
   // --- Auth Helpers ---
@@ -214,11 +229,6 @@ const PricingApp = () => {
         return JSON.stringify(error.detail);
     }
     return String(error.detail);
-  };
-
-  const showNotification = (message, type = 'success') => {
-    setNotification({ message, type });
-    setTimeout(() => setNotification(null), 5000); 
   };
 
   // --- Data Loading Functions ---
@@ -1196,7 +1206,7 @@ const PricingApp = () => {
       return (
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-6xl mx-auto">
-                {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white z-50`}>{notification.message}</div>}
+                {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
                 {renderNavigation()}
                 <div className="bg-white rounded-lg shadow-md p-6">
                     <div className="flex items-center justify-between mb-6">
@@ -1221,7 +1231,7 @@ const PricingApp = () => {
       return (
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-6xl mx-auto">
-                {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white z-50`}>{notification.message}</div>}
+                {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
                 {renderNavigation()}
                 <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Reference Data</h1>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1241,12 +1251,11 @@ const PricingApp = () => {
       );
   }
 
-  // ... (History View) ...
   if (currentPage === 'history') {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
-          {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white z-50`}>{notification.message}</div>}
+          {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h1 className="text-3xl font-bold text-gray-800 mb-6">Calculation History</h1>
@@ -1262,14 +1271,13 @@ const PricingApp = () => {
     );
   }
 
-  // ... (Gates View) ...
   if (currentPage === 'gates') {
     const canEdit = ['account', 'admin'].includes(userRole);
     const canDelete = userRole === 'admin'; 
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
-          {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white z-50`}>{notification.message}</div>}
+          {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-6">
@@ -1291,7 +1299,6 @@ const PricingApp = () => {
     );
   }
 
-  // ... (Items View) ...
   if (currentPage === 'items') {
     const canEdit = ['account', 'admin'].includes(userRole);
     const canDelete = userRole === 'admin'; 
@@ -1308,7 +1315,7 @@ const PricingApp = () => {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
-          {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white z-50`}>{notification.message}</div>}
+          {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-6">
@@ -1391,7 +1398,7 @@ const PricingApp = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto">
-        {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white z-50`}>{notification.message}</div>}
+        {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
         {renderNavigation()}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h1 className="text-3xl font-bold text-gray-800 mb-6">Logistic Cost Calculator</h1>
