@@ -1471,14 +1471,37 @@ const PricingApp = () => {
             </>
           )}
 
-          {selectedGate && (
+          {selectedGate && (() => {
+            const currentGate = gates.find(g => g.gate_name === selectedGate);
+            return (
               <div className="bg-blue-50 rounded-lg border-2 border-blue-300 p-6 mb-6">
-              <div className="flex items-center justify-between">
-                <div><h3 className="text-lg font-semibold text-gray-800">Calculation Type</h3><p className="text-gray-600 mt-1">{calculationType === 'gate_pricing' ? 'Gate Pricing Calculation' : calculationType === 'direct_pricing' ? 'Direct Pricing Calculation' : 'Unknown Type'}</p></div>
-                <div className="text-right"><p className="text-sm text-gray-600">Route</p><p className="text-xl font-bold text-blue-600">{selectedFrom} &rarr; {selectedTo}</p></div>
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800">Calculation Type</h3>
+                    <p className="text-gray-600 mt-1">
+                      {calculationType === 'gate_pricing' ? 'Gate Pricing Calculation' : calculationType === 'direct_pricing' ? 'Direct Pricing Calculation' : 'Unknown Type'}
+                    </p>
+                  </div>
+                  
+                  {/* Gate Cost Display added in the middle */}
+                  {currentGate && currentGate.cost !== null && (
+                    <div className="text-center">
+                      <p className="text-sm text-gray-600">Gate Cost</p>
+                      <p className="text-xl font-bold text-green-600">
+                        {formatNumber(currentGate.cost)} MMK 
+                        {currentGate.uom && <span className="text-sm font-medium text-gray-500 ml-1">/ {currentGate.unit || 1} {currentGate.uom}</span>}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="text-right">
+                    <p className="text-sm text-gray-600">Route</p>
+                    <p className="text-xl font-bold text-blue-600">{selectedFrom} &rarr; {selectedTo}</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {products.length > 0 && (
             <>
