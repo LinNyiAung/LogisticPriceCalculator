@@ -142,6 +142,8 @@ const PricingApp = () => {
   // Reference Management State
   const [refLocations, setRefLocations] = useState([]);
   const [refUOMs, setRefUOMs] = useState([]);
+  const [refChannels, setRefChannels] = useState([]); // New reference state for Channels
+  const [selectedChannel, setSelectedChannel] = useState(''); // New state for selected channel
   const [newRefValue, setNewRefValue] = useState('');
 
   // Log Modal State
@@ -338,6 +340,9 @@ const PricingApp = () => {
           
           const uomResp = await authFetch(`${API_URL}/references/uoms`);
           if (uomResp.ok) setRefUOMs(await uomResp.json());
+
+          const chanResp = await authFetch(`${API_URL}/references/channels`);
+          if (chanResp.ok) setRefChannels(await chanResp.json());
       } catch (error) {
           showNotification('Error loading reference data', 'error');
       }
@@ -422,7 +427,8 @@ const PricingApp = () => {
         doc_nums: selectedDocNums, 
         manual_total_cost: manualTotalCost ? parseFloat(manualTotalCost) : null,
         additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0,
-        final_total_cost: calculatedTotalCost
+        final_total_cost: calculatedTotalCost,
+        channel: selectedChannel
       };
 
       const response = await authFetch(`${API_URL}/history/save`, {
@@ -457,6 +463,7 @@ const PricingApp = () => {
       await loadToLocations(record.from_loc);
       setSelectedTo(record.to_loc);
       setSelectedGate(record.gate_name);
+      setSelectedChannel(record.channel || '');
       setManualTotalCost(record.manual_total_cost || '');
       setAdditionalCharges(record.additional_charges || '');
       setCalculatedProducts([]); 
@@ -613,6 +620,7 @@ const PricingApp = () => {
     setSelectedFrom('');
     setSelectedTo('');
     setSelectedGate('');
+    setSelectedChannel('');
     setCalculationType('');
     setCalculatedProducts([]);
     setCalculatedTotalCost(null);
@@ -635,6 +643,7 @@ const PricingApp = () => {
     setSelectedFrom(val);
     setSelectedTo('');
     setSelectedGate('');
+    setSelectedChannel('');
     setCalculatedProducts([]);
     setCalculatedTotalCost(null);
     setEstimatedTotalCost(null);
@@ -649,6 +658,7 @@ const PricingApp = () => {
   const handleToChange = (val) => {
     setSelectedTo(val);
     setSelectedGate('');
+    setSelectedChannel('');
     setCalculatedProducts([]);
     setCalculatedTotalCost(null);
     setEstimatedTotalCost(null);
@@ -657,6 +667,7 @@ const PricingApp = () => {
 
   const handleGateChange = (gateName) => {
     setSelectedGate(gateName);
+    setSelectedChannel('');
     setCalculatedProducts([]);
     setCalculatedTotalCost(null);
     setEstimatedTotalCost(null);
@@ -1234,7 +1245,7 @@ const PricingApp = () => {
                 {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
                 {renderNavigation()}
                 <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Reference Data</h1>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-blue-700">Locations (From/To)</h2>
                         <div className="flex gap-2 mb-4"><input type="text" placeholder="New Location (e.g., NPT)" className="border p-2 rounded flex-1" id="new-loc" /><button onClick={() => { const val = document.getElementById('new-loc').value; addReference('locations', val); document.getElementById('new-loc').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div>
@@ -1244,6 +1255,11 @@ const PricingApp = () => {
                         <h2 className="text-xl font-bold mb-4 text-purple-700">Units of Measure (UOM)</h2>
                         <div className="flex gap-2 mb-4"><input type="text" placeholder="New UOM (e.g., Box)" className="border p-2 rounded flex-1" id="new-uom" /><button onClick={() => { const val = document.getElementById('new-uom').value; addReference('uoms', val); document.getElementById('new-uom').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div>
                         <div className="border rounded max-h-96 overflow-y-auto">{refUOMs.map((u, i) => (<div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50"><span>{u}</span><button onClick={() => deleteReference('uoms', u)} className="text-red-500 hover:text-red-700"><X size={18} /></button></div>))}</div>
+                    </div>
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h2 className="text-xl font-bold mb-4 text-orange-700">Channels</h2>
+                        <div className="flex gap-2 mb-4"><input type="text" placeholder="New Channel (e.g., SD)" className="border p-2 rounded flex-1" id="new-chan" /><button onClick={() => { const val = document.getElementById('new-chan').value; addReference('channels', val); document.getElementById('new-chan').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div>
+                        <div className="border rounded max-h-96 overflow-y-auto">{refChannels.map((c, i) => (<div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50"><span>{c}</span><button onClick={() => deleteReference('channels', c)} className="text-red-500 hover:text-red-700"><X size={18} /></button></div>))}</div>
                     </div>
                 </div>
             </div>
@@ -1440,6 +1456,15 @@ const PricingApp = () => {
                   <select value={selectedGate} onChange={(e) => handleGateChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option value="">-- Select a Gate --</option>
                     {gates.filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo).map((gate) => (<option key={gate.gate_name} value={gate.gate_name}>{gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}</option>))}
+                  </select>
+                </div>
+              )}
+              {selectedGate && (
+                <div className="bg-white rounded-lg border p-6 mb-6">
+                  <h2 className="text-xl font-bold mb-4">Select Channel</h2>
+                  <select value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <option value="">-- Select a Channel --</option>
+                    {refChannels.map((chan, i) => (<option key={i} value={chan}>{chan}</option>))}
                   </select>
                 </div>
               )}

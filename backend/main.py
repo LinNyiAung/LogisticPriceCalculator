@@ -105,9 +105,16 @@ def startup_db():
                 [doc_nums] TEXT, -- Stored as JSON string (contains DocNums)
                 [manual_total_cost] REAL,
                 [additional_charges] REAL,
-                [final_total_cost] REAL
+                [final_total_cost] REAL,
+                [channel] TEXT
             )
         """)
+
+        # Safely attempt to add channel column for existing databases
+        try:
+            cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [channel] TEXT")
+        except sqlite3.OperationalError:
+            pass # Column already exists
         
         # --- User Table ---
         cursor.execute("""
@@ -118,7 +125,7 @@ def startup_db():
             )
         """)
 
-        # --- Reference Tables (Locations & UOMs) ---
+        # --- Reference Tables (Locations, UOMs, Channels) ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Locations (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,6 +135,13 @@ def startup_db():
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS UOMs (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [name] TEXT UNIQUE
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Channels (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [name] TEXT UNIQUE
             )
@@ -216,6 +230,11 @@ def startup_db():
         if cursor.fetchone()[0] == 0:
             default_uoms = [('Kg',), ('Ton',)]
             cursor.executemany("INSERT INTO UOMs (name) VALUES (?)", default_uoms)
+
+        cursor.execute("SELECT COUNT(*) FROM Channels")
+        if cursor.fetchone()[0] == 0:
+            default_channels = [('SD',), ('Branch',), ('Telecom Branch',), ('Telecom SD',), ('Outlet',)]
+            cursor.executemany("INSERT INTO Channels (name) VALUES (?)", default_channels)
         
         conn.commit()
         conn.close()
@@ -272,6 +291,7 @@ class CalculationSaveRequest(BaseModel):
     manual_total_cost: Optional[float] = None
     additional_charges: Optional[float] = 0.0
     final_total_cost: float
+    channel: Optional[str] = ""
 
 class ReferenceItem(BaseModel):
     name: str
@@ -688,6 +708,8 @@ def delete_user(username: str, user: dict = Depends(get_admin_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
 
+# --- Reference Management Endpoints ---
+
 @app.get("/references/locations")
 def get_ref_locations():
     try:
@@ -782,6 +804,55 @@ def delete_ref_uom(name: str, user: dict = Depends(get_account_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
+@app.get("/references/channels")
+def get_ref_channels():
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM Channels ORDER BY name")
+        rows = cursor.fetchall()
+        conn.close()
+        return [row[0] for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.post("/references/channels")
+def add_ref_channel(item: ReferenceItem, user: dict = Depends(get_account_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("INSERT INTO Channels (name) VALUES (?)", (item.name,))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.close()
+            raise HTTPException(status_code=400, detail="Channel already exists")
+        conn.close()
+        return {"message": "Added successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.delete("/references/channels/{name}")
+def delete_ref_channel(name: str, user: dict = Depends(get_account_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM Channels WHERE name = ?", (name,))
+        if cursor.rowcount == 0:
+             conn.close()
+             raise HTTPException(status_code=404, detail="Not found")
+        conn.commit()
+        conn.close()
+        return {"message": "Deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+# --- Calculation History Endpoints ---
+
 @app.post("/history/save")
 def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_current_user)):
     try:
@@ -799,12 +870,12 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
             cursor.execute("""
                 UPDATE Calculation_History 
                 SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
-                    doc_nums = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?
+                    doc_nums = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?, channel = ?
                 WHERE id = ?
             """, (
                 created_at, data.gate_name, data.from_loc, data.to_loc,
                 doc_nums_json, data.manual_total_cost, data.additional_charges, 
-                data.final_total_cost, data.id
+                data.final_total_cost, data.channel, data.id
             ))
             message = "Calculation updated successfully"
         else:
@@ -817,11 +888,11 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
             cursor.execute("""
                 INSERT INTO Calculation_History 
                 ([id], [created_at], [gate_name], [from_loc], [to_loc], 
-                 [doc_nums], [manual_total_cost], [additional_charges], [final_total_cost])
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 [doc_nums], [manual_total_cost], [additional_charges], [final_total_cost], [channel])
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 new_id, created_at, data.gate_name, data.from_loc, data.to_loc,
-                doc_nums_json, data.manual_total_cost, data.additional_charges, data.final_total_cost
+                doc_nums_json, data.manual_total_cost, data.additional_charges, data.final_total_cost, data.channel
             ))
             message = "Calculation saved successfully"
         
@@ -852,7 +923,8 @@ def get_history(user: dict = Depends(get_current_user)):
                 "doc_nums": json.loads(row[5]),
                 "manual_total_cost": row[6],
                 "additional_charges": row[7],
-                "final_total_cost": row[8]
+                "final_total_cost": row[8],
+                "channel": row[9] 
             })
         conn.close()
         return {"history": history}
@@ -896,7 +968,8 @@ def download_history_excel(record_id: int):
             "to_loc": row[4],
             "doc_nums": json.loads(row[5]),
             "manual_total_cost": row[6],
-            "additional_charges": row[7]
+            "additional_charges": row[7],
+            "channel": row[9] 
         }
 
         try:
@@ -999,7 +1072,7 @@ def download_history_excel(record_id: int):
             ws.cell(row=row_num, column=16, value="Kg").border = border # UOM hardcoded to "Kg"
             
             ws.cell(row=row_num, column=17, value=record['gate_name']).border = border # Gate
-            ws.cell(row=row_num, column=18, value="").border = border # Channel (Blank for now)
+            ws.cell(row=row_num, column=18, value=record.get('channel', '')).border = border # Channel 
             ws.cell(row=row_num, column=19, value=claim_month).border = border # Month
             ws.cell(row=row_num, column=20, value=claim_year).border = border # Year
             ws.cell(row=row_num, column=21, value=b_desc).border = border # Description for Account
