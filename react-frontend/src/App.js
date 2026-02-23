@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -110,7 +110,7 @@ const PricingApp = () => {
   const [selectedGateForPricing, setSelectedGateForPricing] = useState('');
   const [itemPricingData, setItemPricingData] = useState([]);
   
-  // Filter State for Items (UOM Removed)
+  // Filter State for Items
   const [itemFilters, setItemFilters] = useState({
     item_code: '',
     item_name: '',
@@ -142,8 +142,8 @@ const PricingApp = () => {
   // Reference Management State
   const [refLocations, setRefLocations] = useState([]);
   const [refUOMs, setRefUOMs] = useState([]);
-  const [refChannels, setRefChannels] = useState([]); // New reference state for Channels
-  const [selectedChannel, setSelectedChannel] = useState(''); // New state for selected channel
+  const [refChannels, setRefChannels] = useState([]); 
+  const [selectedChannel, setSelectedChannel] = useState(''); 
   const [newRefValue, setNewRefValue] = useState('');
 
   // Log Modal State
@@ -428,7 +428,8 @@ const PricingApp = () => {
         manual_total_cost: manualTotalCost ? parseFloat(manualTotalCost) : null,
         additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0,
         final_total_cost: calculatedTotalCost,
-        channel: selectedChannel
+        channel: selectedChannel,
+        status: "saved"
       };
 
       const response = await authFetch(`${API_URL}/history/save`, {
@@ -451,6 +452,22 @@ const PricingApp = () => {
 
   const handleSaveButtonClick = () => {
     handleSaveCalculation(false);
+  };
+
+  const handleSubmitHistory = async (id) => {
+    if(!window.confirm("Are you sure you want to submit this calculation? Once submitted, account users will be able to review it.")) return;
+    try {
+      const response = await authFetch(`${API_URL}/history/${id}/submit`, { method: 'PUT' });
+      if (response.ok) {
+        showNotification('Calculation submitted successfully', 'success');
+        loadHistory();
+      } else {
+         const err = await response.json();
+         showNotification(getErrorMessage(err), 'error');
+      }
+    } catch (error) {
+      showNotification(`Error: ${error.message}`, 'error');
+    }
   };
 
   const loadSavedCalculation = async (record) => {
@@ -1065,7 +1082,6 @@ const PricingApp = () => {
   };
 
   const ItemModal = ({ item, onSave, onClose }) => {
-    // UOM Removed
     const [formData, setFormData] = useState(item || {
       item_code: '', item_name: '', principal: '', brand: '', transportation_cost: '' 
     });
@@ -1179,7 +1195,7 @@ const PricingApp = () => {
         <h2 className="text-xl font-bold mb-4">Confirm Action</h2>
         <p className="text-gray-700 mb-6">{message}</p>
         <div className="flex gap-2">
-          <button onClick={onConfirm} className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700">Delete</button>
+          <button onClick={onConfirm} className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700">Confirm</button>
           <button onClick={onCancel} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
         </div>
       </div>
@@ -1277,8 +1293,41 @@ const PricingApp = () => {
             <h1 className="text-3xl font-bold text-gray-800 mb-6">Calculation History</h1>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse border">
-                <thead className="bg-gray-100"><tr><th className="border p-3 text-left">ID</th><th className="border p-3 text-left">Date</th><th className="border p-3 text-left">Route</th><th className="border p-3 text-left">Doc Nums</th><th className="border p-3 text-right">Total Cost (MMK)</th><th className="border p-3 text-center">Actions</th></tr></thead>
-                <tbody>{historyData.length === 0 ? (<tr><td colSpan="6" className="text-center p-4 text-gray-500">No saved calculations found.</td></tr>) : (historyData.map((record) => (<tr key={record.id} className="hover:bg-gray-50"><td className="border p-3 text-sm text-gray-600">{record.id}</td><td className="border p-3 text-sm text-gray-600">{record.created_at}</td><td className="border p-3"><span className="font-bold text-gray-700">{record.gate_name}</span> <br/><span className="text-xs text-gray-500">{record.from_loc} &rarr; {record.to_loc}</span></td><td className="border p-3 text-sm">{record.doc_nums.length} Doc(s): {record.doc_nums.join(', ')}</td><td className="border p-3 text-right font-bold text-blue-600">{formatNumber(record.final_total_cost)}</td><td className="border p-3 text-center"><div className="flex justify-center gap-2"><button onClick={() => handleDownloadHistoryExcel(record)} className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1"><FileDown size={16} /></button><button onClick={() => loadSavedCalculation(record)} className="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm font-semibold">Load</button>{userRole === 'admin' && (<button onClick={() => deleteHistory(record.id)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 size={18} /></button>)}</div></td></tr>)))}</tbody>
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="border p-3 text-left">ID / Status</th>
+                    <th className="border p-3 text-left">Date / Author</th>
+                    <th className="border p-3 text-left">Route</th>
+                    <th className="border p-3 text-left">Doc Nums</th>
+                    <th className="border p-3 text-right">Total Cost (MMK)</th>
+                    <th className="border p-3 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>{historyData.length === 0 ? (<tr><td colSpan="6" className="text-center p-4 text-gray-500">No saved calculations found.</td></tr>) : (historyData.map((record) => (
+                    <tr key={record.id} className="hover:bg-gray-50">
+                        <td className="border p-3">
+                            <span className="text-sm text-gray-600 font-bold block mb-1">#{record.id}</span>
+                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${record.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{record.status}</span>
+                        </td>
+                        <td className="border p-3 text-sm text-gray-600">
+                            <div className="font-semibold">{record.created_at}</div>
+                            <div className="text-xs text-gray-500 mt-1">By: {record.created_by}</div>
+                        </td>
+                        <td className="border p-3"><span className="font-bold text-gray-700">{record.gate_name}</span> <br/><span className="text-xs text-gray-500">{record.from_loc} &rarr; {record.to_loc}</span></td>
+                        <td className="border p-3 text-sm">{record.doc_nums.length} Doc(s): {record.doc_nums.join(', ')}</td>
+                        <td className="border p-3 text-right font-bold text-blue-600">{formatNumber(record.final_total_cost)}</td>
+                        <td className="border p-3 text-center">
+                            <div className="flex justify-center gap-2">
+                                {userRole === 'logistic' && record.status === 'saved' && (
+                                    <button onClick={() => handleSubmitHistory(record.id)} className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold flex items-center gap-1" title="Submit Calculation"><CheckCircle size={16} /> Submit</button>
+                                )}
+                                <button onClick={() => handleDownloadHistoryExcel(record)} className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1"><FileDown size={16} /></button>
+                                <button onClick={() => loadSavedCalculation(record)} className="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm font-semibold">Load</button>
+                                {userRole === 'admin' && (<button onClick={() => deleteHistory(record.id)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 size={18} /></button>)}
+                            </div>
+                        </td>
+                    </tr>)))}
+                </tbody>
               </table>
             </div>
           </div>
@@ -1318,7 +1367,7 @@ const PricingApp = () => {
   if (currentPage === 'items') {
     const canEdit = ['account', 'admin'].includes(userRole);
     const canDelete = userRole === 'admin'; 
-    // UOM removed from filters
+    
     const filteredItems = itemPricingData.filter(item => {
       const matchCode = (item.item_code || '').toLowerCase().includes(itemFilters.item_code.toLowerCase());
       const matchName = (item.item_name || '').toLowerCase().includes(itemFilters.item_name.toLowerCase());
@@ -1357,7 +1406,6 @@ const PricingApp = () => {
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse border text-sm">
                   <thead className="bg-gray-100">
-                    {/* UOM column removed */}
                     <tr>
                       <th className="border p-2 text-left"><div>Item Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_code} onChange={(e) => setItemFilters({...itemFilters, item_code: e.target.value})} /></th>
                       <th className="border p-2 text-left"><div>Item Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_name} onChange={(e) => setItemFilters({...itemFilters, item_name: e.target.value})} /></th>
@@ -1483,7 +1531,6 @@ const PricingApp = () => {
                     </p>
                   </div>
                   
-                  {/* Gate Cost Display added in the middle */}
                   {currentGate && currentGate.cost !== null && (
                     <div className="text-center">
                       <p className="text-sm text-gray-600">Gate Cost</p>

@@ -106,15 +106,25 @@ def startup_db():
                 [manual_total_cost] REAL,
                 [additional_charges] REAL,
                 [final_total_cost] REAL,
-                [channel] TEXT
+                [channel] TEXT,
+                [status] TEXT DEFAULT 'saved',
+                [created_by] TEXT
             )
         """)
 
-        # Safely attempt to add channel column for existing databases
+        # Safely attempt to add columns for existing databases
         try:
             cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [channel] TEXT")
         except sqlite3.OperationalError:
-            pass # Column already exists
+            pass
+        try:
+            cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [status] TEXT DEFAULT 'saved'")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [created_by] TEXT")
+        except sqlite3.OperationalError:
+            pass
         
         # --- User Table ---
         cursor.execute("""
@@ -292,6 +302,7 @@ class CalculationSaveRequest(BaseModel):
     additional_charges: Optional[float] = 0.0
     final_total_cost: float
     channel: Optional[str] = ""
+    status: Optional[str] = "saved"
 
 class ReferenceItem(BaseModel):
     name: str
@@ -870,12 +881,13 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
             cursor.execute("""
                 UPDATE Calculation_History 
                 SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
-                    doc_nums = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?, channel = ?
+                    doc_nums = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?, channel = ?,
+                    status = ?
                 WHERE id = ?
             """, (
                 created_at, data.gate_name, data.from_loc, data.to_loc,
                 doc_nums_json, data.manual_total_cost, data.additional_charges, 
-                data.final_total_cost, data.channel, data.id
+                data.final_total_cost, data.channel, data.status, data.id
             ))
             message = "Calculation updated successfully"
         else:
@@ -888,11 +900,11 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
             cursor.execute("""
                 INSERT INTO Calculation_History 
                 ([id], [created_at], [gate_name], [from_loc], [to_loc], 
-                 [doc_nums], [manual_total_cost], [additional_charges], [final_total_cost], [channel])
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 [doc_nums], [manual_total_cost], [additional_charges], [final_total_cost], [channel], [status], [created_by])
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 new_id, created_at, data.gate_name, data.from_loc, data.to_loc,
-                doc_nums_json, data.manual_total_cost, data.additional_charges, data.final_total_cost, data.channel
+                doc_nums_json, data.manual_total_cost, data.additional_charges, data.final_total_cost, data.channel, data.status, user["username"]
             ))
             message = "Calculation saved successfully"
         
@@ -905,12 +917,37 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
         logger.error(f"Error saving history: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error saving history: {str(e)}")
 
+@app.put("/history/{record_id}/submit")
+def submit_history_item(record_id: int, user: dict = Depends(get_current_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE Calculation_History SET status = 'submitted' WHERE id = ?", (record_id,))
+        if cursor.rowcount == 0:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Record not found")
+        conn.commit()
+        conn.close()
+        return {"message": "Calculation submitted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error submitting record: {str(e)}")
+
 @app.get("/history")
 def get_history(user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Calculation_History ORDER BY created_at DESC")
+        
+        role = user.get('role')
+        username = user.get('username')
+
+        if role == 'admin':
+            cursor.execute("SELECT * FROM Calculation_History ORDER BY created_at DESC")
+        elif role == 'account':
+            cursor.execute("SELECT * FROM Calculation_History WHERE status = 'submitted' ORDER BY created_at DESC")
+        else: # logistic
+            cursor.execute("SELECT * FROM Calculation_History WHERE created_by = ? OR created_by IS NULL ORDER BY created_at DESC", (username,))
+            
         rows = cursor.fetchall()
         history = []
         for row in rows:
@@ -924,7 +961,9 @@ def get_history(user: dict = Depends(get_current_user)):
                 "manual_total_cost": row[6],
                 "additional_charges": row[7],
                 "final_total_cost": row[8],
-                "channel": row[9] 
+                "channel": row[9],
+                "status": row[10] if len(row) > 10 else 'saved',
+                "created_by": row[11] if len(row) > 11 else 'unknown'
             })
         conn.close()
         return {"history": history}
