@@ -1046,10 +1046,11 @@ def download_history_excel(record_id: int):
         ws = wb.active
         ws.title = "Cost Details"
 
+        # Added "Price(ctn)" to headers
         headers = [
             "No", "Claim Date", "Delivery Date", "SIN No", "Area", 
-            "Code", "Name", "Principal", "Ctns", "Item Code", "Item", "Quantity", 
-            "Price", "Total Amount", "Weight", "UOM", "Gate", "Channel", "Month", "Year", 
+            "Code", "Name", "Principal", "Item Code", "Item", "Ctns", "Quantity", 
+            "Price(ctn)", "Price", "Total Amount", "Weight", "UOM", "Gate", "Channel", "Month", "Year", 
             "Description for Account", "Description with cnts and price", 
             "Branch", "B-Dept", "B-Principal", "S-Dept", "S-Principal", "Calculation ID"
         ]
@@ -1093,14 +1094,18 @@ def download_history_excel(record_id: int):
             b_desc = item.get('b_desc', '')
             ctns_val = item.get('ctns', 0)
             price_val = item.get('unit_cost', 0)
+            total_cost_val = item.get('total_cost', 0)
             
             # Formatting variables
             ctns_formatted = int(ctns_val) if float(ctns_val).is_integer() else ctns_val
             price_formatted = int(price_val) if float(price_val).is_integer() else round(price_val, 2)
             
+            # Calculate Price(ctn)
+            price_per_ctn = total_cost_val / ctns_val if ctns_val > 0 else 0
+            
             concat_desc = f"{b_desc.strip()} - {ctns_formatted} ctns @{price_formatted} kyats"
 
-            # Populating columns strictly matching the header index mapping (UOM removed)
+            # Populating columns
             ws.cell(row=row_num, column=1, value=idx).border = border # No
             ws.cell(row=row_num, column=2, value=claim_date_str).border = border # Claim Date
             ws.cell(row=row_num, column=3, value=doc_date_str).border = border # Delivery Date
@@ -1109,38 +1114,46 @@ def download_history_excel(record_id: int):
             ws.cell(row=row_num, column=6, value=item.get('b_code', '')).border = border # Code
             ws.cell(row=row_num, column=7, value=item.get('b_name', '')).border = border # Name
             ws.cell(row=row_num, column=8, value=item.get('principal', '')).border = border # Principal
-            ws.cell(row=row_num, column=9, value=ctns_formatted).border = border # Ctns
             
-            ws.cell(row=row_num, column=10, value=item['code']).border = border # Item Code
-            ws.cell(row=row_num, column=11, value=item['name']).border = border # Item
+            ws.cell(row=row_num, column=9, value=item['code']).border = border # Item Code
+            ws.cell(row=row_num, column=10, value=item['name']).border = border # Item
+            ws.cell(row=row_num, column=11, value=ctns_formatted).border = border # Ctns
             ws.cell(row=row_num, column=12, value=item['quantity']).border = border # Quantity
             
-            price_cell = ws.cell(row=row_num, column=13, value=price_val) # Price
+            # New Price(ctn) Column
+            ctn_price_cell = ws.cell(row=row_num, column=13, value=price_per_ctn) 
+            ctn_price_cell.number_format = '#,##0.00'
+            ctn_price_cell.border = border
+
+            # Shifted original price column to 14
+            price_cell = ws.cell(row=row_num, column=14, value=price_val) 
             price_cell.number_format = '#,##0.00'
             price_cell.border = border
 
-            amt_cell = ws.cell(row=row_num, column=14, value=item['total_cost']) # Total Amount
+            # Shifted total amount column to 15
+            amt_cell = ws.cell(row=row_num, column=15, value=total_cost_val) 
             amt_cell.number_format = '#,##0.00'
             amt_cell.border = border
 
-            weight_cell = ws.cell(row=row_num, column=15, value=item['weight']) # Weight
+            # Shifted remaining columns down by 1
+            weight_cell = ws.cell(row=row_num, column=16, value=item['weight']) 
             weight_cell.number_format = '#,##0.00'
             weight_cell.border = border
 
-            ws.cell(row=row_num, column=16, value="Kg").border = border # UOM hardcoded to "Kg"
+            ws.cell(row=row_num, column=17, value="Kg").border = border # UOM hardcoded to "Kg"
             
-            ws.cell(row=row_num, column=17, value=record['gate_name']).border = border # Gate
-            ws.cell(row=row_num, column=18, value=record.get('channel', '')).border = border # Channel 
-            ws.cell(row=row_num, column=19, value=claim_month).border = border # Month
-            ws.cell(row=row_num, column=20, value=claim_year).border = border # Year
-            ws.cell(row=row_num, column=21, value=b_desc).border = border # Description for Account
-            ws.cell(row=row_num, column=22, value=concat_desc).border = border # Description with cnts and price
-            ws.cell(row=row_num, column=23, value=record['to_loc']).border = border # Branch
-            ws.cell(row=row_num, column=24, value=item.get('b_dept', '')).border = border # B-Dept
-            ws.cell(row=row_num, column=25, value=item.get('b_principal', '')).border = border # B-Principal
-            ws.cell(row=row_num, column=26, value=item.get('s_dept', '')).border = border # S-Dept
-            ws.cell(row=row_num, column=27, value=item.get('s_principal', '')).border = border # S-Principal
-            ws.cell(row=row_num, column=28, value=record['id']).border = border # Calculation ID
+            ws.cell(row=row_num, column=18, value=record['gate_name']).border = border # Gate
+            ws.cell(row=row_num, column=19, value=record.get('channel', '')).border = border # Channel 
+            ws.cell(row=row_num, column=20, value=claim_month).border = border # Month
+            ws.cell(row=row_num, column=21, value=claim_year).border = border # Year
+            ws.cell(row=row_num, column=22, value=b_desc).border = border # Description for Account
+            ws.cell(row=row_num, column=23, value=concat_desc).border = border # Description with cnts and price
+            ws.cell(row=row_num, column=24, value=record['to_loc']).border = border # Branch
+            ws.cell(row=row_num, column=25, value=item.get('b_dept', '')).border = border # B-Dept
+            ws.cell(row=row_num, column=26, value=item.get('b_principal', '')).border = border # B-Principal
+            ws.cell(row=row_num, column=27, value=item.get('s_dept', '')).border = border # S-Dept
+            ws.cell(row=row_num, column=28, value=item.get('s_principal', '')).border = border # S-Principal
+            ws.cell(row=row_num, column=29, value=record['id']).border = border # Calculation ID
 
         for col in ws.columns:
             max_length = 0
@@ -1167,7 +1180,7 @@ def download_history_excel(record_id: int):
     except Exception as e:
         logger.error(f"Error generating download: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating download: {str(e)}")
-
+    
 # --- Item Pricing Excel Export/Import ---
 
 @app.get("/account/item-pricing/export/{gate_id}")
