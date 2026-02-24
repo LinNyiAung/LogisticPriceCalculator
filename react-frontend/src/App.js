@@ -419,6 +419,11 @@ const PricingApp = () => {
   // --- Action Functions ---
 
   const handleSaveCalculation = async (isUpdate = false) => {
+    if (!selectedChannel) {
+        showNotification('Channel is required to save.', 'error');
+        return;
+    }
+
     try {
       const payload = {
         id: isUpdate ? currentHistoryId : null,
@@ -713,8 +718,8 @@ const PricingApp = () => {
   };
 
   const calculateCosts = async () => {
-    if (selectedDocNums.length === 0 || !selectedGate) {
-      showNotification('Please select Doc Num(s), From, To, and Gate', 'error');
+    if (selectedDocNums.length === 0 || !selectedFrom || !selectedTo || !selectedGate || !selectedChannel) {
+      showNotification('Please select Doc Num(s), From, To, Gate, and Channel', 'error');
       return;
     }
     setIsLoading(true);
@@ -1528,7 +1533,7 @@ const PricingApp = () => {
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h1 className="text-3xl font-bold text-gray-800 mb-6">Logistic Cost Calculator</h1>
           <div className="bg-white rounded-lg border p-6 mb-6">
-            <h2 className="text-xl font-bold mb-4">Select Doc Nums (Transfer IDs)</h2>
+            <h2 className="text-xl font-bold mb-4">Select Doc Nums (Transfer IDs) <span className="text-red-500">*</span></h2>
             <div className="mb-4">
                <select onChange={(e) => handleAddDocNum(e.target.value)} value="" className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
                 <option value="">-- Add a Doc Num --</option>
@@ -1544,7 +1549,7 @@ const PricingApp = () => {
           {products.length > 0 && (
             <>
               <div className="bg-white rounded-lg border p-6 mb-6">
-                <h2 className="text-xl font-bold mb-4">Select From</h2>
+                <h2 className="text-xl font-bold mb-4">Select From <span className="text-red-500">*</span></h2>
                 <select value={selectedFrom} onChange={(e) => handleFromChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
                   <option value="">-- Select Origin --</option>
                   {fromLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}
@@ -1552,7 +1557,7 @@ const PricingApp = () => {
               </div>
               {selectedFrom && (
                 <div className="bg-white rounded-lg border p-6 mb-6">
-                  <h2 className="text-xl font-bold mb-4">Select To</h2>
+                  <h2 className="text-xl font-bold mb-4">Select To <span className="text-red-500">*</span></h2>
                   <select value={selectedTo} onChange={(e) => handleToChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option value="">-- Select Destination --</option>
                     {toLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}
@@ -1561,7 +1566,7 @@ const PricingApp = () => {
               )}
               {selectedTo && (
                 <div className="bg-white rounded-lg border p-6 mb-6">
-                  <h2 className="text-xl font-bold mb-4">Select Gate</h2>
+                  <h2 className="text-xl font-bold mb-4">Select Gate <span className="text-red-500">*</span></h2>
                   <select value={selectedGate} onChange={(e) => handleGateChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option value="">-- Select a Gate --</option>
                     {gates.filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo).map((gate) => (<option key={gate.gate_name} value={gate.gate_name}>{gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}</option>))}
@@ -1570,7 +1575,7 @@ const PricingApp = () => {
               )}
               {selectedGate && (
                 <div className="bg-white rounded-lg border p-6 mb-6">
-                  <h2 className="text-xl font-bold mb-4">Select Channel</h2>
+                  <h2 className="text-xl font-bold mb-4">Select Channel <span className="text-red-500">*</span></h2>
                   <select value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option value="">-- Select a Channel --</option>
                     {refChannels.map((chan, i) => (<option key={i} value={chan}>{chan}</option>))}
