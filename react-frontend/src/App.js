@@ -128,6 +128,7 @@ const PricingApp = () => {
   const [originalItemCode, setOriginalItemCode] = useState(null);
 
   const [manualTotalCost, setManualTotalCost] = useState('');
+  const [isManualTotalCostEnabled, setIsManualTotalCostEnabled] = useState(false);
   const [additionalCharges, setAdditionalCharges] = useState('');
   const [estimatedTotalCost, setEstimatedTotalCost] = useState(null);
 
@@ -425,7 +426,7 @@ const PricingApp = () => {
         from_loc: selectedFrom,
         to_loc: selectedTo,
         doc_nums: selectedDocNums, 
-        manual_total_cost: manualTotalCost ? parseFloat(manualTotalCost) : null,
+        manual_total_cost: (manualTotalCost && isManualTotalCostEnabled) ? parseFloat(manualTotalCost) : null,
         additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0,
         final_total_cost: calculatedTotalCost,
         channel: selectedChannel,
@@ -722,7 +723,7 @@ const PricingApp = () => {
       selectedDocNums.forEach(id => {
         url += `&doc_nums=${encodeURIComponent(id)}`;
       });
-      if (manualTotalCost) {
+      if (manualTotalCost && isManualTotalCostEnabled) {
         url += `&manual_total_cost=${manualTotalCost}`;
       }
       if (additionalCharges) {
@@ -944,6 +945,48 @@ const PricingApp = () => {
         loadReferenceData();
     }
   }, [currentPage, token, userRole]);
+
+  // EFFECT: Check if Manual Override should be enabled based on selected gate and products
+  useEffect(() => {
+    const checkManualCostStatus = async () => {
+      // Only run on calculator view to prevent unnecessary fetches
+      if (currentPage !== 'calculator' || !token) return;
+      
+      if (calculationType !== 'gate_pricing' || !selectedGate) {
+        setIsManualTotalCostEnabled(false);
+        return;
+      }
+
+      const gateInfo = gates.find(g => g.gate_name === selectedGate);
+      if (!gateInfo) {
+        setIsManualTotalCostEnabled(false);
+        return;
+      }
+
+      try {
+        const response = await authFetch(`${API_URL}/account/item-pricing/${gateInfo.gate_id}`);
+        if (response.ok) {
+          const data = await response.json();
+          // Find if at least one product has a 'transportation_cost' configured in this gate
+          const hasDirectPricingItem = products.some(p => {
+            const pricing = data.items.find(item => item.item_code === p.code);
+            if (!pricing) return false;
+            const tc = String(pricing.transportation_cost || '').trim().toLowerCase();
+            return tc !== '' && tc !== 'nan' && tc !== 'none' && tc !== 'null';
+          });
+          
+          setIsManualTotalCostEnabled(hasDirectPricingItem);
+        } else {
+          setIsManualTotalCostEnabled(false);
+        }
+      } catch (err) {
+        console.error("Failed to check item pricing for manual cost calculation", err);
+        setIsManualTotalCostEnabled(false);
+      }
+    };
+
+    checkManualCostStatus();
+  }, [selectedGate, calculationType, products, gates, token, currentPage]);
 
   // --- Sub-Components ---
   const GateLogModal = ({ logs, gateName, onClose }) => {
@@ -1606,9 +1649,18 @@ const PricingApp = () => {
               <div className="bg-white rounded-lg border p-6 mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Total Cost (Manual Override)</label>
-                    <input type="number" value={manualTotalCost} onChange={(e) => setManualTotalCost(e.target.value)} placeholder="Enter base transport amount..." className="w-full p-3 border rounded-lg" />
-                    <p className="text-xs text-gray-500 mt-1">Overrides calculated item costs.</p>
+                    <label className={`block text-sm font-semibold mb-2 ${!isManualTotalCostEnabled ? 'text-gray-400' : 'text-gray-700'}`}>Total Cost (Manual Override)</label>
+                    <input 
+                      type="number" 
+                      value={manualTotalCost} 
+                      onChange={(e) => setManualTotalCost(e.target.value)} 
+                      placeholder={isManualTotalCostEnabled ? "Enter base transport amount..." : "Not applicable for selected items"} 
+                      className={`w-full p-3 border rounded-lg ${!isManualTotalCostEnabled ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`}
+                      disabled={!isManualTotalCostEnabled}
+                    />
+                    <p className={`text-xs mt-1 ${!isManualTotalCostEnabled ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {isManualTotalCostEnabled ? "Overrides calculated item costs." : "Only enabled if selected items have specific transport costs."}
+                    </p>
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Additional Charges (Optional)</label>
