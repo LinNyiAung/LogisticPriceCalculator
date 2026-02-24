@@ -932,6 +932,21 @@ def submit_history_item(record_id: int, user: dict = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error submitting record: {str(e)}")
 
+@app.put("/history/{record_id}/claim")
+def claim_history_item(record_id: int, user: dict = Depends(get_account_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE Calculation_History SET status = 'claimed' WHERE id = ?", (record_id,))
+        if cursor.rowcount == 0:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Record not found")
+        conn.commit()
+        conn.close()
+        return {"message": "Calculation claimed successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error claiming record: {str(e)}")
+
 @app.get("/history")
 def get_history(user: dict = Depends(get_current_user)):
     try:
@@ -944,7 +959,8 @@ def get_history(user: dict = Depends(get_current_user)):
         if role == 'admin':
             cursor.execute("SELECT * FROM Calculation_History ORDER BY created_at DESC")
         elif role == 'account':
-            cursor.execute("SELECT * FROM Calculation_History WHERE status = 'submitted' ORDER BY created_at DESC")
+            # Account users can see both submitted and already claimed records
+            cursor.execute("SELECT * FROM Calculation_History WHERE status IN ('submitted', 'claimed') ORDER BY created_at DESC")
         else: # logistic
             cursor.execute("SELECT * FROM Calculation_History WHERE created_by = ? OR created_by IS NULL ORDER BY created_at DESC", (username,))
             

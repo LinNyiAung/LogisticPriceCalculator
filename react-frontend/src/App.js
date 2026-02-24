@@ -470,6 +470,22 @@ const PricingApp = () => {
     }
   };
 
+  const handleClaimHistory = async (id) => {
+    if(!window.confirm("Are you sure you want to claim this calculation?")) return;
+    try {
+      const response = await authFetch(`${API_URL}/history/${id}/claim`, { method: 'PUT' });
+      if (response.ok) {
+        showNotification('Calculation claimed successfully', 'success');
+        loadHistory();
+      } else {
+         const err = await response.json();
+         showNotification(getErrorMessage(err), 'error');
+      }
+    } catch (error) {
+      showNotification(`Error: ${error.message}`, 'error');
+    }
+  };
+
   const loadSavedCalculation = async (record) => {
     try {
       setCurrentPage('calculator');
@@ -1296,7 +1312,7 @@ const PricingApp = () => {
                 <thead className="bg-gray-100">
                   <tr>
                     <th className="border p-3 text-left">ID / Status</th>
-                    <th className="border p-3 text-left">Date / Author</th>
+                    <th className="border p-3 text-left">Date</th>
                     <th className="border p-3 text-left">Route</th>
                     <th className="border p-3 text-left">Doc Nums</th>
                     <th className="border p-3 text-right">Total Cost (MMK)</th>
@@ -1307,22 +1323,24 @@ const PricingApp = () => {
                     <tr key={record.id} className="hover:bg-gray-50">
                         <td className="border p-3">
                             <span className="text-sm text-gray-600 font-bold block mb-1">#{record.id}</span>
-                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${record.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{record.status}</span>
+                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${record.status === 'claimed' ? 'bg-blue-100 text-blue-700' : record.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{record.status}</span>
                         </td>
                         <td className="border p-3 text-sm text-gray-600">
                             <div className="font-semibold">{record.created_at}</div>
-                            <div className="text-xs text-gray-500 mt-1">By: {record.created_by}</div>
                         </td>
                         <td className="border p-3"><span className="font-bold text-gray-700">{record.gate_name}</span> <br/><span className="text-xs text-gray-500">{record.from_loc} &rarr; {record.to_loc}</span></td>
                         <td className="border p-3 text-sm">{record.doc_nums.length} Doc(s): {record.doc_nums.join(', ')}</td>
                         <td className="border p-3 text-right font-bold text-blue-600">{formatNumber(record.final_total_cost)}</td>
                         <td className="border p-3 text-center">
                             <div className="flex justify-center gap-2">
+                                <button onClick={() => handleDownloadHistoryExcel(record)} className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1"><FileDown size={16} /></button>
+                                <button onClick={() => loadSavedCalculation(record)} className="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm font-semibold">Load</button>
                                 {userRole === 'logistic' && record.status === 'saved' && (
                                     <button onClick={() => handleSubmitHistory(record.id)} className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold flex items-center gap-1" title="Submit Calculation"><CheckCircle size={16} /> Submit</button>
                                 )}
-                                <button onClick={() => handleDownloadHistoryExcel(record)} className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1"><FileDown size={16} /></button>
-                                <button onClick={() => loadSavedCalculation(record)} className="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm font-semibold">Load</button>
+                                {userRole === 'account' && record.status === 'submitted' && (
+                                    <button onClick={() => handleClaimHistory(record.id)} className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-semibold flex items-center gap-1" title="Claim Calculation"><CheckCircle size={16} /> Claim</button>
+                                )}
                                 {userRole === 'admin' && (<button onClick={() => deleteHistory(record.id)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 size={18} /></button>)}
                             </div>
                         </td>
