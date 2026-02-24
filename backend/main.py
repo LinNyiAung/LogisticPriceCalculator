@@ -1811,9 +1811,29 @@ def get_doc_nums():
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT DocNum FROM PG_TransferDetails WHERE DocNum IS NOT NULL ORDER BY DocNum DESC")
+        # Fetching DocNum and maximum DocDate grouping by DocNum
+        cursor.execute("""
+            SELECT DocNum, MAX(DocDate) 
+            FROM PG_TransferDetails 
+            WHERE DocNum IS NOT NULL 
+            GROUP BY DocNum 
+            ORDER BY DocNum DESC
+        """)
         rows = cursor.fetchall()
-        doc_nums = [row[0] for row in rows]
+        doc_nums = []
+        for row in rows:
+            doc_num = row[0]
+            doc_date_val = row[1]
+            doc_date_str = ""
+            if isinstance(doc_date_val, datetime.datetime):
+                doc_date_str = doc_date_val.strftime("%Y-%m-%d")
+            elif isinstance(doc_date_val, str) and len(doc_date_val) >= 10:
+                doc_date_str = doc_date_val[:10]
+            else:
+                doc_date_str = str(doc_date_val) if doc_date_val else ""
+            
+            # Now returning dict objects
+            doc_nums.append({"doc_num": doc_num, "doc_date": doc_date_str})
         conn.close()
         return {"doc_nums": doc_nums}
     except Exception as e:

@@ -1537,12 +1537,23 @@ const PricingApp = () => {
             <div className="mb-4">
                <select onChange={(e) => handleAddDocNum(e.target.value)} value="" className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
                 <option value="">-- Add a Doc Num --</option>
-                {docNums.filter(id => !selectedDocNums.includes(id)).map((id) => (<option key={id} value={id}>{id}</option>))}
+                {docNums.filter(doc => !selectedDocNums.includes(doc.doc_num)).map((doc) => (
+                  <option key={doc.doc_num} value={doc.doc_num}>{doc.doc_num}{doc.doc_date ? ` - ${doc.doc_date}` : ''}</option>
+                ))}
               </select>
             </div>
             <div className="flex flex-wrap gap-2">
               {selectedDocNums.length === 0 && (<p className="text-gray-500 text-sm italic">No Doc Nums selected</p>)}
-              {selectedDocNums.map(id => (<div key={id} className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full border border-blue-200"><span className="font-semibold">{id}</span><button onClick={() => handleRemoveDocNum(id)} className="hover:text-red-600 transition"><X size={16} /></button></div>))}
+              {selectedDocNums.map(id => {
+                const docObj = docNums.find(d => d.doc_num === id);
+                const displayLabel = docObj && docObj.doc_date ? `${id} - ${docObj.doc_date}` : id;
+                return (
+                  <div key={id} className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full border border-blue-200">
+                    <span className="font-semibold">{displayLabel}</span>
+                    <button onClick={() => handleRemoveDocNum(id)} className="hover:text-red-600 transition"><X size={16} /></button>
+                  </div>
+                );
+              })}
             </div>
           </div>
           
