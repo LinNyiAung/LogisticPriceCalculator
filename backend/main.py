@@ -3,6 +3,7 @@ import pyodbc
 import sqlite3
 import json
 import datetime
+import time
 import random
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -892,10 +893,12 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
             message = "Calculation updated successfully"
         else:
             while True:
-                new_id = random.randint(10000000, 99999999)
+                # Generate 12-digit ID: YYMMDDHHMMSS
+                new_id = int(datetime.datetime.now().strftime("%y%m%d%H%M%S"))
                 cursor.execute("SELECT 1 FROM Calculation_History WHERE id = ?", (new_id,))
                 if not cursor.fetchone():
                     break
+                time.sleep(1) # Prevent duplicate ID if multiple saves happen in the exact same second
 
             cursor.execute("""
                 INSERT INTO Calculation_History 
