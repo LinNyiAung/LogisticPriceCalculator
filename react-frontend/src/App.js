@@ -135,6 +135,15 @@ const PricingApp = () => {
   const [historyData, setHistoryData] = useState([]);
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
 
+  // Filter State for History
+  const [historyFilters, setHistoryFilters] = useState({
+    id_status: '',
+    date: '',
+    route: '',
+    doc_nums: '',
+    total_cost: ''
+  });
+
   // User Management State
   const [usersList, setUsersList] = useState([]);
   const [showUserModal, setShowUserModal] = useState(false);
@@ -1348,6 +1357,15 @@ const PricingApp = () => {
   }
 
   if (currentPage === 'history') {
+    const filteredHistory = historyData.filter(record => {
+      const matchIdStatus = (String(record.id) + ' ' + (record.status || '')).toLowerCase().includes(historyFilters.id_status.toLowerCase());
+      const matchDate = (record.created_at || '').toLowerCase().includes(historyFilters.date.toLowerCase());
+      const matchRoute = ((record.gate_name || '') + ' ' + (record.from_loc || '') + ' ' + (record.to_loc || '')).toLowerCase().includes(historyFilters.route.toLowerCase());
+      const matchDocNums = (record.doc_nums ? record.doc_nums.join(', ') : '').toLowerCase().includes(historyFilters.doc_nums.toLowerCase());
+      const matchTotalCost = (String(record.final_total_cost) || '').toLowerCase().includes(historyFilters.total_cost.toLowerCase());
+      return matchIdStatus && matchDate && matchRoute && matchDocNums && matchTotalCost;
+    });
+
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
@@ -1359,15 +1377,30 @@ const PricingApp = () => {
               <table className="w-full border-collapse border">
                 <thead className="bg-gray-100">
                   <tr>
-                    <th className="border p-3 text-left">ID / Status</th>
-                    <th className="border p-3 text-left">Date</th>
-                    <th className="border p-3 text-left">Route</th>
-                    <th className="border p-3 text-left">Doc Nums</th>
-                    <th className="border p-3 text-right">Total Cost (MMK)</th>
-                    <th className="border p-3 text-center">Actions</th>
+                    <th className="border p-2 text-left">
+                      <div>ID / Status</div>
+                      <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.id_status} onChange={(e) => setHistoryFilters({...historyFilters, id_status: e.target.value})} />
+                    </th>
+                    <th className="border p-2 text-left">
+                      <div>Date</div>
+                      <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.date} onChange={(e) => setHistoryFilters({...historyFilters, date: e.target.value})} />
+                    </th>
+                    <th className="border p-2 text-left">
+                      <div>Route</div>
+                      <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.route} onChange={(e) => setHistoryFilters({...historyFilters, route: e.target.value})} />
+                    </th>
+                    <th className="border p-2 text-left">
+                      <div>Doc Nums</div>
+                      <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.doc_nums} onChange={(e) => setHistoryFilters({...historyFilters, doc_nums: e.target.value})} />
+                    </th>
+                    <th className="border p-2 text-right">
+                      <div>Total Cost (MMK)</div>
+                      <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-right" value={historyFilters.total_cost} onChange={(e) => setHistoryFilters({...historyFilters, total_cost: e.target.value})} />
+                    </th>
+                    <th className="border p-2 text-center align-top">Actions</th>
                   </tr>
                 </thead>
-                <tbody>{historyData.length === 0 ? (<tr><td colSpan="6" className="text-center p-4 text-gray-500">No saved calculations found.</td></tr>) : (historyData.map((record) => (
+                <tbody>{filteredHistory.length === 0 ? (<tr><td colSpan="6" className="text-center p-4 text-gray-500">No matching calculations found.</td></tr>) : (filteredHistory.map((record) => (
                     <tr key={record.id} className="hover:bg-gray-50">
                         <td className="border p-3">
                             <span className="text-sm text-gray-600 font-bold block mb-1">#{record.id}</span>
