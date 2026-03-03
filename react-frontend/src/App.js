@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle } from 'lucide-react';
 
-const API_URL = 'http://192.168.30.15:8000';
+const API_URL = 'http://localhost:8000';
 
 // --- Login Component ---
 const LoginScreen = ({ onLogin }) => {
@@ -437,7 +437,7 @@ const PricingApp = () => {
         gate_name: selectedGate,
         from_loc: selectedFrom,
         to_loc: selectedTo,
-        doc_nums: selectedDocNums, 
+        doc_nums: selectedDocNums.map(String), // <--- FIX: Convert array items to strings
         manual_total_cost: (manualTotalCost && isManualTotalCostEnabled) ? parseFloat(manualTotalCost) : null,
         additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0,
         final_total_cost: calculatedTotalCost,
