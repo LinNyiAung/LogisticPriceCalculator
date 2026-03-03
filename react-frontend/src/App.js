@@ -66,11 +66,6 @@ const LoginScreen = ({ onLogin }) => {
             Sign In
           </button>
         </form>
-        <div className="mt-4 text-xs text-center text-gray-500">
-          <p>Default Admin: admin / admin123</p>
-          <p>Default Account: account / account123</p>
-          <p>Default Logistic: logistic / log123</p>
-        </div>
       </div>
     </div>
   );

@@ -21,7 +21,7 @@ from jose import JWTError, jwt
 # --- Auth Configuration ---
 SECRET_KEY = "CHANGE_THIS_TO_A_SUPER_SECRET_KEY"  # IMPORTANT: Change this!
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 300 # 5 hours expiration
+ACCESS_TOKEN_EXPIRE_MINUTES = 43200 # 30 days expiration
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
