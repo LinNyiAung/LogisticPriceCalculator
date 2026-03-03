@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle } from 'lucide-react';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = 'http://192.168.30.15:8000';
 
 // --- Login Component ---
 const LoginScreen = ({ onLogin }) => {
@@ -88,6 +88,9 @@ const PricingApp = () => {
   const [docNums, setDocNums] = useState([]); 
   
   const [selectedDocNums, setSelectedDocNums] = useState([]); 
+  // New state for Doc Num Search
+  const [docNumSearchTerm, setDocNumSearchTerm] = useState('');
+  const [showDocNumDropdown, setShowDocNumDropdown] = useState(false);
   
   const [fromLocations, setFromLocations] = useState([]);
   const [toLocations, setToLocations] = useState([]);
@@ -1567,14 +1570,58 @@ const PricingApp = () => {
           <h1 className="text-3xl font-bold text-gray-800 mb-6">Logistic Cost Calculator</h1>
           <div className="bg-white rounded-lg border p-6 mb-6">
             <h2 className="text-xl font-bold mb-4">Select Doc Nums (Transfer IDs) <span className="text-red-500">*</span></h2>
-            <div className="mb-4">
-               <select onChange={(e) => handleAddDocNum(e.target.value)} value="" className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                <option value="">-- Add a Doc Num --</option>
-                {docNums.filter(doc => !selectedDocNums.includes(doc.doc_num)).map((doc) => (
-                  <option key={doc.doc_num} value={doc.doc_num}>{doc.doc_num}{doc.doc_date ? ` - ${doc.doc_date}` : ''}</option>
-                ))}
-              </select>
+            
+            {/* --- REPLACED <select> WITH CUSTOM SEARCHABLE DROPDOWN --- */}
+            <div className="relative mb-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search and add a Doc Num (e.g. 22#####)..."
+                  value={docNumSearchTerm}
+                  onChange={(e) => {
+                    setDocNumSearchTerm(e.target.value);
+                    setShowDocNumDropdown(true);
+                  }}
+                  onFocus={() => setShowDocNumDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowDocNumDropdown(false), 200)}
+                  className="w-full p-3 pl-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+                <div className="absolute left-3 top-3 text-gray-400">
+                  <Search size={20} />
+                </div>
+              </div>
+              
+              {showDocNumDropdown && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                  {docNums
+                    .filter(doc => !selectedDocNums.includes(doc.doc_num))
+                    .filter(doc => {
+                      const searchStr = `${doc.doc_num} ${doc.doc_date || ''}`.toLowerCase();
+                      return searchStr.includes(docNumSearchTerm.toLowerCase());
+                    })
+                    .map((doc) => (
+                      <div
+                        key={doc.doc_num}
+                        className="p-3 hover:bg-blue-50 cursor-pointer border-b last:border-0"
+                        onMouseDown={(e) => {
+                          e.preventDefault(); // Prevents input from losing focus
+                          handleAddDocNum(doc.doc_num);
+                          setDocNumSearchTerm('');
+                          setShowDocNumDropdown(false);
+                        }}
+                      >
+                        <span className="font-semibold text-gray-800">{doc.doc_num}</span>
+                        {doc.doc_date && <span className="text-gray-500 ml-2">- {doc.doc_date}</span>}
+                      </div>
+                    ))}
+                  {docNums.filter(doc => !selectedDocNums.includes(doc.doc_num) && `${doc.doc_num} ${doc.doc_date || ''}`.toLowerCase().includes(docNumSearchTerm.toLowerCase())).length === 0 && (
+                    <div className="p-3 text-gray-500 italic">No matching Doc Nums found.</div>
+                  )}
+                </div>
+              )}
             </div>
+            {/* --- END CUSTOM DROPDOWN --- */}
+
             <div className="flex flex-wrap gap-2">
               {selectedDocNums.length === 0 && (<p className="text-gray-500 text-sm italic">No Doc Nums selected</p>)}
               {selectedDocNums.map(id => {
