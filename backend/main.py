@@ -398,6 +398,7 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
     add_charges = float(additional_charges) if additional_charges is not None else 0.0
 
     # 1. Get Transfer Data from DWBI (PG_TransferDetails)
+    # BatchQty removed
     try:
         conn_dwbi = get_dwbi_connection()
         cursor_dwbi = conn_dwbi.cursor()
@@ -405,7 +406,7 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         placeholders = ','.join('?' * len(doc_nums))
         
         query = f"""
-            SELECT ItemCode, MAX(Dscription), SUM(BatchQty), MAX(UoM), SUM(ItemWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(BatchQtyByCtn)
+            SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(BatchQtyByCtn)
             FROM PG_TransferDetails 
             WHERE DocNum IN ({placeholders}) 
             GROUP BY DocNum, ItemCode
@@ -496,20 +497,19 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         ton_cost_total = 0.0
         
         for row in pick_rows:
-            principal_val = row[7] or ""
+            principal_val = row[6] or ""
             bc_info = branch_code_map.get(principal_val.strip().lower(), {})
             sd_info = sd_code_map.get(principal_val.strip().lower(), {})
 
             item_data = {
                 "code": row[0] if row[0] else "",
                 "name": row[1] if row[1] else "",
-                "quantity": float(row[2]) if row[2] else 0.0,
-                "uom": row[3] if row[3] else "",
-                "weight": float(row[4]) if row[4] else 0.0,
-                "doc_date": row[5],         
-                "sin_no": row[6],           
+                "uom": row[2] if row[2] else "",
+                "weight": float(row[3]) if row[3] else 0.0,
+                "doc_date": row[4],         
+                "sin_no": row[5],           
                 "principal": principal_val,   
-                "ctns": float(row[8]) if row[8] else 0.0,
+                "ctns": round(float(row[7])) if row[7] else 0, # ROUNDED CTNS
                 "b_code": bc_info.get("Code", ""),
                 "b_name": bc_info.get("Name", ""),
                 "b_dept": bc_info.get("Dept", ""),
@@ -524,7 +524,8 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
             p_val = p_info.get('value', 0.0)
             
             if p_type == 'direct':
-                estimated_total_cost += (item_data['quantity'] * p_val)
+                # Calculation based on ROUNDED CTNS
+                estimated_total_cost += (item_data['ctns'] * p_val)
                 item_data['standard_unit_cost'] = p_val
                 direct_items.append(item_data)
             else:
@@ -540,17 +541,17 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         direct_unit_cost = 0.0
         if manual_total_cost is not None:
             remainder = manual_total_cost - ton_cost_total
-            total_direct_qty = sum(item['quantity'] for item in direct_items)
+            total_direct_ctns = sum(item['ctns'] for item in direct_items)
             
-            if total_direct_qty > 0:
-                direct_unit_cost = remainder / total_direct_qty
+            if total_direct_ctns > 0:
+                direct_unit_cost = remainder / total_direct_ctns
             
             total_cost = manual_total_cost
         else:
             total_cost = estimated_total_cost
 
         for item in ton_items:
-            avg_unit_cost = item['total_cost'] / item['quantity'] if item['quantity'] > 0 else 0
+            avg_unit_cost = item['total_cost'] / item['ctns'] if item['ctns'] > 0 else 0
             
             calculated_products.append({
                 **item,
@@ -561,7 +562,7 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         
         for item in direct_items:
             final_unit_cost = direct_unit_cost if manual_total_cost is not None else item['standard_unit_cost']
-            final_item_cost = item['quantity'] * final_unit_cost
+            final_item_cost = item['ctns'] * final_unit_cost # Based on CTNS
             
             calculated_products.append({
                 **item,
@@ -575,14 +576,14 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
             item_code = row[0] if row[0] else ""
             pricing_info = item_pricing.get(item_code, {})
             
-            quantity = float(row[2]) if row[2] else 0.0
-            weight = float(row[4]) if row[4] else 0.0
-            principal_val = row[7] or ""
+            weight = float(row[3]) if row[3] else 0.0
+            ctns = round(float(row[7])) if row[7] else 0 # ROUNDED CTNS
+            principal_val = row[6] or ""
             bc_info = branch_code_map.get(principal_val.strip().lower(), {})
             sd_info = sd_code_map.get(principal_val.strip().lower(), {})
 
             unit_cost = pricing_info.get('value', 0.0) or 0.0
-            item_cost = quantity * unit_cost
+            item_cost = ctns * unit_cost # Based on CTNS
             
             total_cost += item_cost
             estimated_total_cost += item_cost
@@ -590,13 +591,12 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
             calculated_products.append({
                 "code": item_code,
                 "name": row[1] if row[1] else "",
-                "quantity": quantity,
-                "uom": row[3] if row[3] else "",
+                "ctns": ctns,
+                "uom": row[2] if row[2] else "",
                 "weight": weight,
-                "doc_date": row[5],       
-                "sin_no": row[6],         
+                "doc_date": row[4],       
+                "sin_no": row[5],         
                 "principal": principal_val,
-                "ctns": float(row[8]) if row[8] else 0.0,
                 "b_code": bc_info.get("Code", ""),
                 "b_name": bc_info.get("Name", ""),
                 "b_dept": bc_info.get("Dept", ""),
@@ -1046,11 +1046,11 @@ def download_history_excel(record_id: int):
         ws = wb.active
         ws.title = "Cost Details"
 
-        # Added "Price(ctn)" to headers
+        # Headers updated: Removed "Quantity" and "Price"
         headers = [
             "No", "Claim Date", "Delivery Date", "SIN No", "Area", 
-            "Code", "Name", "Principal", "Item Code", "Item", "Ctns", "Quantity", 
-            "Price(ctn)", "Price", "Total Amount", "Weight", "UOM", "Gate", "Channel", "Month", "Year", 
+            "Code", "Name", "Principal", "Item Code", "Item", "Ctns", 
+            "Price", "Total Amount", "Weight", "UOM", "Gate", "Channel", "Month", "Year", 
             "Description for Account", "Description with cnts and price", 
             "Branch", "B-Dept", "B-Principal", "S-Dept", "S-Principal", "Calculation ID"
         ]
@@ -1093,16 +1093,15 @@ def download_history_excel(record_id: int):
             # Extract necessary items for calculations
             b_desc = item.get('b_desc', '')
             ctns_val = item.get('ctns', 0)
-            price_val = item.get('unit_cost', 0)
             total_cost_val = item.get('total_cost', 0)
             
             # Formatting variables
             ctns_formatted = int(ctns_val) if float(ctns_val).is_integer() else ctns_val
-            price_formatted = int(price_val) if float(price_val).is_integer() else round(price_val, 2)
             
             # Calculate Price(ctn)
             price_per_ctn = total_cost_val / ctns_val if ctns_val > 0 else 0
-            
+            price_formatted = int(price_per_ctn) if float(price_per_ctn).is_integer() else round(price_per_ctn, 2)
+
             concat_desc = f"{b_desc.strip()} - {ctns_formatted} ctns @{price_formatted} kyats"
 
             # Populating columns
@@ -1118,42 +1117,35 @@ def download_history_excel(record_id: int):
             ws.cell(row=row_num, column=9, value=item['code']).border = border # Item Code
             ws.cell(row=row_num, column=10, value=item['name']).border = border # Item
             ws.cell(row=row_num, column=11, value=ctns_formatted).border = border # Ctns
-            ws.cell(row=row_num, column=12, value=item['quantity']).border = border # Quantity
             
-            # New Price(ctn) Column
-            ctn_price_cell = ws.cell(row=row_num, column=13, value=price_per_ctn) 
+            # Price(ctn) Column is now 12 (Quantity was removed)
+            ctn_price_cell = ws.cell(row=row_num, column=12, value=price_per_ctn) 
             ctn_price_cell.number_format = '#,##0.00'
             ctn_price_cell.border = border
 
-            # Shifted original price column to 14
-            price_cell = ws.cell(row=row_num, column=14, value=price_val) 
-            price_cell.number_format = '#,##0.00'
-            price_cell.border = border
-
-            # Shifted total amount column to 15
-            amt_cell = ws.cell(row=row_num, column=15, value=total_cost_val) 
+            # Total Amount Column is now 13 (Price was removed)
+            amt_cell = ws.cell(row=row_num, column=13, value=total_cost_val) 
             amt_cell.number_format = '#,##0.00'
             amt_cell.border = border
 
-            # Shifted remaining columns down by 1
-            weight_cell = ws.cell(row=row_num, column=16, value=item['weight']) 
+            # Shifted remaining columns down by 2 (Weight is now 14)
+            weight_cell = ws.cell(row=row_num, column=14, value=item['weight']) 
             weight_cell.number_format = '#,##0.00'
             weight_cell.border = border
 
-            ws.cell(row=row_num, column=17, value="Kg").border = border # UOM hardcoded to "Kg"
-            
-            ws.cell(row=row_num, column=18, value=record['gate_name']).border = border # Gate
-            ws.cell(row=row_num, column=19, value=record.get('channel', '')).border = border # Channel 
-            ws.cell(row=row_num, column=20, value=claim_month).border = border # Month
-            ws.cell(row=row_num, column=21, value=claim_year).border = border # Year
-            ws.cell(row=row_num, column=22, value=b_desc).border = border # Description for Account
-            ws.cell(row=row_num, column=23, value=concat_desc).border = border # Description with cnts and price
-            ws.cell(row=row_num, column=24, value=record['to_loc']).border = border # Branch
-            ws.cell(row=row_num, column=25, value=item.get('b_dept', '')).border = border # B-Dept
-            ws.cell(row=row_num, column=26, value=item.get('b_principal', '')).border = border # B-Principal
-            ws.cell(row=row_num, column=27, value=item.get('s_dept', '')).border = border # S-Dept
-            ws.cell(row=row_num, column=28, value=item.get('s_principal', '')).border = border # S-Principal
-            ws.cell(row=row_num, column=29, value=record['id']).border = border # Calculation ID
+            ws.cell(row=row_num, column=15, value="Kg").border = border # UOM hardcoded to "Kg"
+            ws.cell(row=row_num, column=16, value=record['gate_name']).border = border # Gate
+            ws.cell(row=row_num, column=17, value=record.get('channel', '')).border = border # Channel 
+            ws.cell(row=row_num, column=18, value=claim_month).border = border # Month
+            ws.cell(row=row_num, column=19, value=claim_year).border = border # Year
+            ws.cell(row=row_num, column=20, value=b_desc).border = border # Description for Account
+            ws.cell(row=row_num, column=21, value=concat_desc).border = border # Description with cnts and price
+            ws.cell(row=row_num, column=22, value=record['to_loc']).border = border # Branch
+            ws.cell(row=row_num, column=23, value=item.get('b_dept', '')).border = border # B-Dept
+            ws.cell(row=row_num, column=24, value=item.get('b_principal', '')).border = border # B-Principal
+            ws.cell(row=row_num, column=25, value=item.get('s_dept', '')).border = border # S-Dept
+            ws.cell(row=row_num, column=26, value=item.get('s_principal', '')).border = border # S-Principal
+            ws.cell(row=row_num, column=27, value=record['id']).border = border # Calculation ID
 
         for col in ws.columns:
             max_length = 0
@@ -1848,8 +1840,9 @@ def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums"))
         cursor = conn.cursor()
         placeholders = ','.join('?' * len(doc_nums))
         
+        # BatchQty Removed
         query = f"""
-            SELECT ItemCode, MAX(Dscription), SUM(BatchQty), MAX(UoM), SUM(ItemWeight), DocNum
+            SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn)
             FROM PG_TransferDetails 
             WHERE DocNum IN ({placeholders}) 
             GROUP BY DocNum, ItemCode
@@ -1860,14 +1853,14 @@ def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums"))
         products = []
         total_weight = 0.0
         for row in rows:
-            weight = float(row[4]) if row[4] else 0.0
+            weight = float(row[3]) if row[3] else 0.0
             total_weight += weight
             products.append({
                 "code": row[0] or "",
                 "name": row[1] or "",
-                "quantity": float(row[2]) if row[2] else 0.0,
-                "uom": row[3] or "",
-                "weight": weight
+                "uom": row[2] or "",
+                "weight": weight,
+                "ctns": round(float(row[5])) if len(row) > 5 and row[5] is not None else 0
             })
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
@@ -1879,8 +1872,9 @@ def get_products_by_doc_num(doc_num: str):
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
+        # BatchQty Removed
         cursor.execute("""
-            SELECT ItemCode, MAX(Dscription), SUM(BatchQty), MAX(UoM), SUM(ItemWeight), DocNum
+            SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn)
             FROM PG_TransferDetails 
             WHERE DocNum = ? 
             GROUP BY DocNum, ItemCode
@@ -1893,14 +1887,14 @@ def get_products_by_doc_num(doc_num: str):
         products = []
         total_weight = 0.0
         for row in rows:
-            weight = float(row[4]) if row[4] else 0.0
+            weight = float(row[3]) if row[3] else 0.0
             total_weight += weight
             products.append({
                 "item_code": row[0] or "",
                 "description": row[1] or "",
-                "quantity": float(row[2]) if row[2] else 0.0,
-                "uom": row[3] or "",
-                "item_weight": weight
+                "uom": row[2] or "",
+                "item_weight": weight,
+                "ctns": round(float(row[5])) if len(row) > 5 and row[5] is not None else 0
             })
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}

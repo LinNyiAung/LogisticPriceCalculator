@@ -437,7 +437,7 @@ const PricingApp = () => {
         gate_name: selectedGate,
         from_loc: selectedFrom,
         to_loc: selectedTo,
-        doc_nums: selectedDocNums.map(String), // <--- FIX: Convert array items to strings
+        doc_nums: selectedDocNums.map(String),
         manual_total_cost: (manualTotalCost && isManualTotalCostEnabled) ? parseFloat(manualTotalCost) : null,
         additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0,
         final_total_cost: calculatedTotalCost,
@@ -1547,7 +1547,7 @@ const PricingApp = () => {
     if (!acc[curr.code]) {
       acc[curr.code] = { ...curr };
     } else {
-      acc[curr.code].quantity += curr.quantity || 0;
+      acc[curr.code].ctns = (acc[curr.code].ctns || 0) + (curr.ctns || 0);
       acc[curr.code].weight += curr.weight || 0;
       if (curr.total_cost !== undefined) {
         acc[curr.code].total_cost = (acc[curr.code].total_cost || 0) + curr.total_cost;
@@ -1712,7 +1712,7 @@ const PricingApp = () => {
                       <tr>
                         <th className="border p-2 text-left">Item Code</th>
                         <th className="border p-2 text-left">Description</th>
-                        <th className="border p-2 text-left">Quantity (pcs)</th>
+                        <th className="border p-2 text-left">Cartons</th>
                         <th className="border p-2 text-left">Weight</th>
                         <th className="border p-2 text-left">UOM</th>
                         {hasCalculated && (<th className="border p-2 text-left">Cost (MMK)</th>)}
@@ -1723,7 +1723,7 @@ const PricingApp = () => {
                         <tr key={index}>
                           <td className="border p-2">{product.code}</td>
                           <td className="border p-2">{product.name}</td>
-                          <td className="border p-2">{product.quantity}</td>
+                          <td className="border p-2">{product.ctns}</td>
                           <td className="border p-2">{formatNumber(product.weight)}</td>
                           <td className="border p-2">Kg</td>
                           {hasCalculated && (<td className="border p-2 font-semibold">{product.total_cost !== undefined ? formatNumber(product.total_cost) : '-'}</td>)}
