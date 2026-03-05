@@ -81,7 +81,7 @@ def startup_db():
             )
         """)
         
-        # Item_Pricing table (UOM Removed)
+        # Item_Pricing table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Item_Pricing (
                 [Pricing ID] INTEGER PRIMARY KEY,
@@ -103,7 +103,7 @@ def startup_db():
                 [gate_name] TEXT,
                 [from_loc] TEXT,
                 [to_loc] TEXT,
-                [doc_nums] TEXT, -- Stored as JSON string (contains DocNums)
+                [doc_nums] TEXT,
                 [manual_total_cost] REAL,
                 [additional_charges] REAL,
                 [final_total_cost] REAL,
@@ -114,18 +114,12 @@ def startup_db():
         """)
 
         # Safely attempt to add columns for existing databases
-        try:
-            cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [channel] TEXT")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [status] TEXT DEFAULT 'saved'")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [created_by] TEXT")
-        except sqlite3.OperationalError:
-            pass
+        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [channel] TEXT")
+        except sqlite3.OperationalError: pass
+        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [status] TEXT DEFAULT 'saved'")
+        except sqlite3.OperationalError: pass
+        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [created_by] TEXT")
+        except sqlite3.OperationalError: pass
         
         # --- User Table ---
         cursor.execute("""
@@ -133,6 +127,14 @@ def startup_db():
                 username TEXT PRIMARY KEY,
                 hashed_password TEXT,
                 role TEXT
+            )
+        """)
+
+        # --- Roles Table ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Roles (
+                name TEXT PRIMARY KEY,
+                permissions TEXT
             )
         """)
 
@@ -210,28 +212,34 @@ def startup_db():
             )
         """)
         
-        # Create default account user if not exists
+        # --- SEED DEFAULTS ---
+        # Seed default roles to ensure backward compatibility
+        cursor.execute("SELECT COUNT(*) FROM Roles")
+        if cursor.fetchone()[0] == 0:
+            default_roles = [
+                ('admin', json.dumps(['manage_users', 'manage_roles', 'manage_gates', 'manage_items', 'manage_references', 'view_all_history', 'delete_history', 'claim_calculation', 'submit_calculation'])),
+                ('account', json.dumps(['manage_gates', 'manage_items', 'manage_references', 'view_all_history', 'claim_calculation'])),
+                ('logistic', json.dumps(['submit_calculation']))
+            ]
+            cursor.executemany("INSERT INTO Roles (name, permissions) VALUES (?, ?)", default_roles)
+
+        # Create default users
         cursor.execute("SELECT * FROM Users WHERE username = 'account'")
         if not cursor.fetchone():
             default_pw = pwd_context.hash("account123") 
-            cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
-                          ('account', default_pw, 'account'))
+            cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", ('account', default_pw, 'account'))
             
-        # Create default logistic user if not exists
         cursor.execute("SELECT * FROM Users WHERE username = 'logistic'")
         if not cursor.fetchone():
             log_pw = pwd_context.hash("log123")
-            cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
-                          ('logistic', log_pw, 'logistic'))
+            cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", ('logistic', log_pw, 'logistic'))
             
-        # Create default admin user
         cursor.execute("SELECT * FROM Users WHERE username = 'admin'")
         if not cursor.fetchone():
             admin_pw = pwd_context.hash("admin123")
-            cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
-                          ('admin', admin_pw, 'admin'))
+            cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", ('admin', admin_pw, 'admin'))
 
-        # --- SEED DEFAULTS FOR REFERENCES ---
+        # Seed references
         cursor.execute("SELECT COUNT(*) FROM Locations")
         if cursor.fetchone()[0] == 0:
             default_locs = [('YGN',), ('MDY',), ('NPT',), ('MGW',), ('TGI',), ('TGU',), ('PTN',), ('MLM',)]
@@ -308,8 +316,6 @@ class CalculationSaveRequest(BaseModel):
 class ReferenceItem(BaseModel):
     name: str
 
-# --- User Management Models ---
-
 class UserCreate(BaseModel):
     username: str
     password: str
@@ -323,13 +329,25 @@ class UserResponse(BaseModel):
     username: str
     role: str
 
-# --- Auth Models & Helpers ---
+class RoleCreate(BaseModel):
+    name: str
+    permissions: List[str]
+
+class RoleUpdate(BaseModel):
+    permissions: List[str]
+
+class RoleResponse(BaseModel):
+    name: str
+    permissions: List[str]
 
 class Token(BaseModel):
     access_token: str
     token_type: str
     role: str
     username: str
+    permissions: List[str]
+
+# --- Auth Helpers ---
     
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -351,31 +369,188 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         role: str = payload.get("role")
+        permissions: list = payload.get("permissions", [])
         if username is None:
             raise credentials_exception
-        return {"username": username, "role": role}
+        return {"username": username, "role": role, "permissions": permissions}
     except JWTError:
         raise credentials_exception
 
-async def get_account_user(current_user: dict = Depends(get_current_user)):
-    # Account features are accessible by 'account' OR 'admin'
-    if current_user["role"] not in ["account", "admin"]:
-        raise HTTPException(status_code=403, detail="Privileged access required (Account or Admin)")
-    return current_user
+def require_permission(perm: str):
+    def permission_checker(current_user: dict = Depends(get_current_user)):
+        if perm not in current_user.get("permissions", []):
+            raise HTTPException(status_code=403, detail=f"Requires '{perm}' permission")
+        return current_user
+    return permission_checker
 
-async def get_admin_user(current_user: dict = Depends(get_current_user)):
-    # Admin features are ONLY for 'admin'
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin privileges required")
-    return current_user
+# --- Login & Token ---
 
-# --- Helper Functions ---
+@app.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    conn = get_logistic_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT u.username, u.hashed_password, u.role, r.permissions 
+        FROM Users u
+        LEFT JOIN Roles r ON u.role = r.name
+        WHERE u.username = ?
+    """, (form_data.username,))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if not user or not verify_password(form_data.password, user[1]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    permissions = json.loads(user[3]) if user[3] else []
+    access_token = create_access_token(data={"sub": user[0], "role": user[2], "permissions": permissions})
+    return {"access_token": access_token, "token_type": "bearer", "role": user[2], "username": user[0], "permissions": permissions}
+
+# --- Role Management Endpoints ---
+
+@app.get("/roles", response_model=List[RoleResponse])
+def get_all_roles(user: dict = Depends(require_permission("manage_roles"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, permissions FROM Roles ORDER BY name")
+        rows = cursor.fetchall()
+        conn.close()
+        return [{"name": row[0], "permissions": json.loads(row[1]) if row[1] else []} for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching roles: {str(e)}")
+
+@app.post("/roles")
+def create_role(role_data: RoleCreate, user: dict = Depends(require_permission("manage_roles"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM Roles WHERE name = ?", (role_data.name,))
+        if cursor.fetchone():
+            conn.close()
+            raise HTTPException(status_code=400, detail="Role already exists")
+        cursor.execute("INSERT INTO Roles (name, permissions) VALUES (?, ?)", 
+                      (role_data.name, json.dumps(role_data.permissions)))
+        conn.commit()
+        conn.close()
+        return {"message": "Role created successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating role: {str(e)}")
+
+@app.put("/roles/{role_name}")
+def update_role(role_name: str, role_data: RoleUpdate, user: dict = Depends(require_permission("manage_roles"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE Roles SET permissions = ? WHERE name = ?", (json.dumps(role_data.permissions), role_name))
+        conn.commit()
+        conn.close()
+        return {"message": "Role updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating role: {str(e)}")
+
+@app.delete("/roles/{role_name}")
+def delete_role(role_name: str, user: dict = Depends(require_permission("manage_roles"))):
+    if role_name in ['admin', 'account', 'logistic']:
+        raise HTTPException(status_code=400, detail="Cannot delete default system roles")
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM Users WHERE role = ?", (role_name,))
+        if cursor.fetchone()[0] > 0:
+            conn.close()
+            raise HTTPException(status_code=400, detail="Cannot delete role currently assigned to users")
+        cursor.execute("DELETE FROM Roles WHERE name = ?", (role_name,))
+        conn.commit()
+        conn.close()
+        return {"message": "Role deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting role: {str(e)}")
+
+# --- User Management Endpoints ---
+
+@app.get("/users", response_model=List[UserResponse])
+def get_all_users(user: dict = Depends(require_permission("manage_users"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT username, role FROM Users ORDER BY username")
+        rows = cursor.fetchall()
+        conn.close()
+        return [{"username": row[0], "role": row[1]} for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
+
+@app.post("/users")
+def create_user(user_data: UserCreate, user: dict = Depends(require_permission("manage_users"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT username FROM Users WHERE username = ?", (user_data.username,))
+        if cursor.fetchone():
+            conn.close()
+            raise HTTPException(status_code=400, detail="Username already exists")
+        hashed_pw = pwd_context.hash(user_data.password)
+        cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
+                      (user_data.username, hashed_pw, user_data.role))
+        conn.commit()
+        conn.close()
+        return {"message": "User created successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating user: {str(e)}")
+
+@app.put("/users/{username}")
+def update_user(username: str, user_data: UserUpdate, user: dict = Depends(require_permission("manage_users"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT username FROM Users WHERE username = ?", (username,))
+        if not cursor.fetchone():
+            conn.close()
+            raise HTTPException(status_code=404, detail="User not found")
+        if user_data.password:
+            hashed_pw = pwd_context.hash(user_data.password)
+            cursor.execute("UPDATE Users SET hashed_password = ? WHERE username = ?", (hashed_pw, username))
+        if user_data.role:
+            cursor.execute("UPDATE Users SET role = ? WHERE username = ?", (user_data.role, username))
+        conn.commit()
+        conn.close()
+        return {"message": "User updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating user: {str(e)}")
+
+@app.delete("/users/{username}")
+def delete_user(username: str, user: dict = Depends(require_permission("manage_users"))):
+    if username == user["username"]:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM Users WHERE username = ?", (username,))
+        if cursor.rowcount == 0:
+            conn.close()
+            raise HTTPException(status_code=404, detail="User not found")
+        conn.commit()
+        conn.close()
+        return {"message": "User deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
+
+# --- Helper Functions for Calculation ---
 
 def determine_calculation_type_sql(gate_id):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
         cursor.execute("SELECT [Cost] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
         row = cursor.fetchone()
         conn.close()
@@ -387,9 +562,7 @@ def determine_calculation_type_sql(gate_id):
                     return "gate_pricing"
             except ValueError:
                 pass
-        
         return "direct_pricing"
-
     except Exception as e:
         logger.error(f"Error determining calc type: {str(e)}")
         return "unknown"
@@ -397,14 +570,10 @@ def determine_calculation_type_sql(gate_id):
 def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, additional_charges=0.0):
     add_charges = float(additional_charges) if additional_charges is not None else 0.0
 
-    # 1. Get Transfer Data from DWBI (PG_TransferDetails)
-    # BatchQty removed
     try:
         conn_dwbi = get_dwbi_connection()
         cursor_dwbi = conn_dwbi.cursor()
-        
         placeholders = ','.join('?' * len(doc_nums))
-        
         query = f"""
             SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(BatchQtyByCtn)
             FROM PG_TransferDetails 
@@ -421,29 +590,20 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
     if not pick_rows:
         raise Exception("No products found for the selected Doc Nums")
     
-    # 2. Get Gate Data, Branch_Code, and SD_Code mapping
     try:
         conn_log = get_logistic_connection()
         cursor_log = conn_log.cursor()
-        
         cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
         gate_row = cursor_log.fetchone()
         
-        # Fetch Branch_Code mapping
         cursor_log.execute("SELECT [Log-Pric], [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code")
         branch_code_map = {row[0].strip().lower(): {
-            "Code": row[1],
-            "Name": row[2],
-            "Dept": row[3],
-            "Principal": row[4],
-            "Description": row[5]
+            "Code": row[1], "Name": row[2], "Dept": row[3], "Principal": row[4], "Description": row[5]
         } for row in cursor_log.fetchall() if row[3]}
 
-        # Fetch SD_Code mapping (Mapped by Log-Pric)
         cursor_log.execute("SELECT [Dept], [Principal], [Log-Pric] FROM SD_Code")
         sd_code_map = {row[2].strip().lower(): {
-            "Dept": row[0],
-            "Principal": row[1]
+            "Dept": row[0], "Principal": row[1]
         } for row in cursor_log.fetchall() if row[2]}
 
     except Exception as e:
@@ -457,14 +617,9 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
     from_loc = gate_row[1]
     to_loc = gate_row[2]
     cost = float(gate_row[3] or 0)
-    gate_unit = float(gate_row[4]) if gate_row[4] else 1.0 # default to 1 if Unit is missing
+    gate_unit = float(gate_row[4]) if gate_row[4] else 1.0
     
-    # 3. Get Item Pricing (UOM removed)
-    cursor_log.execute("""
-        SELECT [Item ID], [Transportation Cost] 
-        FROM Item_Pricing 
-        WHERE [Gate ID] = ?
-    """, (gate_id,))
+    cursor_log.execute("SELECT [Item ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
     pricing_rows = cursor_log.fetchall()
     conn_log.close()
     
@@ -472,7 +627,6 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
     for row in pricing_rows:
         i_code = row[0]
         t_cost = str(row[1]).strip() if row[1] else ""
-        
         if not t_cost or t_cost.lower() == 'nan' or t_cost.lower() == 'none' or t_cost == '':
             item_pricing[i_code] = {'type': 'ton', 'value': None}
         else:
@@ -482,10 +636,8 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
             except:
                 item_pricing[i_code] = {'type': 'unknown', 'value': None}
 
-    if cost > 0:
-        calc_type = "gate_pricing"
-    else:
-        calc_type = "direct_pricing"
+    if cost > 0: calc_type = "gate_pricing"
+    else: calc_type = "direct_pricing"
 
     calculated_products = []
     total_cost = 0.0
@@ -509,7 +661,7 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
                 "doc_date": row[4],         
                 "sin_no": row[5],           
                 "principal": principal_val,   
-                "ctns": round(float(row[7])) if row[7] else 0, # ROUNDED CTNS
+                "ctns": round(float(row[7])) if row[7] else 0,
                 "b_code": bc_info.get("Code", ""),
                 "b_name": bc_info.get("Name", ""),
                 "b_dept": bc_info.get("Dept", ""),
@@ -524,15 +676,12 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
             p_val = p_info.get('value', 0.0)
             
             if p_type == 'direct':
-                # Calculation based on ROUNDED CTNS
                 estimated_total_cost += (item_data['ctns'] * p_val)
                 item_data['standard_unit_cost'] = p_val
                 direct_items.append(item_data)
             else:
-                # Calculate cost based on Unit (e.g. cost per 1000 kg vs cost per 1 kg)
                 effective_rate = cost / gate_unit if gate_unit > 0 else cost
                 cost_item = item_data['weight'] * effective_rate
-                
                 estimated_total_cost += cost_item
                 ton_cost_total += cost_item
                 item_data['total_cost'] = cost_item
@@ -542,35 +691,24 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         if manual_total_cost is not None:
             remainder = manual_total_cost - ton_cost_total
             total_direct_ctns = sum(item['ctns'] for item in direct_items)
-            
-            if total_direct_ctns > 0:
-                direct_unit_cost = remainder / total_direct_ctns
-            
+            if total_direct_ctns > 0: direct_unit_cost = remainder / total_direct_ctns
             total_cost = manual_total_cost
         else:
             total_cost = estimated_total_cost
 
         for item in ton_items:
             avg_unit_cost = item['total_cost'] / item['ctns'] if item['ctns'] > 0 else 0
-            
             calculated_products.append({
-                **item,
-                "calculation_type": "weight",
-                "system_rate": None,
-                "unit_cost": avg_unit_cost, 
-                "total_cost": item['total_cost'] 
+                **item, "calculation_type": "weight", "system_rate": None,
+                "unit_cost": avg_unit_cost, "total_cost": item['total_cost'] 
             })
         
         for item in direct_items:
             final_unit_cost = direct_unit_cost if manual_total_cost is not None else item['standard_unit_cost']
-            final_item_cost = item['ctns'] * final_unit_cost # Based on CTNS
-            
+            final_item_cost = item['ctns'] * final_unit_cost
             calculated_products.append({
-                **item,
-                "calculation_type": "direct_split" if manual_total_cost else "direct",
-                "system_rate": item['standard_unit_cost'],
-                "unit_cost": final_unit_cost,
-                "total_cost": final_item_cost
+                **item, "calculation_type": "direct_split" if manual_total_cost else "direct",
+                "system_rate": item['standard_unit_cost'], "unit_cost": final_unit_cost, "total_cost": final_item_cost
             })
 
     elif calc_type == "direct_pricing":
@@ -579,161 +717,45 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
             pricing_info = item_pricing.get(item_code, {})
             
             weight = float(row[3]) if row[3] else 0.0
-            ctns = round(float(row[7])) if row[7] else 0 # ROUNDED CTNS
+            ctns = round(float(row[7])) if row[7] else 0
             principal_val = row[6] or ""
             bc_info = branch_code_map.get(principal_val.strip().lower(), {})
             sd_info = sd_code_map.get(principal_val.strip().lower(), {})
 
             unit_cost = pricing_info.get('value', 0.0) or 0.0
-            item_cost = ctns * unit_cost # Based on CTNS
+            item_cost = ctns * unit_cost
             
             total_cost += item_cost
             estimated_total_cost += item_cost
             
             calculated_products.append({
-                "code": item_code,
-                "name": row[1] if row[1] else "",
-                "ctns": ctns,
-                "uom": row[2] if row[2] else "",
-                "weight": weight,
-                "doc_date": row[4],       
-                "sin_no": row[5],         
-                "principal": principal_val,
-                "b_code": bc_info.get("Code", ""),
-                "b_name": bc_info.get("Name", ""),
-                "b_dept": bc_info.get("Dept", ""),
-                "b_principal": bc_info.get("Principal", ""),
-                "b_desc": bc_info.get("Description", ""),
-                "s_dept": sd_info.get("Dept", ""),
-                "s_principal": sd_info.get("Principal", ""),
-                "calculation_type": "direct",
-                "system_rate": unit_cost if unit_cost > 0 else None,
-                "unit_cost": unit_cost,
-                "total_cost": item_cost
+                "code": item_code, "name": row[1] if row[1] else "", "ctns": ctns,
+                "uom": row[2] if row[2] else "", "weight": weight, "doc_date": row[4],       
+                "sin_no": row[5], "principal": principal_val, "b_code": bc_info.get("Code", ""),
+                "b_name": bc_info.get("Name", ""), "b_dept": bc_info.get("Dept", ""),
+                "b_principal": bc_info.get("Principal", ""), "b_desc": bc_info.get("Description", ""),
+                "s_dept": sd_info.get("Dept", ""), "s_principal": sd_info.get("Principal", ""),
+                "calculation_type": "direct", "system_rate": unit_cost if unit_cost > 0 else None,
+                "unit_cost": unit_cost, "total_cost": item_cost
             })
 
-    # --- DISTRIBUTE ADDITIONAL CHARGES TO INDIVIDUAL ITEMS EQUALLY ---
     if add_charges != 0 and calculated_products:
         num_items = len(calculated_products)
         equal_extra_cost = add_charges / num_items
-        
         for p in calculated_products:
             p['total_cost'] += equal_extra_cost
-            
-            # Recalculate the unit cost to reflect the added charge
-            if p['ctns'] > 0:
-                p['unit_cost'] = p['total_cost'] / p['ctns']
+            if p['ctns'] > 0: p['unit_cost'] = p['total_cost'] / p['ctns']
 
     calculated_products.sort(key=lambda x: (x.get('sin_no', ''), x['code']))
-    
     total_cost += add_charges
     estimated_total_cost += add_charges
     
     return {
-        "calculation_type": calc_type,
-        "gate_name": gate_name,
-        "from_loc": from_loc,
-        "to_loc": to_loc,
-        "cost": cost, 
-        "additional_charges": add_charges,
-        "calculated_products": calculated_products,
-        "total_cost": total_cost,
+        "calculation_type": calc_type, "gate_name": gate_name, "from_loc": from_loc,
+        "to_loc": to_loc, "cost": cost, "additional_charges": add_charges,
+        "calculated_products": calculated_products, "total_cost": total_cost,
         "estimated_total_cost": estimated_total_cost
     }
-
-# --- Login & Token ---
-
-@app.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    conn = get_logistic_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT username, hashed_password, role FROM Users WHERE username = ?", (form_data.username,))
-    user = cursor.fetchone()
-    conn.close()
-    
-    if not user or not verify_password(form_data.password, user[1]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    access_token = create_access_token(data={"sub": user[0], "role": user[2]})
-    return {"access_token": access_token, "token_type": "bearer", "role": user[2], "username": user[0]}
-
-# --- User Management Endpoints (Admin Only) ---
-@app.get("/users", response_model=List[UserResponse])
-def get_all_users(user: dict = Depends(get_admin_user)):
-    try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT username, role FROM Users ORDER BY username")
-        rows = cursor.fetchall()
-        conn.close()
-        return [{"username": row[0], "role": row[1]} for row in rows]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
-
-@app.post("/users")
-def create_user(user_data: UserCreate, user: dict = Depends(get_admin_user)):
-    try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT username FROM Users WHERE username = ?", (user_data.username,))
-        if cursor.fetchone():
-            conn.close()
-            raise HTTPException(status_code=400, detail="Username already exists")
-        hashed_pw = pwd_context.hash(user_data.password)
-        cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
-                      (user_data.username, hashed_pw, user_data.role))
-        conn.commit()
-        conn.close()
-        return {"message": "User created successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating user: {str(e)}")
-
-@app.put("/users/{username}")
-def update_user(username: str, user_data: UserUpdate, user: dict = Depends(get_admin_user)):
-    try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT username FROM Users WHERE username = ?", (username,))
-        if not cursor.fetchone():
-            conn.close()
-            raise HTTPException(status_code=404, detail="User not found")
-        if user_data.password:
-            hashed_pw = pwd_context.hash(user_data.password)
-            cursor.execute("UPDATE Users SET hashed_password = ? WHERE username = ?", (hashed_pw, username))
-        if user_data.role:
-            cursor.execute("UPDATE Users SET role = ? WHERE username = ?", (user_data.role, username))
-        conn.commit()
-        conn.close()
-        return {"message": "User updated successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating user: {str(e)}")
-
-@app.delete("/users/{username}")
-def delete_user(username: str, user: dict = Depends(get_admin_user)):
-    if username == user["username"]:
-        raise HTTPException(status_code=400, detail="Cannot delete your own account")
-    try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM Users WHERE username = ?", (username,))
-        if cursor.rowcount == 0:
-            conn.close()
-            raise HTTPException(status_code=404, detail="User not found")
-        conn.commit()
-        conn.close()
-        return {"message": "User deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
 
 # --- Reference Management Endpoints ---
 
@@ -750,7 +772,7 @@ def get_ref_locations():
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/locations")
-def add_ref_location(item: ReferenceItem, user: dict = Depends(get_account_user)):
+def add_ref_location(item: ReferenceItem, user: dict = Depends(require_permission("manage_references"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -762,13 +784,11 @@ def add_ref_location(item: ReferenceItem, user: dict = Depends(get_account_user)
             raise HTTPException(status_code=400, detail="Location already exists")
         conn.close()
         return {"message": "Added successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.delete("/references/locations/{name}")
-def delete_ref_location(name: str, user: dict = Depends(get_account_user)):
+def delete_ref_location(name: str, user: dict = Depends(require_permission("manage_references"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -779,10 +799,8 @@ def delete_ref_location(name: str, user: dict = Depends(get_account_user)):
         conn.commit()
         conn.close()
         return {"message": "Deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.get("/references/uoms")
 def get_ref_uoms():
@@ -793,11 +811,10 @@ def get_ref_uoms():
         rows = cursor.fetchall()
         conn.close()
         return [row[0] for row in rows]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/uoms")
-def add_ref_uom(item: ReferenceItem, user: dict = Depends(get_account_user)):
+def add_ref_uom(item: ReferenceItem, user: dict = Depends(require_permission("manage_references"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -809,13 +826,11 @@ def add_ref_uom(item: ReferenceItem, user: dict = Depends(get_account_user)):
             raise HTTPException(status_code=400, detail="UOM already exists")
         conn.close()
         return {"message": "Added successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.delete("/references/uoms/{name}")
-def delete_ref_uom(name: str, user: dict = Depends(get_account_user)):
+def delete_ref_uom(name: str, user: dict = Depends(require_permission("manage_references"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -826,10 +841,8 @@ def delete_ref_uom(name: str, user: dict = Depends(get_account_user)):
         conn.commit()
         conn.close()
         return {"message": "Deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.get("/references/channels")
 def get_ref_channels():
@@ -840,11 +853,10 @@ def get_ref_channels():
         rows = cursor.fetchall()
         conn.close()
         return [row[0] for row in rows]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/channels")
-def add_ref_channel(item: ReferenceItem, user: dict = Depends(get_account_user)):
+def add_ref_channel(item: ReferenceItem, user: dict = Depends(require_permission("manage_references"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -856,13 +868,11 @@ def add_ref_channel(item: ReferenceItem, user: dict = Depends(get_account_user))
             raise HTTPException(status_code=400, detail="Channel already exists")
         conn.close()
         return {"message": "Added successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.delete("/references/channels/{name}")
-def delete_ref_channel(name: str, user: dict = Depends(get_account_user)):
+def delete_ref_channel(name: str, user: dict = Depends(require_permission("manage_references"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -873,10 +883,8 @@ def delete_ref_channel(name: str, user: dict = Depends(get_account_user)):
         conn.commit()
         conn.close()
         return {"message": "Deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 # --- Calculation History Endpoints ---
 
@@ -885,7 +893,6 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
         doc_nums_json = json.dumps(data.doc_nums)
         created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -908,12 +915,10 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
             message = "Calculation updated successfully"
         else:
             while True:
-                # Generate 12-digit ID: YYMMDDHHMMSS
                 new_id = int(datetime.datetime.now().strftime("%y%m%d%H%M%S"))
                 cursor.execute("SELECT 1 FROM Calculation_History WHERE id = ?", (new_id,))
-                if not cursor.fetchone():
-                    break
-                time.sleep(1) # Prevent duplicate ID if multiple saves happen in the exact same second
+                if not cursor.fetchone(): break
+                time.sleep(1)
 
             cursor.execute("""
                 INSERT INTO Calculation_History 
@@ -929,14 +934,11 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
         conn.commit()
         conn.close()
         return {"message": message}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error saving history: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error saving history: {str(e)}")
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error saving history: {str(e)}")
 
 @app.put("/history/{record_id}/submit")
-def submit_history_item(record_id: int, user: dict = Depends(get_current_user)):
+def submit_history_item(record_id: int, user: dict = Depends(require_permission("submit_calculation"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -947,11 +949,10 @@ def submit_history_item(record_id: int, user: dict = Depends(get_current_user)):
         conn.commit()
         conn.close()
         return {"message": "Calculation submitted successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error submitting record: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error submitting record: {str(e)}")
 
 @app.put("/history/{record_id}/claim")
-def claim_history_item(record_id: int, user: dict = Depends(get_account_user)):
+def claim_history_item(record_id: int, user: dict = Depends(require_permission("claim_calculation"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -962,8 +963,7 @@ def claim_history_item(record_id: int, user: dict = Depends(get_account_user)):
         conn.commit()
         conn.close()
         return {"message": "Calculation claimed successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error claiming record: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error claiming record: {str(e)}")
 
 @app.get("/history")
 def get_history(user: dict = Depends(get_current_user)):
@@ -971,42 +971,31 @@ def get_history(user: dict = Depends(get_current_user)):
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        role = user.get('role')
+        permissions = user.get('permissions', [])
         username = user.get('username')
 
-        if role == 'admin':
+        if 'view_all_history' in permissions:
             cursor.execute("SELECT * FROM Calculation_History ORDER BY created_at DESC")
-        elif role == 'account':
-            # Account users can see both submitted and already claimed records
+        elif 'claim_calculation' in permissions:
             cursor.execute("SELECT * FROM Calculation_History WHERE status IN ('submitted', 'claimed') ORDER BY created_at DESC")
-        else: # logistic
+        else:
             cursor.execute("SELECT * FROM Calculation_History WHERE created_by = ? OR created_by IS NULL ORDER BY created_at DESC", (username,))
             
         rows = cursor.fetchall()
         history = []
         for row in rows:
             history.append({
-                "id": row[0],
-                "created_at": row[1],
-                "gate_name": row[2],
-                "from_loc": row[3],
-                "to_loc": row[4],
-                "doc_nums": json.loads(row[5]),
-                "manual_total_cost": row[6],
-                "additional_charges": row[7],
-                "final_total_cost": row[8],
-                "channel": row[9],
-                "status": row[10] if len(row) > 10 else 'saved',
+                "id": row[0], "created_at": row[1], "gate_name": row[2], "from_loc": row[3], "to_loc": row[4],
+                "doc_nums": json.loads(row[5]), "manual_total_cost": row[6], "additional_charges": row[7],
+                "final_total_cost": row[8], "channel": row[9], "status": row[10] if len(row) > 10 else 'saved',
                 "created_by": row[11] if len(row) > 11 else 'unknown'
             })
         conn.close()
         return {"history": history}
-    except Exception as e:
-        logger.error(f"Error loading history: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error loading history: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading history: {str(e)}")
 
 @app.delete("/history/{record_id}")
-def delete_history_item(record_id: int, user: dict = Depends(get_admin_user)):
+def delete_history_item(record_id: int, user: dict = Depends(require_permission("delete_history"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -1017,10 +1006,8 @@ def delete_history_item(record_id: int, user: dict = Depends(get_admin_user)):
         conn.commit()
         conn.close()
         return {"message": "Record deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting record: {str(e)}")
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting record: {str(e)}")
 
 @app.get("/history/{record_id}/download")
 def download_history_excel(record_id: int):
@@ -1031,43 +1018,29 @@ def download_history_excel(record_id: int):
         row = cursor.fetchone()
         conn.close()
 
-        if not row:
-            raise HTTPException(status_code=404, detail="History record not found")
+        if not row: raise HTTPException(status_code=404, detail="History record not found")
 
         record = {
-            "id": row[0],
-            "gate_name": row[2],
-            "from_loc": row[3],
-            "to_loc": row[4],
-            "doc_nums": json.loads(row[5]),
-            "manual_total_cost": row[6],
-            "additional_charges": row[7],
-            "channel": row[9] 
+            "id": row[0], "gate_name": row[2], "from_loc": row[3], "to_loc": row[4],
+            "doc_nums": json.loads(row[5]), "manual_total_cost": row[6], "additional_charges": row[7], "channel": row[9] 
         }
 
         try:
             calc_result = _perform_calculation_logic(
-                gate_name=record['gate_name'],
-                doc_nums=record['doc_nums'],
-                manual_total_cost=record['manual_total_cost'],
-                additional_charges=record['additional_charges']
+                gate_name=record['gate_name'], doc_nums=record['doc_nums'],
+                manual_total_cost=record['manual_total_cost'], additional_charges=record['additional_charges']
             )
-        except Exception as e:
-             raise HTTPException(status_code=500, detail=f"Error recalculating data: {str(e)}")
+        except Exception as e: raise HTTPException(status_code=500, detail=f"Error recalculating data: {str(e)}")
 
         products = calc_result['calculated_products']
-
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Cost Details"
 
-        # Headers updated: Removed "Quantity" and "Price"
         headers = [
-            "No", "Claim Date", "Delivery Date", "SIN No", "Area", 
-            "Code", "Name", "Principal", "Item Code", "Item", "Ctns", 
-            "Price", "Total Amount", "Weight", "UOM", "Gate", "Channel", "Month", "Year", 
-            "Description for Account", "Description with cnts and price", 
-            "Branch", "B-Dept", "B-Principal", "S-Dept", "S-Principal", "Calculation ID"
+            "No", "Claim Date", "Delivery Date", "SIN No", "Area", "Code", "Name", "Principal", "Item Code", "Item", "Ctns", 
+            "Price", "Total Amount", "Weight", "UOM", "Gate", "Channel", "Month", "Year", "Description for Account", 
+            "Description with cnts and price", "Branch", "B-Dept", "B-Principal", "S-Dept", "S-Principal", "Calculation ID"
         ]
         
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
@@ -1083,7 +1056,6 @@ def download_history_excel(record_id: int):
             cell.alignment = Alignment(horizontal='center')
             cell.border = border
 
-        # Claim Date Logic
         now = datetime.datetime.now()
         claim_date_str = now.strftime("%d/%m/%Y") 
         claim_month = now.strftime("%B") 
@@ -1091,86 +1063,67 @@ def download_history_excel(record_id: int):
         
         for idx, item in enumerate(products, 1):
             row_num = idx + 1
-            
-            # Delivery Date (Doc Date) Logic
             doc_date_val = item.get('doc_date')
-            if isinstance(doc_date_val, datetime.datetime):
-                doc_date_str = doc_date_val.strftime("%d/%m/%Y")
+            if isinstance(doc_date_val, datetime.datetime): doc_date_str = doc_date_val.strftime("%d/%m/%Y")
             elif isinstance(doc_date_val, str) and len(doc_date_val) >= 10:
-                try:
-                    parsed_date = datetime.datetime.strptime(doc_date_val[:10], "%Y-%m-%d")
-                    doc_date_str = parsed_date.strftime("%d/%m/%Y")
-                except ValueError:
-                    doc_date_str = doc_date_val
-            else:
-                doc_date_str = str(doc_date_val) if doc_date_val else ""
+                try: doc_date_str = datetime.datetime.strptime(doc_date_val[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+                except ValueError: doc_date_str = doc_date_val
+            else: doc_date_str = str(doc_date_val) if doc_date_val else ""
 
-            # Extract necessary items for calculations
             b_desc = item.get('b_desc', '')
             ctns_val = item.get('ctns', 0)
             total_cost_val = item.get('total_cost', 0)
-            
-            # Formatting variables
             ctns_formatted = int(ctns_val) if float(ctns_val).is_integer() else ctns_val
-            
-            # Calculate Price(ctn)
             price_per_ctn = total_cost_val / ctns_val if ctns_val > 0 else 0
             price_formatted = int(price_per_ctn) if float(price_per_ctn).is_integer() else round(price_per_ctn, 2)
 
             concat_desc = f"{b_desc.strip()} - {ctns_formatted} ctns @{price_formatted} kyats"
 
-            # Populating columns
-            ws.cell(row=row_num, column=1, value=idx).border = border # No
-            ws.cell(row=row_num, column=2, value=claim_date_str).border = border # Claim Date
-            ws.cell(row=row_num, column=3, value=doc_date_str).border = border # Delivery Date
-            ws.cell(row=row_num, column=4, value=item.get('sin_no', '')).border = border # SIN No
-            ws.cell(row=row_num, column=5, value=record['to_loc']).border = border # Area
-            ws.cell(row=row_num, column=6, value=item.get('b_code', '')).border = border # Code
-            ws.cell(row=row_num, column=7, value=item.get('b_name', '')).border = border # Name
-            ws.cell(row=row_num, column=8, value=item.get('principal', '')).border = border # Principal
+            ws.cell(row=row_num, column=1, value=idx).border = border
+            ws.cell(row=row_num, column=2, value=claim_date_str).border = border
+            ws.cell(row=row_num, column=3, value=doc_date_str).border = border
+            ws.cell(row=row_num, column=4, value=item.get('sin_no', '')).border = border
+            ws.cell(row=row_num, column=5, value=record['to_loc']).border = border
+            ws.cell(row=row_num, column=6, value=item.get('b_code', '')).border = border
+            ws.cell(row=row_num, column=7, value=item.get('b_name', '')).border = border
+            ws.cell(row=row_num, column=8, value=item.get('principal', '')).border = border
+            ws.cell(row=row_num, column=9, value=item['code']).border = border
+            ws.cell(row=row_num, column=10, value=item['name']).border = border
+            ws.cell(row=row_num, column=11, value=ctns_formatted).border = border
             
-            ws.cell(row=row_num, column=9, value=item['code']).border = border # Item Code
-            ws.cell(row=row_num, column=10, value=item['name']).border = border # Item
-            ws.cell(row=row_num, column=11, value=ctns_formatted).border = border # Ctns
-            
-            # Price(ctn) Column is now 12 (Quantity was removed)
             ctn_price_cell = ws.cell(row=row_num, column=12, value=price_per_ctn) 
             ctn_price_cell.number_format = '#,##0.00'
             ctn_price_cell.border = border
 
-            # Total Amount Column is now 13 (Price was removed)
             amt_cell = ws.cell(row=row_num, column=13, value=total_cost_val) 
             amt_cell.number_format = '#,##0.00'
             amt_cell.border = border
 
-            # Shifted remaining columns down by 2 (Weight is now 14)
             weight_cell = ws.cell(row=row_num, column=14, value=item['weight']) 
             weight_cell.number_format = '#,##0.00'
             weight_cell.border = border
 
-            ws.cell(row=row_num, column=15, value="Kg").border = border # UOM hardcoded to "Kg"
-            ws.cell(row=row_num, column=16, value=record['gate_name']).border = border # Gate
-            ws.cell(row=row_num, column=17, value=record.get('channel', '')).border = border # Channel 
-            ws.cell(row=row_num, column=18, value=claim_month).border = border # Month
-            ws.cell(row=row_num, column=19, value=claim_year).border = border # Year
-            ws.cell(row=row_num, column=20, value=b_desc).border = border # Description for Account
-            ws.cell(row=row_num, column=21, value=concat_desc).border = border # Description with cnts and price
-            ws.cell(row=row_num, column=22, value=record['to_loc']).border = border # Branch
-            ws.cell(row=row_num, column=23, value=item.get('b_dept', '')).border = border # B-Dept
-            ws.cell(row=row_num, column=24, value=item.get('b_principal', '')).border = border # B-Principal
-            ws.cell(row=row_num, column=25, value=item.get('s_dept', '')).border = border # S-Dept
-            ws.cell(row=row_num, column=26, value=item.get('s_principal', '')).border = border # S-Principal
-            ws.cell(row=row_num, column=27, value=record['id']).border = border # Calculation ID
+            ws.cell(row=row_num, column=15, value="Kg").border = border
+            ws.cell(row=row_num, column=16, value=record['gate_name']).border = border
+            ws.cell(row=row_num, column=17, value=record.get('channel', '')).border = border
+            ws.cell(row=row_num, column=18, value=claim_month).border = border
+            ws.cell(row=row_num, column=19, value=claim_year).border = border
+            ws.cell(row=row_num, column=20, value=b_desc).border = border
+            ws.cell(row=row_num, column=21, value=concat_desc).border = border
+            ws.cell(row=row_num, column=22, value=record['to_loc']).border = border
+            ws.cell(row=row_num, column=23, value=item.get('b_dept', '')).border = border
+            ws.cell(row=row_num, column=24, value=item.get('b_principal', '')).border = border
+            ws.cell(row=row_num, column=25, value=item.get('s_dept', '')).border = border
+            ws.cell(row=row_num, column=26, value=item.get('s_principal', '')).border = border
+            ws.cell(row=row_num, column=27, value=record['id']).border = border
 
         for col in ws.columns:
             max_length = 0
             col_letter = col[0].column_letter
             for cell in col:
                 try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
+                    if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
+                except: pass
             ws.column_dimensions[col_letter].width = max_length + 2
 
         output = io.BytesIO()
@@ -1178,15 +1131,11 @@ def download_history_excel(record_id: int):
         output.seek(0)
         filename = f"Calculation_{record_id}_{record['gate_name']}.xlsx"
         return StreamingResponse(
-            output,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error generating download: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error generating download: {str(e)}")
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error generating download: {str(e)}")
     
 # --- Item Pricing Excel Export/Import ---
 
@@ -1200,18 +1149,9 @@ def export_item_pricing_excel(gate_id: int):
         if not gate_row:
             conn.close()
             raise HTTPException(status_code=404, detail="Gate not found")
-        gate_name = gate_row[0]
-        from_loc = gate_row[1] or ""
-        to_loc = gate_row[2] or ""
+        gate_name, from_loc, to_loc = gate_row[0], gate_row[1] or "", gate_row[2] or ""
         
-        # UOM Removed
-        query = """
-            SELECT [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]
-            FROM Item_Pricing 
-            WHERE [Gate ID] = ?
-            ORDER BY [Item ID]
-        """
-        cursor.execute(query, (gate_id,))
+        cursor.execute("SELECT [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? ORDER BY [Item ID]", (gate_id,))
         rows = cursor.fetchall()
         conn.close()
         
@@ -1221,7 +1161,6 @@ def export_item_pricing_excel(gate_id: int):
         ws['A1'] = f"Gate: {gate_name} ({from_loc} -> {to_loc})"
         ws['A1'].font = Font(bold=True, size=14)
         
-        # UOM Removed
         headers = ['Item Code', 'Item Name', 'Principal', 'Brand', 'Transportation Cost']
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
         header_font = Font(bold=True, color='FFFFFF')
@@ -1241,30 +1180,23 @@ def export_item_pricing_excel(gate_id: int):
             col_letter = col[0].column_letter
             for cell in col:
                 try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = min(max_length + 2, 50)
-            ws.column_dimensions[col_letter].width = adjusted_width
+                    if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
+                except: pass
+            ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
         
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
         filename = f"item_pricing_{gate_name.replace(' ', '_')}.xlsx"
         return StreamingResponse(
-            output,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error exporting Excel: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error exporting: {str(e)}")
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error exporting: {str(e)}")
 
 @app.post("/account/item-pricing/import/{gate_id}")
-async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), user: dict = Depends(get_account_user)):
+async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), user: dict = Depends(require_permission("manage_items"))):
     try:
         contents = await file.read()
         wb = openpyxl.load_workbook(io.BytesIO(contents))
@@ -1273,32 +1205,20 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         excel_rows = []
         item_codes_to_check = set()
         
-        # Updated indices for UOM removal
         for row_idx, row in enumerate(ws.iter_rows(min_row=4, values_only=True), start=4):
             if not row[0]: continue
-            
             item_code = str(row[0]).strip()
-            item_name = str(row[1]).strip() if row[1] else ""
-            principal = str(row[2]).strip() if row[2] else ""
-            brand = str(row[3]).strip() if row[3] else ""
-            transport_cost = str(row[4]).strip() if len(row) > 4 and row[4] else ""
-            
             excel_rows.append({
-                "row_num": row_idx,
-                "code": item_code,
-                "name": item_name,
-                "principal": principal,
-                "brand": brand,
-                "cost": transport_cost
+                "row_num": row_idx, "code": item_code, "name": str(row[1]).strip() if row[1] else "",
+                "principal": str(row[2]).strip() if row[2] else "", "brand": str(row[3]).strip() if row[3] else "",
+                "cost": str(row[4]).strip() if len(row) > 4 and row[4] else ""
             })
             item_codes_to_check.add(item_code)
             
-        if not excel_rows:
-             raise HTTPException(status_code=400, detail="No data found in Excel file")
+        if not excel_rows: raise HTTPException(status_code=400, detail="No data found in Excel file")
 
         conn_dwbi = get_dwbi_connection()
         cursor_dwbi = conn_dwbi.cursor()
-        
         dwbi_data = {}
         unique_codes_list = list(item_codes_to_check)
         batch_size = 1000
@@ -1306,20 +1226,10 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         for i in range(0, len(unique_codes_list), batch_size):
             batch = unique_codes_list[i:i + batch_size]
             placeholders = ','.join('?' * len(batch))
-            query_dwbi = f"""
-                SELECT ItemCode, ItemName, ItemGroupName, BrandName 
-                FROM _ItemAllinone 
-                WHERE ItemCode IN ({placeholders})
-            """
-            cursor_dwbi.execute(query_dwbi, batch)
+            cursor_dwbi.execute(f"SELECT ItemCode, ItemName, ItemGroupName, BrandName FROM _ItemAllinone WHERE ItemCode IN ({placeholders})", batch)
             rows = cursor_dwbi.fetchall()
             for r in rows:
-                dwbi_data[str(r[0]).strip()] = {
-                    "name": str(r[1]).strip() if r[1] else "",
-                    "principal": str(r[2]).strip() if r[2] else "", 
-                    "brand": str(r[3]).strip() if r[3] else ""
-                }
-        
+                dwbi_data[str(r[0]).strip()] = {"name": str(r[1]).strip() if r[1] else "", "principal": str(r[2]).strip() if r[2] else "", "brand": str(r[3]).strip() if r[3] else ""}
         conn_dwbi.close()
         
         errors = []
@@ -1329,23 +1239,18 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                 errors.append(f"Row {row['row_num']}: Item Code '{code}' not found in DWBI.")
                 continue
             db_item = dwbi_data[code]
-            if row["name"].lower() != db_item["name"].lower():
-                 errors.append(f"Row {row['row_num']}: Item Name mismatch. Excel: '{row['name']}', System: '{db_item['name']}'")
-            if row["principal"].lower() != db_item["principal"].lower():
-                 errors.append(f"Row {row['row_num']}: Principal mismatch. Excel: '{row['principal']}', System: '{db_item['principal']}'")
-            if row["brand"].lower() != db_item["brand"].lower():
-                 errors.append(f"Row {row['row_num']}: Brand mismatch. Excel: '{row['brand']}', System: '{db_item['brand']}'")
+            if row["name"].lower() != db_item["name"].lower(): errors.append(f"Row {row['row_num']}: Item Name mismatch. Excel: '{row['name']}', System: '{db_item['name']}'")
+            if row["principal"].lower() != db_item["principal"].lower(): errors.append(f"Row {row['row_num']}: Principal mismatch.")
+            if row["brand"].lower() != db_item["brand"].lower(): errors.append(f"Row {row['row_num']}: Brand mismatch.")
 
         if errors:
             error_msg = errors[:10]
-            if len(errors) > 10:
-                error_msg.append(f"... and {len(errors) - 10} more errors.")
+            if len(errors) > 10: error_msg.append(f"... and {len(errors) - 10} more errors.")
             raise HTTPException(status_code=400, detail=error_msg)
 
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # MODIFIED: Get existing item details required for change logging
         cursor.execute("SELECT [Item ID], [Pricing ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
         existing_items_data = {row[0]: {'pricing_id': row[1], 'cost': row[2]} for row in cursor.fetchall()}
         existing_items = set(existing_items_data.keys())
@@ -1354,10 +1259,8 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         used_ids = {row[0] for row in cursor.fetchall()}
         
         updated_items_set = set()
-        updates_made = 0
-        inserts_made = 0
+        updates_made, inserts_made = 0, 0
         
-        # New logging variables
         change_logs = []
         change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         username = user['username']
@@ -1367,16 +1270,13 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
             updated_items_set.add(item_code)
             
             if item_code in existing_items:
-                # Logging Check Start
                 pricing_id = existing_items_data[item_code]['pricing_id']
                 old_cost = existing_items_data[item_code]['cost']
-                
                 old_cost_str = str(old_cost).strip() if old_cost else ""
                 new_cost_str = str(row["cost"]).strip() if row["cost"] else ""
                 
                 if old_cost_str != new_cost_str:
                     change_logs.append((pricing_id, username, change_date, 'Transportation Cost', old_cost_str, new_cost_str))
-                # Logging Check End
 
                 cursor.execute("""
                     UPDATE Item_Pricing
@@ -1390,47 +1290,29 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                     if new_id not in used_ids:
                         used_ids.add(new_id)
                         break
-                # Insert query modified (UOM removed)
                 cursor.execute("""
-                    INSERT INTO Item_Pricing 
-                    ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost])
+                    INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost])
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (new_id, gate_id, item_code, row["name"], row["principal"], row["brand"], row["cost"]))
                 inserts_made += 1
                 
-        # Insert any detected changes into the log table
         if change_logs:
-            cursor.executemany("""
-                INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, change_logs)
+            cursor.executemany("INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", change_logs)
         
         items_to_delete = existing_items - updated_items_set
         deletes_made = 0
         for item_code in items_to_delete:
             pricing_id = existing_items_data[item_code]['pricing_id']
-            # Delete associated logs first to prevent DB orphaned records/constraint errors
             cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (pricing_id,))
-            cursor.execute("""
-                DELETE FROM Item_Pricing 
-                WHERE [Gate ID] = ? AND [Item ID] = ?
-            """, (gate_id, item_code))
+            cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
             deletes_made += 1
             
         conn.commit()
         conn.close()
         
-        return {
-            "message": "Import completed successfully",
-            "updates": updates_made,
-            "inserts": inserts_made,
-            "deletes": deletes_made
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error importing Excel: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error importing: {str(e)}")
+        return {"message": "Import completed successfully", "updates": updates_made, "inserts": inserts_made, "deletes": deletes_made}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error importing: {str(e)}")
 
 # --- Gate Management Endpoints (SQLite) ---
 
@@ -1446,190 +1328,106 @@ def get_all_gates(user: dict = Depends(get_current_user)):
             gate_id = row[0]
             calc_type = determine_calculation_type_sql(gate_id)
             gates.append({
-                "gate_id": gate_id,
-                "gate_name": row[1],
-                "from_loc": row[2], 
-                "to_loc": row[3],
-                "uom": row[4],         
-                "unit": row[5],        
-                "cost": float(row[6]) if row[6] is not None else None, 
-                "calculation_type": calc_type
+                "gate_id": gate_id, "gate_name": row[1], "from_loc": row[2], "to_loc": row[3], "uom": row[4],         
+                "unit": row[5], "cost": float(row[6]) if row[6] is not None else None, "calculation_type": calc_type
             })
         conn.close()
         return {"gates": gates}
-    except Exception as e:
-        logger.error(f"Error loading gates: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error loading gates: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading gates: {str(e)}")
 
 @app.post("/account/gates")
-def save_gate(gate_data: GateData, user: dict = Depends(get_account_user)):
+def save_gate(gate_data: GateData, user: dict = Depends(require_permission("manage_gates"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
 
-        # Check for changes if editing existing gate
         if gate_data.original_gate_name:
-            # 1. Fetch current data before update to detect changes
-            cursor.execute("""
-                SELECT [Gate ID], [UOM], [Unit], [Cost] 
-                FROM Gate 
-                WHERE [Gate Name] = ?
-            """, (gate_data.original_gate_name,))
+            cursor.execute("SELECT [Gate ID], [UOM], [Unit], [Cost] FROM Gate WHERE [Gate Name] = ?", (gate_data.original_gate_name,))
             current_row = cursor.fetchone()
             
             if current_row:
                 gate_id, old_uom, old_unit, old_cost = current_row
-                
-                # Normalize values for comparison
                 old_uom = old_uom if old_uom else None
                 new_uom = gate_data.uom if gate_data.uom else None
-                
                 old_unit = old_unit if old_unit is not None else None
                 new_unit = gate_data.unit if gate_data.unit is not None else None
-                
                 old_cost = float(old_cost) if old_cost is not None else None
                 new_cost = float(gate_data.cost) if gate_data.cost is not None else None
 
                 change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 username = user['username']
-                
                 changes = []
 
-                if old_uom != new_uom:
-                    changes.append((gate_id, username, change_date, 'UOM', str(old_uom or ''), str(new_uom or '')))
+                if old_uom != new_uom: changes.append((gate_id, username, change_date, 'UOM', str(old_uom or ''), str(new_uom or '')))
+                if old_unit != new_unit: changes.append((gate_id, username, change_date, 'Unit', str(old_unit) if old_unit is not None else '', str(new_unit) if new_unit is not None else ''))
+                if old_cost != new_cost: changes.append((gate_id, username, change_date, 'Cost', str(old_cost) if old_cost is not None else '', str(new_cost) if new_cost is not None else ''))
                 
-                if old_unit != new_unit:
-                    changes.append((gate_id, username, change_date, 'Unit', str(old_unit) if old_unit is not None else '', str(new_unit) if new_unit is not None else ''))
-                
-                if old_cost != new_cost:
-                    changes.append((gate_id, username, change_date, 'Cost', str(old_cost) if old_cost is not None else '', str(new_cost) if new_cost is not None else ''))
-                
-                # Insert logs if changes detected
                 if changes:
-                    cursor.executemany("""
-                        INSERT INTO Gate_Change_Log (gate_id, changed_by, change_date, field_name, old_value, new_value)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, changes)
+                    cursor.executemany("INSERT INTO Gate_Change_Log (gate_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
 
-            # 2. Perform Update
             cursor.execute("""
-                UPDATE Gate 
-                SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Cost] = ?
-                WHERE [Gate Name] = ?
-            """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, 
-                  gate_data.uom, gate_data.unit, gate_data.cost, 
-                  gate_data.original_gate_name))
+                UPDATE Gate SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Cost] = ? WHERE [Gate Name] = ?
+            """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, gate_data.original_gate_name))
         else:
-            # Insert New Gate
-            cursor.execute("""
-                INSERT INTO Gate ([Gate Name], [From], [To], [UOM], [Unit], [Cost])
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, 
-                  gate_data.uom, gate_data.unit, gate_data.cost))
+            cursor.execute("INSERT INTO Gate ([Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES (?, ?, ?, ?, ?, ?)", 
+                  (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost))
         
         conn.commit()
         conn.close()
         return {"message": "Gate saved successfully"}
-    
-    except Exception as e:
-        logger.error(f"Error saving gate: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error saving gate: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error saving gate: {str(e)}")
 
 @app.get("/account/gates/{gate_id}/logs", response_model=List[GateLogItem])
 def get_gate_logs(gate_id: int, user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, gate_id, changed_by, change_date, field_name, old_value, new_value
-            FROM Gate_Change_Log
-            WHERE gate_id = ?
-            ORDER BY change_date DESC
-        """, (gate_id,))
+        cursor.execute("SELECT id, gate_id, changed_by, change_date, field_name, old_value, new_value FROM Gate_Change_Log WHERE gate_id = ? ORDER BY change_date DESC", (gate_id,))
         rows = cursor.fetchall()
-        logs = []
-        for row in rows:
-            logs.append({
-                "id": row[0],
-                "gate_id": row[1],
-                "changed_by": row[2],
-                "change_date": row[3],
-                "field_name": row[4],
-                "old_value": row[5],
-                "new_value": row[6]
-            })
+        logs = [{"id": r[0], "gate_id": r[1], "changed_by": r[2], "change_date": r[3], "field_name": r[4], "old_value": r[5], "new_value": r[6]} for r in rows]
         conn.close()
         return logs
-    except Exception as e:
-        logger.error(f"Error fetching logs: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error fetching logs: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching logs: {str(e)}")
 
 @app.delete("/account/gates/{gate_id}")
-def delete_gate(gate_id: int, user: dict = Depends(get_admin_user)): 
+def delete_gate(gate_id: int, user: dict = Depends(require_permission("manage_gates"))): 
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
         cursor.execute("DELETE FROM Gate_Change_Log WHERE gate_id = ?", (gate_id,))
         cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
         cursor.execute("DELETE FROM Gate WHERE [Gate ID] = ?", (gate_id,))
-        
         if cursor.rowcount == 0:
              conn.close()
              raise HTTPException(status_code=404, detail="Gate not found")
-
         conn.commit()
         conn.close()
         return {"message": f"Gate {gate_id} deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error deleting gate: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error deleting gate: {str(e)}")
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting gate: {str(e)}")
 
 @app.get("/account/item-pricing/{gate_id}")
 def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        # UOM Removed
-        query = """
-            SELECT [Pricing ID], [Item ID], [Item Name], [Principal], 
-                   [Brand], [Transportation Cost]
-            FROM Item_Pricing 
-            WHERE [Gate ID] = ?
-        """
-        cursor.execute(query, (gate_id,))
+        cursor.execute("SELECT [Pricing ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
         rows = cursor.fetchall()
-        items = []
-        for row in rows:
-            items.append({
-                "pricing_id": row[0],
-                "item_code": row[1],
-                "item_name": row[2],
-                "principal": row[3],
-                "brand": row[4],
-                "transportation_cost": row[5]
-            })
+        items = [{"pricing_id": r[0], "item_code": r[1], "item_name": r[2], "principal": r[3], "brand": r[4], "transportation_cost": r[5]} for r in rows]
         conn.close()
         return {"items": items, "gate_id": gate_id}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading items: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading items: {str(e)}")
 
 @app.post("/account/item-pricing")
-def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_account_user)):
+def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(require_permission("manage_items"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-
-        # UOM Removed from check
-        query_check = "SELECT [Pricing ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?"
-        cursor.execute(query_check, (item_data.gate_id, item_data.original_item_code or item_data.item_code))
+        cursor.execute("SELECT [Pricing ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (item_data.gate_id, item_data.original_item_code or item_data.item_code))
         existing = cursor.fetchone()
 
         if existing:
             pricing_id, old_cost = existing
-            
             old_cost_str = str(old_cost).strip() if old_cost else ""
             new_cost_str = str(item_data.transportation_cost).strip() if item_data.transportation_cost else ""
             
@@ -1641,87 +1439,43 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_accou
                  changes.append((pricing_id, username, change_date, 'Transportation Cost', old_cost_str, new_cost_str))
 
             if changes:
-                 cursor.executemany("""
-                    INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                 """, changes)
+                 cursor.executemany("INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
 
-            update_query = """
-                UPDATE Item_Pricing
-                SET [Item ID] = ?, [Item Name] = ?, [Principal] = ?,
-                    [Brand] = ?, [Transportation Cost] = ?
-                WHERE [Pricing ID] = ?
-            """
-            cursor.execute(update_query, (
-                item_data.item_code, item_data.item_name,
-                item_data.principal, item_data.brand,
-                item_data.transportation_cost,
-                pricing_id
-            ))
+            cursor.execute("UPDATE Item_Pricing SET [Item ID] = ?, [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ? WHERE [Pricing ID] = ?", 
+                (item_data.item_code, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost, pricing_id))
         else:
             while True:
                 new_id = random.randint(10000000, 99999999)
                 cursor.execute("SELECT 1 FROM Item_Pricing WHERE [Pricing ID] = ?", (new_id,))
-                if not cursor.fetchone():
-                    break
-            insert_query = """
-                INSERT INTO Item_Pricing 
-                ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal],
-                 [Brand], [Transportation Cost])
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """
-            cursor.execute(insert_query, (
-                new_id, item_data.gate_id, item_data.item_code, item_data.item_name,
-                item_data.principal, item_data.brand, item_data.transportation_cost
-            ))
+                if not cursor.fetchone(): break
+            cursor.execute("INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                (new_id, item_data.gate_id, item_data.item_code, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost))
 
         conn.commit()
         conn.close()
         return {"message": "Item saved successfully"}
-    except Exception as e:
-        logger.error(f"Error saving item: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error saving item: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error saving item: {str(e)}")
 
 @app.get("/account/items/{pricing_id}/logs", response_model=List[ItemLogItem])
 def get_item_logs(pricing_id: int, user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, pricing_id, changed_by, change_date, field_name, old_value, new_value
-            FROM Item_Change_Log
-            WHERE pricing_id = ?
-            ORDER BY change_date DESC
-        """, (pricing_id,))
+        cursor.execute("SELECT id, pricing_id, changed_by, change_date, field_name, old_value, new_value FROM Item_Change_Log WHERE pricing_id = ? ORDER BY change_date DESC", (pricing_id,))
         rows = cursor.fetchall()
-        logs = []
-        for row in rows:
-            logs.append({
-                "id": row[0],
-                "pricing_id": row[1],
-                "changed_by": row[2],
-                "change_date": row[3],
-                "field_name": row[4],
-                "old_value": row[5],
-                "new_value": row[6]
-            })
+        logs = [{"id": r[0], "pricing_id": r[1], "changed_by": r[2], "change_date": r[3], "field_name": r[4], "old_value": r[5], "new_value": r[6]} for r in rows]
         conn.close()
         return logs
-    except Exception as e:
-        logger.error(f"Error fetching logs: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error fetching logs: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching logs: {str(e)}")
 
 @app.delete("/account/item-pricing/{gate_id}/{item_code}")
-def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(get_admin_user)): 
+def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(require_permission("manage_items"))): 
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
         cursor.execute("SELECT [Pricing ID] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
         row = cursor.fetchone()
-        if row:
-             pricing_id = row[0]
-             cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (pricing_id,))
+        if row: cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (row[0],))
 
         cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
         if cursor.rowcount == 0:
@@ -1730,61 +1484,33 @@ def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(get_a
         conn.commit()
         conn.close()
         return {"message": "Item deleted successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting item: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting item: {str(e)}")
 
 @app.get("/dwbi/items/search")
 def search_dwbi_items(q: str = Query(..., min_length=2)):
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        query_sql = """
-            SELECT TOP 50 ItemCode, ItemName, ItemGroupName, BrandName 
-            FROM _ItemAllinone 
-            WHERE ItemCode LIKE ? OR ItemName LIKE ?
-        """
         search_term = f"%{q}%"
-        cursor.execute(query_sql, (search_term, search_term))
+        cursor.execute("SELECT TOP 50 ItemCode, ItemName, ItemGroupName, BrandName FROM _ItemAllinone WHERE ItemCode LIKE ? OR ItemName LIKE ?", (search_term, search_term))
         rows = cursor.fetchall()
-        
-        items = []
-        for row in rows:
-            items.append({
-                "item_code": row[0],
-                "item_name": row[1],
-                "principal": row[2], 
-                "brand": row[3]      
-            })
+        items = [{"item_code": r[0], "item_name": r[1], "principal": r[2], "brand": r[3]} for r in rows]
         conn.close()
         return {"items": items}
-    except Exception as e:
-        logger.error(f"Error searching DWBI items: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error searching items: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error searching items: {str(e)}")
 
 @app.get("/dwbi/items/validate")
 def validate_dwbi_item(code: str = Query(...)):
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        query = "SELECT ItemCode, ItemName, ItemGroupName, BrandName FROM _ItemAllinone WHERE ItemCode = ?"
-        cursor.execute(query, (code,))
+        cursor.execute("SELECT ItemCode, ItemName, ItemGroupName, BrandName FROM _ItemAllinone WHERE ItemCode = ?", (code,))
         row = cursor.fetchone()
         conn.close()
         
-        if row:
-            return {
-                "valid": True,
-                "item": {
-                    "item_code": row[0],
-                    "item_name": row[1],
-                    "principal": row[2],
-                    "brand": row[3]
-                }
-            }
+        if row: return {"valid": True, "item": {"item_code": row[0], "item_name": row[1], "principal": row[2], "brand": row[3]}}
         return {"valid": False}
-    except Exception as e:
-        logger.error(f"Error validating item: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
 
 @app.get("/locations/from")
 def get_from_locations():
@@ -1793,29 +1519,21 @@ def get_from_locations():
         cursor = conn.cursor()
         cursor.execute("SELECT DISTINCT [From] FROM Gate WHERE [From] IS NOT NULL ORDER BY [From]")
         rows = cursor.fetchall()
-        locations = [row[0] for row in rows if row[0]]
         conn.close()
-        return {"locations": locations}
-    except Exception as e:
-        logger.error(f"Error loading from locations: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error loading from locations: {str(e)}")
+        return {"locations": [r[0] for r in rows if r[0]]}
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading from locations: {str(e)}")
 
 @app.get("/locations/to")
 def get_to_locations(from_loc: Optional[str] = None):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        if from_loc:
-            cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [From] = ? AND [To] IS NOT NULL ORDER BY [To]", (from_loc,))
-        else:
-            cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [To] IS NOT NULL ORDER BY [To]")
+        if from_loc: cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [From] = ? AND [To] IS NOT NULL ORDER BY [To]", (from_loc,))
+        else: cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [To] IS NOT NULL ORDER BY [To]")
         rows = cursor.fetchall()
-        locations = [row[0] for row in rows if row[0]]
         conn.close()
-        return {"locations": locations}
-    except Exception as e:
-        logger.error(f"Error loading to locations: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error loading to locations: {str(e)}")
+        return {"locations": [r[0] for r in rows if r[0]]}
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading to locations: {str(e)}")
 
 @app.post("/calculate-with-gate")
 def calculate_with_gate(
@@ -1825,123 +1543,65 @@ def calculate_with_gate(
     additional_charges: Optional[float] = 0.0
 ):
     try:
-        if not doc_nums:
-            raise HTTPException(status_code=400, detail="No Doc Nums provided")
-        result = _perform_calculation_logic(
-            gate_name=gate_name, 
-            doc_nums=doc_nums, 
-            manual_total_cost=manual_total_cost, 
-            additional_charges=additional_charges
-        )
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Calculation error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")
+        if not doc_nums: raise HTTPException(status_code=400, detail="No Doc Nums provided")
+        return _perform_calculation_logic(gate_name=gate_name, doc_nums=doc_nums, manual_total_cost=manual_total_cost, additional_charges=additional_charges)
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")
 
 @app.get("/doc-nums")
 def get_doc_nums():
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        # Fetching DocNum and maximum DocDate grouping by DocNum
-        cursor.execute("""
-            SELECT DocNum, MAX(DocDate) 
-            FROM PG_TransferDetails 
-            WHERE DocNum IS NOT NULL 
-            GROUP BY DocNum 
-            ORDER BY DocNum DESC
-        """)
+        cursor.execute("SELECT DocNum, MAX(DocDate) FROM PG_TransferDetails WHERE DocNum IS NOT NULL GROUP BY DocNum ORDER BY DocNum DESC")
         rows = cursor.fetchall()
         doc_nums = []
         for row in rows:
-            doc_num = row[0]
             doc_date_val = row[1]
-            doc_date_str = ""
-            if isinstance(doc_date_val, datetime.datetime):
-                doc_date_str = doc_date_val.strftime("%Y-%m-%d")
-            elif isinstance(doc_date_val, str) and len(doc_date_val) >= 10:
-                doc_date_str = doc_date_val[:10]
-            else:
-                doc_date_str = str(doc_date_val) if doc_date_val else ""
-            
-            # Now returning dict objects
-            doc_nums.append({"doc_num": doc_num, "doc_date": doc_date_str})
+            if isinstance(doc_date_val, datetime.datetime): doc_date_str = doc_date_val.strftime("%Y-%m-%d")
+            elif isinstance(doc_date_val, str) and len(doc_date_val) >= 10: doc_date_str = doc_date_val[:10]
+            else: doc_date_str = str(doc_date_val) if doc_date_val else ""
+            doc_nums.append({"doc_num": row[0], "doc_date": doc_date_str})
         conn.close()
         return {"doc_nums": doc_nums}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/products-by-doc-nums")
 def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums")):
     try:
-        if not doc_nums:
-            return {"products": [], "total_weight": 0}
+        if not doc_nums: return {"products": [], "total_weight": 0}
         conn = get_dwbi_connection()
         cursor = conn.cursor()
         placeholders = ','.join('?' * len(doc_nums))
-        
-        # BatchQty Removed
-        query = f"""
-            SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn)
-            FROM PG_TransferDetails 
-            WHERE DocNum IN ({placeholders}) 
-            GROUP BY DocNum, ItemCode
-            ORDER BY DocNum, ItemCode
-        """
-        cursor.execute(query, doc_nums)
+        cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn) FROM PG_TransferDetails WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", doc_nums)
         rows = cursor.fetchall()
-        products = []
-        total_weight = 0.0
+        products, total_weight = [], 0.0
         for row in rows:
             weight = float(row[3]) if row[3] else 0.0
             total_weight += weight
-            products.append({
-                "code": row[0] or "",
-                "name": row[1] or "",
-                "uom": row[2] or "",
-                "weight": weight,
-                "ctns": round(float(row[5])) if len(row) > 5 and row[5] is not None else 0
-            })
+            products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": round(float(row[5])) if len(row) > 5 and row[5] is not None else 0})
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/products/{doc_num}")
 def get_products_by_doc_num(doc_num: str):
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        # BatchQty Removed
-        cursor.execute("""
-            SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn)
-            FROM PG_TransferDetails 
-            WHERE DocNum = ? 
-            GROUP BY DocNum, ItemCode
-            ORDER BY DocNum, ItemCode
-        """, (doc_num,))
+        cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn) FROM PG_TransferDetails WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (doc_num,))
         rows = cursor.fetchall()
         if not rows:
             conn.close()
             raise HTTPException(status_code=404, detail="No products found")
-        products = []
-        total_weight = 0.0
+        products, total_weight = [], 0.0
         for row in rows:
             weight = float(row[3]) if row[3] else 0.0
             total_weight += weight
-            products.append({
-                "item_code": row[0] or "",
-                "description": row[1] or "",
-                "uom": row[2] or "",
-                "item_weight": weight,
-                "ctns": round(float(row[5])) if len(row) > 5 and row[5] is not None else 0
-            })
+            products.append({"item_code": row[0] or "", "description": row[1] or "", "uom": row[2] or "", "item_weight": weight, "ctns": round(float(row[5])) if len(row) > 5 and row[5] is not None else 0})
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
