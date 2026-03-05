@@ -1734,9 +1734,43 @@ const PricingApp = () => {
                 </div>
               </div>
               
-              <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border-2 border-purple-300 p-6 mb-6">
-                <div className="flex items-center justify-between"><span className="text-lg font-semibold text-gray-700">Total Weight:</span><span className="text-3xl font-bold text-purple-600">{formatNumber(totalWeight)} Kg</span></div>
+              {/* --- UPDATED TOTAL SUMMARY SECTION --- */}
+              <div className="bg-white rounded-lg border p-6 mb-6">
+                <h2 className="text-xl font-bold mb-4">Total Summary</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  
+                  {/* Weight Summary - Always shows if products exist */}
+                  <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200 p-6 flex flex-col justify-center">
+                    <span className="text-lg font-semibold text-gray-700 mb-2">Total Weight</span>
+                    <span className="text-3xl font-bold text-purple-600">{formatNumber(totalWeight)} Kg</span>
+                  </div>
+
+                  {/* Cost Summary - Only shows if calculated */}
+                  {calculatedTotalCost !== null && (
+                    <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200 p-6 flex flex-col justify-center">
+                      <div className="flex justify-between items-center mb-2">
+                         <span className="text-lg font-semibold text-gray-700">Total Cost</span>
+                         <span className="text-3xl font-bold text-blue-600">{formatNumber(calculatedTotalCost)} MMK</span>
+                      </div>
+                      
+                      {additionalCharges && (
+                        <div className="mt-2 pt-2 border-t border-blue-200 text-sm text-gray-600 space-y-1">
+                          <div className="flex justify-between">
+                            <span>Subtotal (Transport):</span>
+                            <span>{formatNumber(calculatedTotalCost - (parseFloat(additionalCharges) || 0))} MMK</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Additional Charges:</span>
+                            <span>{formatNumber(additionalCharges)} MMK</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
+              {/* --- END UPDATED TOTAL SUMMARY SECTION --- */}
+
               <div className="bg-white rounded-lg border p-6 mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
@@ -1772,20 +1806,6 @@ const PricingApp = () => {
               </div>
               </>
             )}
-
-             {calculatedTotalCost !== null && (
-                <div className="bg-white rounded-lg border p-6">
-                  <h2 className="text-xl font-bold mb-4">Total Summary</h2>
-                   <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                      <div className="flex flex-col gap-2 items-end">
-                        {additionalCharges && (
-                          <><div className="flex justify-between w-full md:w-1/3 text-gray-600"><span>Subtotal (Transport):</span><span>{formatNumber(calculatedTotalCost - (parseFloat(additionalCharges) || 0))} MMK</span></div><div className="flex justify-between w-full md:w-1/3 text-gray-600"><span>Additional Charges:</span><span>{formatNumber(additionalCharges)} MMK</span></div><div className="w-full md:w-1/3 border-b border-gray-300 my-1"></div></>
-                        )}
-                        <div className="flex justify-between w-full md:w-1/3 items-center"><span className="text-lg font-bold">Total Cost:</span><span className="text-2xl font-bold text-blue-600">{formatNumber(calculatedTotalCost)} MMK</span></div>
-                      </div>
-                    </div>
-                </div>
-             )}
         </div>
         {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} />}
       </div>
