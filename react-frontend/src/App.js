@@ -1695,7 +1695,7 @@ const PricingApp = () => {
             </>
           )}
 
-          {selectedGate && (() => {
+          {products.length > 0 && selectedGate && (() => {
             const currentGate = gates.find(g => g.gate_name === selectedGate);
             return (
               <div className="bg-blue-50 rounded-lg border-2 border-blue-300 p-6 mb-6">
