@@ -41,7 +41,7 @@ const LoginScreen = ({ onLogin }) => {
         {error && <div className="bg-red-100 text-red-700 p-2 rounded mb-4 text-sm text-center">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">Username</label>
+            <label className="block text-gray-700 text-sm font-bold mb-2">Username <span className="text-red-500">*</span></label>
             <input
               type="text"
               value={username}
@@ -52,7 +52,7 @@ const LoginScreen = ({ onLogin }) => {
             />
           </div>
           <div className="mb-6">
-            <label className="block text-gray-700 text-sm font-bold mb-2">Password</label>
+            <label className="block text-gray-700 text-sm font-bold mb-2">Password <span className="text-red-500">*</span></label>
             <input
               type="password"
               value={password}
@@ -763,6 +763,21 @@ const PricingApp = () => {
   };
 
   const saveGate = async (gateData) => {
+    // --- ADDED VALIDATION HERE ---
+    if (!gateData.gate_name || !gateData.gate_name.trim()) {
+      showNotification('Gate Name is required.', 'error');
+      return;
+    }
+    if (!gateData.from_loc) {
+      showNotification('From location is required.', 'error');
+      return;
+    }
+    if (!gateData.to_loc) {
+      showNotification('To location is required.', 'error');
+      return;
+    }
+    // --- END VALIDATION ---
+
     const hasUOM = gateData.uom && gateData.uom.trim().length > 0;
     const hasUnit = gateData.unit !== '' && gateData.unit !== null && gateData.unit !== undefined;
     const hasCost = gateData.cost !== '' && gateData.cost !== null && gateData.cost !== undefined;
@@ -1108,18 +1123,18 @@ const PricingApp = () => {
           <h2 className="text-2xl font-bold mb-4">{gate ? 'Edit Gate' : 'Add New Gate'}</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold mb-1">Gate Name</label>
+              <label className="block text-sm font-semibold mb-1">Gate Name <span className="text-red-500">*</span></label>
               <input type="text" value={formData.gate_name ?? ''} onChange={(e) => setFormData({...formData, gate_name: e.target.value})} className="w-full p-2 border rounded" />
             </div>
             <div>
-              <label className="block text-sm font-semibold mb-1">From</label>
+              <label className="block text-sm font-semibold mb-1">From <span className="text-red-500">*</span></label>
               <select value={formData.from_loc ?? ''} onChange={(e) => setFormData({...formData, from_loc: e.target.value})} className="w-full p-2 border rounded">
                   <option value="">-- Select --</option>
                   {refLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-semibold mb-1">To</label>
+              <label className="block text-sm font-semibold mb-1">To <span className="text-red-500">*</span></label>
               <select value={formData.to_loc ?? ''} onChange={(e) => setFormData({...formData, to_loc: e.target.value})} className="w-full p-2 border rounded">
                   <option value="">-- Select --</option>
                   {refLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}
@@ -1203,7 +1218,7 @@ const PricingApp = () => {
           <h2 className="text-2xl font-bold mb-4">{item ? 'Edit Item' : 'Add New Item'}</h2>
           <div className="grid grid-cols-2 gap-4">
             <div className="relative">
-              <label className="block text-sm font-semibold mb-1">Item Code (Search)</label>
+              <label className="block text-sm font-semibold mb-1">Item Code (Search) <span className="text-red-500">*</span></label>
               <div className="relative">
                 <input type="text" value={searchTerm} onChange={(e) => handleSearch(e.target.value)} className="w-full p-2 border rounded pr-8" placeholder="Type code or name..." />
                 <div className="absolute right-2 top-2 text-gray-400"><Search size={18} /></div>
@@ -1240,10 +1255,10 @@ const PricingApp = () => {
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
                 <h2 className="text-2xl font-bold mb-4">{user ? 'Edit User' : 'Add New User'}</h2>
                 <div className="space-y-4">
-                    <div><label className="block text-sm font-semibold mb-1">Username</label><input type="text" value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} className="w-full p-2 border rounded" disabled={!!user} /></div>
-                    <div><label className="block text-sm font-semibold mb-1">Password</label><input type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full p-2 border rounded" placeholder={user ? "Leave blank to keep" : "Required"} /></div>
+                    <div><label className="block text-sm font-semibold mb-1">Username <span className="text-red-500">*</span></label><input type="text" value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} className="w-full p-2 border rounded" disabled={!!user} /></div>
+                    <div><label className="block text-sm font-semibold mb-1">Password {!user && <span className="text-red-500">*</span>}</label><input type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full p-2 border rounded" placeholder={user ? "Leave blank to keep" : "Required"} /></div>
                     <div>
-                        <label className="block text-sm font-semibold mb-1">Role</label>
+                        <label className="block text-sm font-semibold mb-1">Role <span className="text-red-500">*</span></label>
                         <select value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})} className="w-full p-2 border rounded">
                             <option value="logistic">Logistic (Read Only)</option>
                             <option value="account">Account (Manage Gates/Items)</option>

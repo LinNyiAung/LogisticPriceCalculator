@@ -234,7 +234,7 @@ def startup_db():
         # --- SEED DEFAULTS FOR REFERENCES ---
         cursor.execute("SELECT COUNT(*) FROM Locations")
         if cursor.fetchone()[0] == 0:
-            default_locs = [('YGN',), ('MDY',), ('NPT',), ('MGY',)]
+            default_locs = [('YGN',), ('MDY',), ('NPT',), ('MGW',), ('TGI',), ('TGU',), ('PTN',), ('MLM',)]
             cursor.executemany("INSERT INTO Locations (name) VALUES (?)", default_locs)
 
         cursor.execute("SELECT COUNT(*) FROM UOMs")
