@@ -1345,8 +1345,10 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT [Item ID] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
-        existing_items = {row[0] for row in cursor.fetchall()}
+        # MODIFIED: Get existing item details required for change logging
+        cursor.execute("SELECT [Item ID], [Pricing ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
+        existing_items_data = {row[0]: {'pricing_id': row[1], 'cost': row[2]} for row in cursor.fetchall()}
+        existing_items = set(existing_items_data.keys())
         
         cursor.execute("SELECT [Pricing ID] FROM Item_Pricing")
         used_ids = {row[0] for row in cursor.fetchall()}
@@ -1355,12 +1357,27 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         updates_made = 0
         inserts_made = 0
         
+        # New logging variables
+        change_logs = []
+        change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        username = user['username']
+        
         for row in excel_rows:
             item_code = row["code"]
             updated_items_set.add(item_code)
             
-            # Update query modified (UOM removed)
             if item_code in existing_items:
+                # Logging Check Start
+                pricing_id = existing_items_data[item_code]['pricing_id']
+                old_cost = existing_items_data[item_code]['cost']
+                
+                old_cost_str = str(old_cost).strip() if old_cost else ""
+                new_cost_str = str(row["cost"]).strip() if row["cost"] else ""
+                
+                if old_cost_str != new_cost_str:
+                    change_logs.append((pricing_id, username, change_date, 'Transportation Cost', old_cost_str, new_cost_str))
+                # Logging Check End
+
                 cursor.execute("""
                     UPDATE Item_Pricing
                     SET [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ?
@@ -1380,10 +1397,20 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (new_id, gate_id, item_code, row["name"], row["principal"], row["brand"], row["cost"]))
                 inserts_made += 1
+                
+        # Insert any detected changes into the log table
+        if change_logs:
+            cursor.executemany("""
+                INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, change_logs)
         
         items_to_delete = existing_items - updated_items_set
         deletes_made = 0
         for item_code in items_to_delete:
+            pricing_id = existing_items_data[item_code]['pricing_id']
+            # Delete associated logs first to prevent DB orphaned records/constraint errors
+            cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (pricing_id,))
             cursor.execute("""
                 DELETE FROM Item_Pricing 
                 WHERE [Gate ID] = ? AND [Item ID] = ?
