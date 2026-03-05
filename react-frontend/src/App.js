@@ -1741,8 +1741,10 @@ const PricingApp = () => {
                   
                   {/* Weight Summary - Always shows if products exist */}
                   <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200 p-6 flex flex-col justify-center">
-                    <span className="text-lg font-semibold text-gray-700 mb-2">Total Weight</span>
-                    <span className="text-3xl font-bold text-purple-600">{formatNumber(totalWeight)} Kg</span>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-lg font-semibold text-gray-700 mb-2">Total Weight</span>
+                      <span className="text-3xl font-bold text-purple-600">{formatNumber(totalWeight)} Kg</span>
+                    </div>
                   </div>
 
                   {/* Cost Summary - Only shows if calculated */}
