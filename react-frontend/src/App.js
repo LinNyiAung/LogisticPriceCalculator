@@ -1747,8 +1747,9 @@ const PricingApp = () => {
                         <th className="border p-2 text-left">Cartons</th>
                         <th className="border p-2 text-left">Weight</th>
                         <th className="border p-2 text-left">UOM</th>
+                        {/* Modified conditionally displayed headers */}
                         {hasDirectPricingItems && (<th className="border p-2 text-left">System Rate</th>)}
-                        {hasDirectPricingItems && (<th className="border p-2 text-left">Calculated Rate</th>)}
+                        {hasCalculated && (<th className="border p-2 text-left">Calculated Rate / Ctn</th>)}
                         {hasCalculated && (<th className="border p-2 text-left">Cost (MMK)</th>)}
                       </tr>
                     </thead>
@@ -1760,14 +1761,15 @@ const PricingApp = () => {
                           <td className="border p-2">{product.ctns}</td>
                           <td className="border p-2">{formatNumber(product.weight)}</td>
                           <td className="border p-2">Kg</td>
+                          {/* Modified conditionally displayed rows */}
                           {hasDirectPricingItems && (
                             <td className="border p-2">
                               {product.system_rate !== undefined && product.system_rate !== null ? formatNumber(product.system_rate) : '-'}
                             </td>
                           )}
-                          {hasDirectPricingItems && (
+                          {hasCalculated && (
                             <td className="border p-2">
-                              {product.system_rate !== undefined && product.system_rate !== null ? formatNumber(product.display_calculated_rate) : '-'}
+                              {product.display_calculated_rate !== undefined && product.display_calculated_rate !== null ? formatNumber(product.display_calculated_rate) : '-'}
                             </td>
                           )}
                           {hasCalculated && (<td className="border p-2 font-semibold">{product.total_cost !== undefined ? formatNumber(product.total_cost) : '-'}</td>)}
