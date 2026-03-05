@@ -1657,42 +1657,50 @@ const PricingApp = () => {
           </div>
           
           {products.length > 0 && (
-            <>
-              <div className="bg-white rounded-lg border p-6 mb-6">
-                <h2 className="text-xl font-bold mb-4">Select From <span className="text-red-500">*</span></h2>
-                <select value={selectedFrom} onChange={(e) => handleFromChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                  <option value="">-- Select Origin --</option>
-                  {fromLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}
-                </select>
-              </div>
-              {selectedFrom && (
-                <div className="bg-white rounded-lg border p-6 mb-6">
+            <div className="flex flex-col gap-6 mb-6">
+              {/* Row 1: From and To grouped together. Both show if products > 0. */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white rounded-lg border p-6">
+                  <h2 className="text-xl font-bold mb-4">Select From <span className="text-red-500">*</span></h2>
+                  <select value={selectedFrom} onChange={(e) => handleFromChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <option value="">-- Select Origin --</option>
+                    {fromLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}
+                  </select>
+                </div>
+                <div className="bg-white rounded-lg border p-6">
                   <h2 className="text-xl font-bold mb-4">Select To <span className="text-red-500">*</span></h2>
-                  <select value={selectedTo} onChange={(e) => handleToChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <select 
+                    value={selectedTo} 
+                    onChange={(e) => handleToChange(e.target.value)} 
+                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    disabled={!selectedFrom} // Disables the dropdown if "From" isn't selected yet
+                  >
                     <option value="">-- Select Destination --</option>
                     {toLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}
                   </select>
                 </div>
-              )}
-              {selectedTo && (
-                <div className="bg-white rounded-lg border p-6 mb-6">
-                  <h2 className="text-xl font-bold mb-4">Select Gate <span className="text-red-500">*</span></h2>
-                  <select value={selectedGate} onChange={(e) => handleGateChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                    <option value="">-- Select a Gate --</option>
-                    {gates.filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo).map((gate) => (<option key={gate.gate_name} value={gate.gate_name}>{gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}</option>))}
-                  </select>
+              </div>
+
+              {/* Row 2: Gate and Channel grouped together. Both show once From and To are selected. */}
+              {(selectedFrom && selectedTo) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-lg border p-6">
+                    <h2 className="text-xl font-bold mb-4">Select Gate <span className="text-red-500">*</span></h2>
+                    <select value={selectedGate} onChange={(e) => handleGateChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                      <option value="">-- Select a Gate --</option>
+                      {gates.filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo).map((gate) => (<option key={gate.gate_name} value={gate.gate_name}>{gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}</option>))}
+                    </select>
+                  </div>
+                  <div className="bg-white rounded-lg border p-6">
+                    <h2 className="text-xl font-bold mb-4">Select Channel <span className="text-red-500">*</span></h2>
+                    <select value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                      <option value="">-- Select a Channel --</option>
+                      {refChannels.map((chan, i) => (<option key={i} value={chan}>{chan}</option>))}
+                    </select>
+                  </div>
                 </div>
               )}
-              {selectedGate && (
-                <div className="bg-white rounded-lg border p-6 mb-6">
-                  <h2 className="text-xl font-bold mb-4">Select Channel <span className="text-red-500">*</span></h2>
-                  <select value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                    <option value="">-- Select a Channel --</option>
-                    {refChannels.map((chan, i) => (<option key={i} value={chan}>{chan}</option>))}
-                  </select>
-                </div>
-              )}
-            </>
+            </div>
           )}
 
           {products.length > 0 && selectedGate && (() => {
