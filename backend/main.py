@@ -609,6 +609,18 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
                 "total_cost": item_cost
             })
 
+    # --- DISTRIBUTE ADDITIONAL CHARGES TO INDIVIDUAL ITEMS EQUALLY ---
+    if add_charges != 0 and calculated_products:
+        num_items = len(calculated_products)
+        equal_extra_cost = add_charges / num_items
+        
+        for p in calculated_products:
+            p['total_cost'] += equal_extra_cost
+            
+            # Recalculate the unit cost to reflect the added charge
+            if p['ctns'] > 0:
+                p['unit_cost'] = p['total_cost'] / p['ctns']
+
     calculated_products.sort(key=lambda x: (x.get('sin_no', ''), x['code']))
     
     total_cost += add_charges
