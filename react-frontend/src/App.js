@@ -763,7 +763,6 @@ const PricingApp = () => {
   };
 
   const saveGate = async (gateData) => {
-    // --- ADDED VALIDATION HERE ---
     if (!gateData.gate_name || !gateData.gate_name.trim()) {
       showNotification('Gate Name is required.', 'error');
       return;
@@ -776,7 +775,6 @@ const PricingApp = () => {
       showNotification('To location is required.', 'error');
       return;
     }
-    // --- END VALIDATION ---
 
     const hasUOM = gateData.uom && gateData.uom.trim().length > 0;
     const hasUnit = gateData.unit !== '' && gateData.unit !== null && gateData.unit !== undefined;
@@ -1556,6 +1554,9 @@ const PricingApp = () => {
   // Calculator View (Default)
   const hasCalculated = calculatedProducts.length > 0;
   const rawTableData = hasCalculated ? calculatedProducts : products;
+  
+  // Check if we need to show the new Direct Pricing calculation columns
+  const hasDirectPricingItems = hasCalculated && calculatedProducts.some(p => p.system_rate !== undefined && p.system_rate !== null);
 
   // Aggregate items by item code for the frontend UI view only
   const tableData = Object.values(rawTableData.reduce((acc, curr) => {
@@ -1569,7 +1570,15 @@ const PricingApp = () => {
       }
     }
     return acc;
-  }, {})).sort((a, b) => a.code.localeCompare(b.code));
+  }, {})).map(item => {
+    // Determine the calculated display rate (cost per carton) specifically based on aggregated values
+    if (item.total_cost !== undefined && item.ctns > 0) {
+       item.display_calculated_rate = item.total_cost / item.ctns;
+    } else {
+       item.display_calculated_rate = item.unit_cost; // fallback
+    }
+    return item;
+  }).sort((a, b) => a.code.localeCompare(b.code));
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -1730,6 +1739,8 @@ const PricingApp = () => {
                         <th className="border p-2 text-left">Cartons</th>
                         <th className="border p-2 text-left">Weight</th>
                         <th className="border p-2 text-left">UOM</th>
+                        {hasDirectPricingItems && (<th className="border p-2 text-left">System Rate</th>)}
+                        {hasDirectPricingItems && (<th className="border p-2 text-left">Calculated Rate</th>)}
                         {hasCalculated && (<th className="border p-2 text-left">Cost (MMK)</th>)}
                       </tr>
                     </thead>
@@ -1741,6 +1752,16 @@ const PricingApp = () => {
                           <td className="border p-2">{product.ctns}</td>
                           <td className="border p-2">{formatNumber(product.weight)}</td>
                           <td className="border p-2">Kg</td>
+                          {hasDirectPricingItems && (
+                            <td className="border p-2">
+                              {product.system_rate !== undefined && product.system_rate !== null ? formatNumber(product.system_rate) : '-'}
+                            </td>
+                          )}
+                          {hasDirectPricingItems && (
+                            <td className="border p-2">
+                              {product.system_rate !== undefined && product.system_rate !== null ? formatNumber(product.display_calculated_rate) : '-'}
+                            </td>
+                          )}
                           {hasCalculated && (<td className="border p-2 font-semibold">{product.total_cost !== undefined ? formatNumber(product.total_cost) : '-'}</td>)}
                         </tr>
                       ))}

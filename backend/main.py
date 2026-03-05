@@ -556,6 +556,7 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
             calculated_products.append({
                 **item,
                 "calculation_type": "weight",
+                "system_rate": None,
                 "unit_cost": avg_unit_cost, 
                 "total_cost": item['total_cost'] 
             })
@@ -567,6 +568,7 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
             calculated_products.append({
                 **item,
                 "calculation_type": "direct_split" if manual_total_cost else "direct",
+                "system_rate": item['standard_unit_cost'],
                 "unit_cost": final_unit_cost,
                 "total_cost": final_item_cost
             })
@@ -605,6 +607,7 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
                 "s_dept": sd_info.get("Dept", ""),
                 "s_principal": sd_info.get("Principal", ""),
                 "calculation_type": "direct",
+                "system_rate": unit_cost if unit_cost > 0 else None,
                 "unit_cost": unit_cost,
                 "total_cost": item_cost
             })
