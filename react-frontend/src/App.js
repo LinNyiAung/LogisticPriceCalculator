@@ -1748,8 +1748,8 @@ const PricingApp = () => {
                         <th className="border p-2 text-left">Weight</th>
                         <th className="border p-2 text-left">UOM</th>
                         {/* Modified conditionally displayed headers */}
-                        {hasDirectPricingItems && (<th className="border p-2 text-left">System Rate</th>)}
-                        {hasCalculated && (<th className="border p-2 text-left">Calculated Rate / Ctn</th>)}
+                        {hasDirectPricingItems && (<th className="border p-2 text-left">System Rate per Ctn</th>)}
+                        {hasCalculated && (<th className="border p-2 text-left">Calculated Rate per Ctn</th>)}
                         {hasCalculated && (<th className="border p-2 text-left">Cost (MMK)</th>)}
                       </tr>
                     </thead>
