@@ -109,7 +109,11 @@ def startup_db():
                 [final_total_cost] REAL,
                 [channel] TEXT,
                 [status] TEXT DEFAULT 'saved',
-                [created_by] TEXT
+                [created_by] TEXT,
+                [submitted_by] TEXT,
+                [submitted_at] TEXT,
+                [claimed_by] TEXT,
+                [claimed_at] TEXT
             )
         """)
 
@@ -119,6 +123,14 @@ def startup_db():
         try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [status] TEXT DEFAULT 'saved'")
         except sqlite3.OperationalError: pass
         try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [created_by] TEXT")
+        except sqlite3.OperationalError: pass
+        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [submitted_by] TEXT")
+        except sqlite3.OperationalError: pass
+        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [submitted_at] TEXT")
+        except sqlite3.OperationalError: pass
+        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [claimed_by] TEXT")
+        except sqlite3.OperationalError: pass
+        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [claimed_at] TEXT")
         except sqlite3.OperationalError: pass
         
         # --- User Table ---
@@ -953,7 +965,8 @@ def submit_history_item(record_id: int, user: dict = Depends(require_permission(
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("UPDATE Calculation_History SET status = 'submitted' WHERE id = ?", (record_id,))
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("UPDATE Calculation_History SET status = 'submitted', submitted_by = ?, submitted_at = ? WHERE id = ?", (user["username"], now_str, record_id))
         if cursor.rowcount == 0:
             conn.close()
             raise HTTPException(status_code=404, detail="Record not found")
@@ -967,7 +980,8 @@ def claim_history_item(record_id: int, user: dict = Depends(require_permission("
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("UPDATE Calculation_History SET status = 'claimed' WHERE id = ?", (record_id,))
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("UPDATE Calculation_History SET status = 'claimed', claimed_by = ?, claimed_at = ? WHERE id = ?", (user["username"], now_str, record_id))
         if cursor.rowcount == 0:
             conn.close()
             raise HTTPException(status_code=404, detail="Record not found")
@@ -988,14 +1002,12 @@ def get_history(user: dict = Depends(get_current_user)):
         if 'view_all_history' in permissions:
             cursor.execute("SELECT * FROM Calculation_History ORDER BY created_at DESC")
         elif 'claim_calculation' in permissions:
-            # Can see their own (saved) history, AND submitted/claimed history from others
             cursor.execute("""
                 SELECT * FROM Calculation_History 
                 WHERE created_by = ? OR status IN ('submitted', 'claimed') 
                 ORDER BY created_at DESC
             """, (username,))
         else:
-            # Logistics user, can only see their own
             cursor.execute("SELECT * FROM Calculation_History WHERE created_by = ? OR created_by IS NULL ORDER BY created_at DESC", (username,))
             
         rows = cursor.fetchall()
@@ -1005,7 +1017,11 @@ def get_history(user: dict = Depends(get_current_user)):
                 "id": row[0], "created_at": row[1], "gate_name": row[2], "from_loc": row[3], "to_loc": row[4],
                 "doc_nums": json.loads(row[5]), "manual_total_cost": row[6], "additional_charges": row[7],
                 "final_total_cost": row[8], "channel": row[9], "status": row[10] if len(row) > 10 else 'saved',
-                "created_by": row[11] if len(row) > 11 else 'unknown'
+                "created_by": row[11] if len(row) > 11 else 'unknown',
+                "submitted_by": row[12] if len(row) > 12 else None,
+                "submitted_at": row[13] if len(row) > 13 else None,
+                "claimed_by": row[14] if len(row) > 14 else None,
+                "claimed_at": row[15] if len(row) > 15 else None
             })
         conn.close()
         return {"history": history}

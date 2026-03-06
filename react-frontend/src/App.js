@@ -140,7 +140,9 @@ const PricingApp = () => {
 
   const [historyData, setHistoryData] = useState([]);
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
-  const [historyFilters, setHistoryFilters] = useState({ id_status: '', date: '', route: '', doc_nums: '', total_cost: '' });
+  
+  // NOTE: 'author' filter added here
+  const [historyFilters, setHistoryFilters] = useState({ id_status: '', date: '', route: '', doc_nums: '', total_cost: '', author: '' });
 
   // User & Role Management State
   const [usersList, setUsersList] = useState([]);
@@ -907,7 +909,13 @@ const PricingApp = () => {
       const matchRoute = ((record.gate_name || '') + ' ' + (record.from_loc || '') + ' ' + (record.to_loc || '')).toLowerCase().includes(historyFilters.route.toLowerCase());
       const matchDocNums = (record.doc_nums ? record.doc_nums.join(', ') : '').toLowerCase().includes(historyFilters.doc_nums.toLowerCase());
       const matchTotalCost = (String(record.final_total_cost) || '').toLowerCase().includes(historyFilters.total_cost.toLowerCase());
-      return matchIdStatus && matchDate && matchRoute && matchDocNums && matchTotalCost;
+      const matchAuthor = [record.created_by, record.submitted_by, record.claimed_by]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes((historyFilters.author || '').toLowerCase());
+
+      return matchIdStatus && matchDate && matchRoute && matchDocNums && matchTotalCost && matchAuthor;
     });
 
     return (
@@ -925,17 +933,23 @@ const PricingApp = () => {
                     <th className="border p-2 text-left"><div>Date</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.date} onChange={(e) => setHistoryFilters({...historyFilters, date: e.target.value})} /></th>
                     <th className="border p-2 text-left"><div>Route</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.route} onChange={(e) => setHistoryFilters({...historyFilters, route: e.target.value})} /></th>
                     <th className="border p-2 text-left"><div>Doc Nums</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.doc_nums} onChange={(e) => setHistoryFilters({...historyFilters, doc_nums: e.target.value})} /></th>
-                    <th className="border p-2 text-right"><div>Total Cost (MMK)</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-right" value={historyFilters.total_cost} onChange={(e) => setHistoryFilters({...historyFilters, total_cost: e.target.value})} /></th>
+                    <th className="border p-2 text-left"><div>Total Cost (MMK)</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.total_cost} onChange={(e) => setHistoryFilters({...historyFilters, total_cost: e.target.value})} /></th>
+                    <th className="border p-2 text-left"><div>Author</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.author} onChange={(e) => setHistoryFilters({...historyFilters, author: e.target.value})} /></th>
                     <th className="border p-2 text-center align-top">Actions</th>
                   </tr>
                 </thead>
-                <tbody>{filteredHistory.length === 0 ? (<tr><td colSpan="6" className="text-center p-4 text-gray-500">No matching calculations found.</td></tr>) : (filteredHistory.map((record) => (
+                <tbody>{filteredHistory.length === 0 ? (<tr><td colSpan="7" className="text-center p-4 text-gray-500">No matching calculations found.</td></tr>) : (filteredHistory.map((record) => (
                     <tr key={record.id} className="hover:bg-gray-50">
                         <td className="border p-3"><span className="text-sm text-gray-600 font-bold block mb-1">#{record.id}</span><span className={`px-2 py-1 rounded text-xs font-bold uppercase ${record.status === 'claimed' ? 'bg-blue-100 text-blue-700' : record.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{record.status}</span></td>
                         <td className="border p-3 text-sm text-gray-600"><div className="font-semibold">{record.created_at}</div></td>
                         <td className="border p-3"><span className="font-bold text-gray-700">{record.gate_name}</span> <br/><span className="text-xs text-gray-500">{record.from_loc} &rarr; {record.to_loc}</span></td>
                         <td className="border p-3 text-sm">{record.doc_nums.length} Doc(s): {record.doc_nums.join(', ')}</td>
                         <td className="border p-3 text-right font-bold text-blue-600">{formatNumber(record.final_total_cost)}</td>
+                        <td className="border p-3 text-sm">
+                            <div className="mb-1"><span className="text-gray-500 text-xs">Saved:</span> <span className="font-semibold text-gray-800">{record.created_by || 'unknown'}</span></div>
+                            {record.submitted_by && <div className="mb-1"><span className="text-gray-500 text-xs">Submitted:</span> <span className="font-semibold text-blue-600">{record.submitted_by}</span></div>}
+                            {record.claimed_by && <div><span className="text-gray-500 text-xs">Claimed:</span> <span className="font-semibold text-green-600">{record.claimed_by}</span></div>}
+                        </td>
                         <td className="border p-3 text-center">
                             <div className="flex justify-center gap-2">
                                 <button onClick={() => handleDownloadHistoryExcel(record)} className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1"><FileDown size={16} /></button>
