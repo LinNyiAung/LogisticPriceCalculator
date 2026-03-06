@@ -69,6 +69,17 @@ const LoginScreen = ({ onLogin }) => {
 
 // --- Main Application Component ---
 const PricingApp = () => {
+  // --- Global UI Zoom Effect ---
+  useEffect(() => {
+    // Scales the entire application down by modifying the root font size.
+    // Default is usually 16px. Setting it to 14px acts as an ~87.5% zoom out 
+    // for all Tailwind 'rem' classes (text, padding, margins, sizes).
+    document.documentElement.style.fontSize = '14px';
+    
+    // Optional cleanup in case the component unmounts
+    return () => { document.documentElement.style.fontSize = ''; };
+  }, []);
+
   // Auth State
   const [token, setToken] = useState(localStorage.getItem('token') || null);
   const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || null);
