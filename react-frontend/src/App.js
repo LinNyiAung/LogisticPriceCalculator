@@ -1138,8 +1138,8 @@ const PricingApp = () => {
                     <thead className="bg-gray-100">
                       <tr>
                         <th className="border p-2 text-left">Item Code</th><th className="border p-2 text-left">Description</th><th className="border p-2 text-left">Cartons</th><th className="border p-2 text-left">Weight</th><th className="border p-2 text-left">UOM</th>
-                        {hasDirectPricingItems && (<th className="border p-2 text-left">System Rate per Ctn</th>)}
-                        {hasCalculated && (<th className="border p-2 text-left">Calculated Rate per Ctn</th>)}
+                        {hasDirectPricingItems && (<th className="border p-2 text-left">System Rate (Ctn)</th>)}
+                        {hasCalculated && (<th className="border p-2 text-left">Calculated Rate (Ctn)</th>)}
                         {hasCalculated && (<th className="border p-2 text-left">Cost (MMK)</th>)}
                       </tr>
                     </thead>
