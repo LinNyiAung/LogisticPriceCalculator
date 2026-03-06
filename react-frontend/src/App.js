@@ -4,11 +4,25 @@ import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, 
 const API_URL = 'http://localhost:8000';
 
 const AVAILABLE_PERMISSIONS = [
-  { id: 'manage_users', label: 'Manage Users' },
-  { id: 'manage_roles', label: 'Manage Roles' },
-  { id: 'manage_gates', label: 'Manage Gates' },
-  { id: 'manage_items', label: 'Manage Items' },
-  { id: 'manage_references', label: 'Manage References' },
+  { id: 'view_users', label: 'View Users' },
+  { id: 'add_user', label: 'Add User' },
+  { id: 'edit_user', label: 'Edit User' },
+  { id: 'delete_user', label: 'Delete User' },
+  { id: 'view_roles', label: 'View Roles' },
+  { id: 'add_role', label: 'Add Role' },
+  { id: 'edit_role', label: 'Edit Role' },
+  { id: 'delete_role', label: 'Delete Role' },
+  { id: 'view_gates', label: 'View Gates' },
+  { id: 'add_gate', label: 'Add Gate' },
+  { id: 'edit_gate', label: 'Edit Gate' },
+  { id: 'delete_gate', label: 'Delete Gate' },
+  { id: 'view_items', label: 'View Items' },
+  { id: 'add_item', label: 'Add Item' },
+  { id: 'edit_item', label: 'Edit Item' },
+  { id: 'delete_item', label: 'Delete Item' },
+  { id: 'view_references', label: 'View References' },
+  { id: 'add_reference', label: 'Add Reference' },
+  { id: 'delete_reference', label: 'Delete Reference' },
   { id: 'view_all_history', label: 'View All History' },
   { id: 'submit_calculation', label: 'Submit Calculation' },
   { id: 'claim_calculation', label: 'Claim Calculation' },
@@ -71,12 +85,7 @@ const LoginScreen = ({ onLogin }) => {
 const PricingApp = () => {
   // --- Global UI Zoom Effect ---
   useEffect(() => {
-    // Scales the entire application down by modifying the root font size.
-    // Default is usually 16px. Setting it to 14px acts as an ~87.5% zoom out 
-    // for all Tailwind 'rem' classes (text, padding, margins, sizes).
     document.documentElement.style.fontSize = '14px';
-    
-    // Optional cleanup in case the component unmounts
     return () => { document.documentElement.style.fontSize = ''; };
   }, []);
 
@@ -415,13 +424,13 @@ const PricingApp = () => {
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
-  const deleteUser = async (username) => {
-    if (username === userRole.username) return; 
+  const deleteUser = async (userToDelete) => {
+    if (userToDelete === username) return; 
     setConfirmDialog({
-        message: `Delete user "${username}"?`,
+        message: `Delete user "${userToDelete}"?`,
         onConfirm: async () => {
             try {
-                const response = await authFetch(`${API_URL}/users/${username}`, { method: 'DELETE' });
+                const response = await authFetch(`${API_URL}/users/${userToDelete}`, { method: 'DELETE' });
                 if (response.ok) { showNotification('User deleted', 'success'); loadUsers(); } 
                 else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
             } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
@@ -463,9 +472,9 @@ const PricingApp = () => {
 
   useEffect(() => {
     if (token && currentPage === 'history') loadHistory();
-    if (token && currentPage === 'users' && permissions.includes('manage_users')) { loadUsers(); loadRoles(); }
-    if (token && currentPage === 'roles' && permissions.includes('manage_roles')) loadRoles();
-    if (token && currentPage === 'references' && permissions.includes('manage_references')) loadReferenceData();
+    if (token && currentPage === 'users' && permissions.includes('view_users')) { loadUsers(); loadRoles(); }
+    if (token && currentPage === 'roles' && permissions.includes('view_roles')) loadRoles();
+    if (token && currentPage === 'references' && permissions.includes('view_references')) loadReferenceData();
   }, [currentPage, token, permissions]);
 
   useEffect(() => {
@@ -805,12 +814,12 @@ const PricingApp = () => {
       <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
         <div className="flex flex-wrap gap-2">
           <button onClick={() => setCurrentPage('calculator')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'calculator' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calculator size={18} /> Calculator</button>
-          <button onClick={() => setCurrentPage('gates')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Gates</button>
-          <button onClick={() => setCurrentPage('items')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><FileText size={18} /> Items</button>
+          {permissions.includes('view_gates') && <button onClick={() => setCurrentPage('gates')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Gates</button>}
+          {permissions.includes('view_items') && <button onClick={() => setCurrentPage('items')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><FileText size={18} /> Items</button>}
           <button onClick={() => setCurrentPage('history')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><History size={18} /> History</button>
-          {permissions.includes('manage_references') && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={18} /> References</button>)}
-          {permissions.includes('manage_users') && (<button onClick={() => setCurrentPage('users')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Users size={18} /> Users</button>)}
-          {permissions.includes('manage_roles') && (<button onClick={() => setCurrentPage('roles')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'roles' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Shield size={18} /> Roles</button>)}
+          {permissions.includes('view_references') && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={18} /> References</button>)}
+          {permissions.includes('view_users') && (<button onClick={() => setCurrentPage('users')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Users size={18} /> Users</button>)}
+          {permissions.includes('view_roles') && (<button onClick={() => setCurrentPage('roles')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'roles' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Shield size={18} /> Roles</button>)}
         </div>
         <div className="flex items-center gap-4">
             <div className="text-right"><p className="text-xs text-gray-500">Logged in as</p><div className="flex items-center gap-1"><User size={14} className="text-blue-600"/><p className="font-bold text-sm text-blue-600 capitalize">{username} ({userRole})</p></div></div>
@@ -823,7 +832,7 @@ const PricingApp = () => {
   // --- Views ---
   if (!token) return <LoginScreen onLogin={handleLogin} />;
 
-  if (currentPage === 'roles' && permissions.includes('manage_roles')) {
+  if (currentPage === 'roles' && permissions.includes('view_roles')) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
@@ -832,11 +841,11 @@ const PricingApp = () => {
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-3xl font-bold text-gray-800">Role Management</h1>
-              <button onClick={() => { setEditingRole(null); setShowRoleModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Role</button>
+              {permissions.includes('add_role') && <button onClick={() => { setEditingRole(null); setShowRoleModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Role</button>}
             </div>
             <table className="w-full border-collapse border">
               <thead className="bg-gray-100"><tr><th className="border p-3 text-left">Role Name</th><th className="border p-3 text-left">Permissions</th><th className="border p-3 text-center w-32">Actions</th></tr></thead>
-              <tbody>{rolesList.map((r, i) => (<tr key={i} className="hover:bg-gray-50"><td className="border p-3 font-semibold text-gray-700">{r.name}</td><td className="border p-3 text-xs text-gray-600"><div className="flex flex-wrap gap-1">{r.permissions.map(p => <span key={p} className="bg-gray-200 px-2 py-1 rounded text-gray-700">{p.replace('_', ' ')}</span>)}</div></td><td className="border p-3 text-center"><div className="flex justify-center gap-2"><button onClick={() => { setEditingRole(r); setShowRoleModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded"><Edit2 size={16} /></button><button onClick={() => deleteRole(r.name)} className="p-2 bg-red-100 text-red-600 rounded"><Trash2 size={16} /></button></div></td></tr>))}</tbody>
+              <tbody>{rolesList.map((r, i) => (<tr key={i} className="hover:bg-gray-50"><td className="border p-3 font-semibold text-gray-700">{r.name}</td><td className="border p-3 text-xs text-gray-600"><div className="flex flex-wrap gap-1">{r.permissions.map(p => <span key={p} className="bg-gray-200 px-2 py-1 rounded text-gray-700">{p.replace('_', ' ')}</span>)}</div></td><td className="border p-3 text-center"><div className="flex justify-center gap-2">{permissions.includes('edit_role') && <button onClick={() => { setEditingRole(r); setShowRoleModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded"><Edit2 size={16} /></button>}{permissions.includes('delete_role') && <button onClick={() => deleteRole(r.name)} className="p-2 bg-red-100 text-red-600 rounded"><Trash2 size={16} /></button>}</div></td></tr>))}</tbody>
             </table>
           </div>
         </div>
@@ -845,7 +854,7 @@ const PricingApp = () => {
     );
   }
 
-  if (currentPage === 'users' && permissions.includes('manage_users')) {
+  if (currentPage === 'users' && permissions.includes('view_users')) {
       return (
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-6xl mx-auto">
@@ -854,12 +863,12 @@ const PricingApp = () => {
                 <div className="bg-white rounded-lg shadow-md p-6">
                     <div className="flex items-center justify-between mb-6">
                         <h1 className="text-3xl font-bold text-gray-800">User Management</h1>
-                        <button onClick={() => { setEditingUser(null); setShowUserModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add User</button>
+                        {permissions.includes('add_user') && <button onClick={() => { setEditingUser(null); setShowUserModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add User</button>}
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full border-collapse border">
                             <thead className="bg-gray-100"><tr><th className="border p-3 text-left">Username</th><th className="border p-3 text-left">Role</th><th className="border p-3 text-center w-32">Actions</th></tr></thead>
-                            <tbody>{usersList.map((u, index) => (<tr key={index} className="hover:bg-gray-50"><td className="border p-3 font-semibold text-gray-700">{u.username}</td><td className="border p-3"><span className="px-2 py-1 rounded text-xs font-bold uppercase bg-blue-100 text-blue-700">{u.role}</span></td><td className="border p-3 text-center"><div className="flex justify-center gap-2"><button onClick={() => { setEditingUser(u); setShowUserModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>{u.username !== username && (<button onClick={() => deleteUser(u.username)} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"><Trash2 size={16} /></button>)}</div></td></tr>))}</tbody>
+                            <tbody>{usersList.map((u, index) => (<tr key={index} className="hover:bg-gray-50"><td className="border p-3 font-semibold text-gray-700">{u.username}</td><td className="border p-3"><span className="px-2 py-1 rounded text-xs font-bold uppercase bg-blue-100 text-blue-700">{u.role}</span></td><td className="border p-3 text-center"><div className="flex justify-center gap-2">{permissions.includes('edit_user') && <button onClick={() => { setEditingUser(u); setShowUserModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}{permissions.includes('delete_user') && u.username !== username && (<button onClick={() => deleteUser(u.username)} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"><Trash2 size={16} /></button>)}</div></td></tr>))}</tbody>
                         </table>
                     </div>
                 </div>
@@ -870,7 +879,7 @@ const PricingApp = () => {
       );
   }
 
-  if (currentPage === 'references' && permissions.includes('manage_references')) {
+  if (currentPage === 'references' && permissions.includes('view_references')) {
       return (
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-6xl mx-auto">
@@ -878,9 +887,9 @@ const PricingApp = () => {
                 {renderNavigation()}
                 <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Reference Data</h1>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white rounded-lg shadow-md p-6"><h2 className="text-xl font-bold mb-4 text-blue-700">Locations (From/To)</h2><div className="flex gap-2 mb-4"><input type="text" placeholder="New Location..." className="border p-2 rounded flex-1" id="new-loc" /><button onClick={() => { addReference('locations', document.getElementById('new-loc').value); document.getElementById('new-loc').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div><div className="border rounded max-h-96 overflow-y-auto">{refLocations.map((loc, i) => (<div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50"><span>{loc}</span><button onClick={() => deleteReference('locations', loc)} className="text-red-500 hover:text-red-700"><X size={18} /></button></div>))}</div></div>
-                    <div className="bg-white rounded-lg shadow-md p-6"><h2 className="text-xl font-bold mb-4 text-purple-700">Units of Measure</h2><div className="flex gap-2 mb-4"><input type="text" placeholder="New UOM..." className="border p-2 rounded flex-1" id="new-uom" /><button onClick={() => { addReference('uoms', document.getElementById('new-uom').value); document.getElementById('new-uom').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div><div className="border rounded max-h-96 overflow-y-auto">{refUOMs.map((u, i) => (<div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50"><span>{u}</span><button onClick={() => deleteReference('uoms', u)} className="text-red-500 hover:text-red-700"><X size={18} /></button></div>))}</div></div>
-                    <div className="bg-white rounded-lg shadow-md p-6"><h2 className="text-xl font-bold mb-4 text-orange-700">Channels</h2><div className="flex gap-2 mb-4"><input type="text" placeholder="New Channel..." className="border p-2 rounded flex-1" id="new-chan" /><button onClick={() => { addReference('channels', document.getElementById('new-chan').value); document.getElementById('new-chan').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div><div className="border rounded max-h-96 overflow-y-auto">{refChannels.map((c, i) => (<div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50"><span>{c}</span><button onClick={() => deleteReference('channels', c)} className="text-red-500 hover:text-red-700"><X size={18} /></button></div>))}</div></div>
+                    <div className="bg-white rounded-lg shadow-md p-6"><h2 className="text-xl font-bold mb-4 text-blue-700">Locations (From/To)</h2>{permissions.includes('add_reference') && <div className="flex gap-2 mb-4"><input type="text" placeholder="New Location..." className="border p-2 rounded flex-1" id="new-loc" /><button onClick={() => { addReference('locations', document.getElementById('new-loc').value); document.getElementById('new-loc').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div>}<div className="border rounded max-h-96 overflow-y-auto">{refLocations.map((loc, i) => (<div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50"><span>{loc}</span>{permissions.includes('delete_reference') && <button onClick={() => deleteReference('locations', loc)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}</div>))}</div></div>
+                    <div className="bg-white rounded-lg shadow-md p-6"><h2 className="text-xl font-bold mb-4 text-purple-700">Units of Measure</h2>{permissions.includes('add_reference') && <div className="flex gap-2 mb-4"><input type="text" placeholder="New UOM..." className="border p-2 rounded flex-1" id="new-uom" /><button onClick={() => { addReference('uoms', document.getElementById('new-uom').value); document.getElementById('new-uom').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div>}<div className="border rounded max-h-96 overflow-y-auto">{refUOMs.map((u, i) => (<div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50"><span>{u}</span>{permissions.includes('delete_reference') && <button onClick={() => deleteReference('uoms', u)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}</div>))}</div></div>
+                    <div className="bg-white rounded-lg shadow-md p-6"><h2 className="text-xl font-bold mb-4 text-orange-700">Channels</h2>{permissions.includes('add_reference') && <div className="flex gap-2 mb-4"><input type="text" placeholder="New Channel..." className="border p-2 rounded flex-1" id="new-chan" /><button onClick={() => { addReference('channels', document.getElementById('new-chan').value); document.getElementById('new-chan').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div>}<div className="border rounded max-h-96 overflow-y-auto">{refChannels.map((c, i) => (<div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50"><span>{c}</span>{permissions.includes('delete_reference') && <button onClick={() => deleteReference('channels', c)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}</div>))}</div></div>
                 </div>
             </div>
         </div>
@@ -946,8 +955,7 @@ const PricingApp = () => {
     );
   }
 
-  if (currentPage === 'gates') {
-    const canEditGates = permissions.includes('manage_gates');
+  if (currentPage === 'gates' && permissions.includes('view_gates')) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
@@ -956,12 +964,12 @@ const PricingApp = () => {
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-3xl font-bold text-gray-800">Transportation Cost by Gate</h1>
-              {canEditGates && (<button onClick={() => setShowAddGateModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Gate</button>)}
+              {permissions.includes('add_gate') && (<button onClick={() => setShowAddGateModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Gate</button>)}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse border">
                 <thead className="bg-gray-100"><tr><th className="border p-3 text-left">Gate Name</th><th className="border p-3 text-left">From</th><th className="border p-3 text-left">To</th><th className="border p-3 text-left">UOM</th><th className="border p-3 text-left">Unit</th><th className="border p-3 text-left">Cost</th><th className="border p-3 text-center">Actions</th></tr></thead>
-                <tbody>{gateData.map((gate, index) => (<tr key={index}><td className="border p-3">{gate.gate_name}</td><td className="border p-3">{gate.from_loc}</td><td className="border p-3">{gate.to_loc}</td><td className="border p-3">{gate.uom || '-'}</td><td className="border p-3">{gate.unit || '-'}</td><td className="border p-3">{formatNumber(gate.cost)}</td><td className="border p-3 text-center"><div className="flex items-center justify-center gap-2"><button onClick={() => fetchGateLogs(gate)} className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={16} /></button>{canEditGates ? (<><button onClick={() => { setOriginalGateName(gate.gate_name); setEditingGate(gate); setShowAddGateModal(true); }} className="p-2 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={16} /></button><button onClick={() => deleteGate(gate.gate_id)} className="p-2 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={16} /></button></>) : (<span className="text-gray-400 text-sm ml-2">Read Only</span>)}</div></td></tr>))}</tbody>
+                <tbody>{gateData.map((gate, index) => (<tr key={index}><td className="border p-3">{gate.gate_name}</td><td className="border p-3">{gate.from_loc}</td><td className="border p-3">{gate.to_loc}</td><td className="border p-3">{gate.uom || '-'}</td><td className="border p-3">{gate.unit || '-'}</td><td className="border p-3">{formatNumber(gate.cost)}</td><td className="border p-3 text-center"><div className="flex items-center justify-center gap-2"><button onClick={() => fetchGateLogs(gate)} className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={16} /></button>{permissions.includes('edit_gate') && <button onClick={() => { setOriginalGateName(gate.gate_name); setEditingGate(gate); setShowAddGateModal(true); }} className="p-2 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={16} /></button>}{permissions.includes('delete_gate') && <button onClick={() => deleteGate(gate.gate_id)} className="p-2 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={16} /></button>}</div></td></tr>))}</tbody>
               </table>
             </div>
           </div>
@@ -973,8 +981,7 @@ const PricingApp = () => {
     );
   }
 
-  if (currentPage === 'items') {
-    const canEditItems = permissions.includes('manage_items');
+  if (currentPage === 'items' && permissions.includes('view_items')) {
     const filteredItems = itemPricingData.filter(item => {
       const matchCode = (item.item_code || '').toLowerCase().includes(itemFilters.item_code.toLowerCase());
       const matchName = (item.item_name || '').toLowerCase().includes(itemFilters.item_name.toLowerCase());
@@ -995,7 +1002,8 @@ const PricingApp = () => {
               <div className="flex gap-2">
                 {selectedGateForPricing && (
                   <><button onClick={handleExportExcel} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"><Download size={20} /> Download Excel</button>
-                    {canEditItems && (<><label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer"><Upload size={20} /> Upload Excel <input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" /></label><button onClick={() => setShowAddItemModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Item</button></>)}
+                    {(permissions.includes('add_item') && permissions.includes('edit_item')) && <label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer"><Upload size={20} /> Upload Excel <input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" /></label>}
+                    {permissions.includes('add_item') && <button onClick={() => setShowAddItemModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Item</button>}
                   </>
                 )}
               </div>
@@ -1029,7 +1037,8 @@ const PricingApp = () => {
                         <td className="border p-2">
                           <div className="flex gap-2">
                                 <button onClick={() => fetchItemLogs(item)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
-                                {canEditItems && (<><button onClick={() => { setOriginalItemCode(item.item_code); setEditingItem(item); setShowAddItemModal(true); }} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={14} /></button><button onClick={() => deleteItem(item.item_code)} className="p-1 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={14} /></button></>)}
+                                {permissions.includes('edit_item') && <button onClick={() => { setOriginalItemCode(item.item_code); setEditingItem(item); setShowAddItemModal(true); }} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={14} /></button>}
+                                {permissions.includes('delete_item') && <button onClick={() => deleteItem(item.item_code)} className="p-1 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={14} /></button>}
                           </div>
                         </td>
                       </tr>

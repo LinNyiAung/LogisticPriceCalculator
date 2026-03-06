@@ -63,7 +63,7 @@ def get_logistic_connection():
 
 @app.on_event("startup")
 def startup_db():
-    """Ensure logistic.db has the required tables"""
+    """Ensure logistic.db has the required tables and updated roles"""
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -212,14 +212,25 @@ def startup_db():
             )
         """)
         
-        # --- SEED DEFAULTS ---
-        # Seed default roles to ensure backward compatibility
+        # --- SEED DEFAULTS AND MIGRATE TO GRANULAR PERMISSIONS ---
         cursor.execute("SELECT COUNT(*) FROM Roles")
         if cursor.fetchone()[0] == 0:
             default_roles = [
-                ('admin', json.dumps(['manage_users', 'manage_roles', 'manage_gates', 'manage_items', 'manage_references', 'view_all_history', 'delete_history', 'claim_calculation', 'submit_calculation'])),
-                ('account', json.dumps(['manage_gates', 'manage_items', 'manage_references', 'view_all_history', 'claim_calculation'])),
-                ('logistic', json.dumps(['submit_calculation']))
+                ('admin', json.dumps([
+                    'view_users', 'add_user', 'edit_user', 'delete_user',
+                    'view_roles', 'add_role', 'edit_role', 'delete_role',
+                    'view_gates', 'add_gate', 'edit_gate', 'delete_gate',
+                    'view_items', 'add_item', 'edit_item', 'delete_item',
+                    'view_references', 'add_reference', 'delete_reference',
+                    'view_all_history', 'delete_history', 'claim_calculation', 'submit_calculation'
+                ])),
+                ('account', json.dumps([
+                    'view_gates', 'add_gate', 'edit_gate', 
+                    'view_items', 'add_item', 'edit_item', 
+                    'view_references', 'add_reference', 'delete_reference',
+                    'claim_calculation'
+                ])),
+                ('logistic', json.dumps(['submit_calculation', 'view_gates', 'view_items', 'view_references',]))
             ]
             cursor.executemany("INSERT INTO Roles (name, permissions) VALUES (?, ?)", default_roles)
 
@@ -412,7 +423,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 # --- Role Management Endpoints ---
 
 @app.get("/roles", response_model=List[RoleResponse])
-def get_all_roles(user: dict = Depends(require_permission("manage_roles"))):
+def get_all_roles(user: dict = Depends(require_permission("view_roles"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -424,7 +435,7 @@ def get_all_roles(user: dict = Depends(require_permission("manage_roles"))):
         raise HTTPException(status_code=500, detail=f"Error fetching roles: {str(e)}")
 
 @app.post("/roles")
-def create_role(role_data: RoleCreate, user: dict = Depends(require_permission("manage_roles"))):
+def create_role(role_data: RoleCreate, user: dict = Depends(require_permission("add_role"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -441,7 +452,7 @@ def create_role(role_data: RoleCreate, user: dict = Depends(require_permission("
         raise HTTPException(status_code=500, detail=f"Error creating role: {str(e)}")
 
 @app.put("/roles/{role_name}")
-def update_role(role_name: str, role_data: RoleUpdate, user: dict = Depends(require_permission("manage_roles"))):
+def update_role(role_name: str, role_data: RoleUpdate, user: dict = Depends(require_permission("edit_role"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -453,7 +464,7 @@ def update_role(role_name: str, role_data: RoleUpdate, user: dict = Depends(requ
         raise HTTPException(status_code=500, detail=f"Error updating role: {str(e)}")
 
 @app.delete("/roles/{role_name}")
-def delete_role(role_name: str, user: dict = Depends(require_permission("manage_roles"))):
+def delete_role(role_name: str, user: dict = Depends(require_permission("delete_role"))):
     if role_name in ['admin', 'account', 'logistic']:
         raise HTTPException(status_code=400, detail="Cannot delete default system roles")
     try:
@@ -473,7 +484,7 @@ def delete_role(role_name: str, user: dict = Depends(require_permission("manage_
 # --- User Management Endpoints ---
 
 @app.get("/users", response_model=List[UserResponse])
-def get_all_users(user: dict = Depends(require_permission("manage_users"))):
+def get_all_users(user: dict = Depends(require_permission("view_users"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -485,7 +496,7 @@ def get_all_users(user: dict = Depends(require_permission("manage_users"))):
         raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
 
 @app.post("/users")
-def create_user(user_data: UserCreate, user: dict = Depends(require_permission("manage_users"))):
+def create_user(user_data: UserCreate, user: dict = Depends(require_permission("add_user"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -505,7 +516,7 @@ def create_user(user_data: UserCreate, user: dict = Depends(require_permission("
         raise HTTPException(status_code=500, detail=f"Error creating user: {str(e)}")
 
 @app.put("/users/{username}")
-def update_user(username: str, user_data: UserUpdate, user: dict = Depends(require_permission("manage_users"))):
+def update_user(username: str, user_data: UserUpdate, user: dict = Depends(require_permission("edit_user"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -527,7 +538,7 @@ def update_user(username: str, user_data: UserUpdate, user: dict = Depends(requi
         raise HTTPException(status_code=500, detail=f"Error updating user: {str(e)}")
 
 @app.delete("/users/{username}")
-def delete_user(username: str, user: dict = Depends(require_permission("manage_users"))):
+def delete_user(username: str, user: dict = Depends(require_permission("delete_user"))):
     if username == user["username"]:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     try:
@@ -772,7 +783,7 @@ def get_ref_locations():
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/locations")
-def add_ref_location(item: ReferenceItem, user: dict = Depends(require_permission("manage_references"))):
+def add_ref_location(item: ReferenceItem, user: dict = Depends(require_permission("add_reference"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -788,7 +799,7 @@ def add_ref_location(item: ReferenceItem, user: dict = Depends(require_permissio
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.delete("/references/locations/{name}")
-def delete_ref_location(name: str, user: dict = Depends(require_permission("manage_references"))):
+def delete_ref_location(name: str, user: dict = Depends(require_permission("delete_reference"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -814,7 +825,7 @@ def get_ref_uoms():
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/uoms")
-def add_ref_uom(item: ReferenceItem, user: dict = Depends(require_permission("manage_references"))):
+def add_ref_uom(item: ReferenceItem, user: dict = Depends(require_permission("add_reference"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -830,7 +841,7 @@ def add_ref_uom(item: ReferenceItem, user: dict = Depends(require_permission("ma
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.delete("/references/uoms/{name}")
-def delete_ref_uom(name: str, user: dict = Depends(require_permission("manage_references"))):
+def delete_ref_uom(name: str, user: dict = Depends(require_permission("delete_reference"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -856,7 +867,7 @@ def get_ref_channels():
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/channels")
-def add_ref_channel(item: ReferenceItem, user: dict = Depends(require_permission("manage_references"))):
+def add_ref_channel(item: ReferenceItem, user: dict = Depends(require_permission("add_reference"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -872,7 +883,7 @@ def add_ref_channel(item: ReferenceItem, user: dict = Depends(require_permission
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.delete("/references/channels/{name}")
-def delete_ref_channel(name: str, user: dict = Depends(require_permission("manage_references"))):
+def delete_ref_channel(name: str, user: dict = Depends(require_permission("delete_reference"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -977,8 +988,14 @@ def get_history(user: dict = Depends(get_current_user)):
         if 'view_all_history' in permissions:
             cursor.execute("SELECT * FROM Calculation_History ORDER BY created_at DESC")
         elif 'claim_calculation' in permissions:
-            cursor.execute("SELECT * FROM Calculation_History WHERE status IN ('submitted', 'claimed') ORDER BY created_at DESC")
+            # Can see their own (saved) history, AND submitted/claimed history from others
+            cursor.execute("""
+                SELECT * FROM Calculation_History 
+                WHERE created_by = ? OR status IN ('submitted', 'claimed') 
+                ORDER BY created_at DESC
+            """, (username,))
         else:
+            # Logistics user, can only see their own
             cursor.execute("SELECT * FROM Calculation_History WHERE created_by = ? OR created_by IS NULL ORDER BY created_at DESC", (username,))
             
         rows = cursor.fetchall()
@@ -1196,7 +1213,11 @@ def export_item_pricing_excel(gate_id: int):
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error exporting: {str(e)}")
 
 @app.post("/account/item-pricing/import/{gate_id}")
-async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), user: dict = Depends(require_permission("manage_items"))):
+async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    perms = user.get("permissions", [])
+    if "add_item" not in perms or "edit_item" not in perms:
+        raise HTTPException(status_code=403, detail="Requires both 'add_item' and 'edit_item' permissions for bulk import")
+
     try:
         contents = await file.read()
         wb = openpyxl.load_workbook(io.BytesIO(contents))
@@ -1336,12 +1357,17 @@ def get_all_gates(user: dict = Depends(get_current_user)):
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading gates: {str(e)}")
 
 @app.post("/account/gates")
-def save_gate(gate_data: GateData, user: dict = Depends(require_permission("manage_gates"))):
+def save_gate(gate_data: GateData, user: dict = Depends(get_current_user)):
+    perms = user.get("permissions", [])
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
 
         if gate_data.original_gate_name:
+            if "edit_gate" not in perms:
+                conn.close()
+                raise HTTPException(status_code=403, detail="Requires 'edit_gate' permission")
+            
             cursor.execute("SELECT [Gate ID], [UOM], [Unit], [Cost] FROM Gate WHERE [Gate Name] = ?", (gate_data.original_gate_name,))
             current_row = cursor.fetchone()
             
@@ -1369,12 +1395,17 @@ def save_gate(gate_data: GateData, user: dict = Depends(require_permission("mana
                 UPDATE Gate SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Cost] = ? WHERE [Gate Name] = ?
             """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, gate_data.original_gate_name))
         else:
+            if "add_gate" not in perms:
+                conn.close()
+                raise HTTPException(status_code=403, detail="Requires 'add_gate' permission")
+                
             cursor.execute("INSERT INTO Gate ([Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES (?, ?, ?, ?, ?, ?)", 
                   (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost))
         
         conn.commit()
         conn.close()
         return {"message": "Gate saved successfully"}
+    except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error saving gate: {str(e)}")
 
 @app.get("/account/gates/{gate_id}/logs", response_model=List[GateLogItem])
@@ -1390,7 +1421,7 @@ def get_gate_logs(gate_id: int, user: dict = Depends(get_current_user)):
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching logs: {str(e)}")
 
 @app.delete("/account/gates/{gate_id}")
-def delete_gate(gate_id: int, user: dict = Depends(require_permission("manage_gates"))): 
+def delete_gate(gate_id: int, user: dict = Depends(require_permission("delete_gate"))): 
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -1419,7 +1450,8 @@ def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading items: {str(e)}")
 
 @app.post("/account/item-pricing")
-def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(require_permission("manage_items"))):
+def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_current_user)):
+    perms = user.get("permissions", [])
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -1427,6 +1459,10 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(require_p
         existing = cursor.fetchone()
 
         if existing:
+            if "edit_item" not in perms:
+                conn.close()
+                raise HTTPException(status_code=403, detail="Requires 'edit_item' permission")
+                
             pricing_id, old_cost = existing
             old_cost_str = str(old_cost).strip() if old_cost else ""
             new_cost_str = str(item_data.transportation_cost).strip() if item_data.transportation_cost else ""
@@ -1444,6 +1480,10 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(require_p
             cursor.execute("UPDATE Item_Pricing SET [Item ID] = ?, [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ? WHERE [Pricing ID] = ?", 
                 (item_data.item_code, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost, pricing_id))
         else:
+            if "add_item" not in perms:
+                conn.close()
+                raise HTTPException(status_code=403, detail="Requires 'add_item' permission")
+                
             while True:
                 new_id = random.randint(10000000, 99999999)
                 cursor.execute("SELECT 1 FROM Item_Pricing WHERE [Pricing ID] = ?", (new_id,))
@@ -1454,6 +1494,7 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(require_p
         conn.commit()
         conn.close()
         return {"message": "Item saved successfully"}
+    except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error saving item: {str(e)}")
 
 @app.get("/account/items/{pricing_id}/logs", response_model=List[ItemLogItem])
@@ -1469,7 +1510,7 @@ def get_item_logs(pricing_id: int, user: dict = Depends(get_current_user)):
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching logs: {str(e)}")
 
 @app.delete("/account/item-pricing/{gate_id}/{item_code}")
-def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(require_permission("manage_items"))): 
+def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(require_permission("delete_item"))): 
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
