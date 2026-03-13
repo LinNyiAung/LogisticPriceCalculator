@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Scissors } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -26,7 +26,11 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'view_all_history', label: 'View All History' },
   { id: 'submit_calculation', label: 'Submit Calculation' },
   { id: 'claim_calculation', label: 'Claim Calculation' },
-  { id: 'delete_history', label: 'Delete History' }
+  { id: 'delete_history', label: 'Delete History' },
+  { id: 'view_rate_cuts', label: 'View Rate Cuts' },
+  { id: 'add_rate_cut', label: 'Add Rate Cut' },
+  { id: 'edit_rate_cut', label: 'Edit Rate Cut' },
+  { id: 'delete_rate_cut', label: 'Delete Rate Cut' }
 ];
 
 // --- Login Component ---
@@ -140,9 +144,12 @@ const PricingApp = () => {
 
   const [historyData, setHistoryData] = useState([]);
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
-  
-  // NOTE: 'author' filter added here
   const [historyFilters, setHistoryFilters] = useState({ id_status: '', date: '', route: '', doc_nums: '', total_cost: '', author: '' });
+
+  // Rate Cut State
+  const [rateCuts, setRateCuts] = useState([]);
+  const [showRateCutModal, setShowRateCutModal] = useState(false);
+  const [editingRateCut, setEditingRateCut] = useState(null);
 
   // User & Role Management State
   const [usersList, setUsersList] = useState([]);
@@ -160,7 +167,7 @@ const PricingApp = () => {
   const [selectedChannel, setSelectedChannel] = useState(''); 
   const [newRefValue, setNewRefValue] = useState('');
 
-  // Log Modal State
+  // Log Modal States
   const [showLogModal, setShowLogModal] = useState(false);
   const [logsData, setLogsData] = useState([]);
   const [currentLogGateName, setCurrentLogGateName] = useState('');
@@ -168,6 +175,10 @@ const PricingApp = () => {
   const [showItemLogModal, setShowItemLogModal] = useState(false);
   const [itemLogsData, setItemLogsData] = useState([]);
   const [currentLogItemName, setCurrentLogItemName] = useState('');
+
+  const [showRateCutLogModal, setShowRateCutLogModal] = useState(false);
+  const [rateCutLogsData, setRateCutLogsData] = useState([]);
+  const [currentLogRateCutLocation, setCurrentLogRateCutLocation] = useState('');
 
   // --- Formatting & UI Helpers ---
   const formatNumber = (num) => {
@@ -304,6 +315,13 @@ const PricingApp = () => {
           if (chanResp.ok) setRefChannels(await chanResp.json());
       } catch (error) { showNotification('Error loading reference data', 'error'); }
   }
+
+  const loadRateCuts = async () => {
+      try {
+          const response = await authFetch(`${API_URL}/account/rate-cuts`);
+          if (response.ok) { const data = await response.json(); setRateCuts(data); }
+      } catch (error) { showNotification(`Error loading rate cuts: ${error.message}`, 'error'); }
+  };
 
   // --- API Actions ---
   const addReference = async (type, value) => {
@@ -462,6 +480,27 @@ const PricingApp = () => {
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
+  const saveRateCut = async (data) => {
+    if (!data.location || data.cost === '') { showNotification('Both fields are required', 'error'); return; }
+    try {
+        const response = await authFetch(`${API_URL}/account/rate-cuts`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ location: data.location, cost: parseFloat(data.cost) })
+        });
+        if (response.ok) { showNotification('Rate cut saved', 'success'); loadRateCuts(); setShowRateCutModal(false); }
+        else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
+    } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+  };
+
+  const deleteRateCut = async (location) => {
+      if (!window.confirm(`Delete rate cut for ${location}?`)) return;
+      try {
+          const response = await authFetch(`${API_URL}/account/rate-cuts/${encodeURIComponent(location)}`, { method: 'DELETE' });
+          if (response.ok) { showNotification('Deleted successfully', 'success'); loadRateCuts(); }
+          else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+  };
+
   // --- Effects ---
   useEffect(() => {
     if (token) { loadDocNums(); loadGates(); loadFromLocations(); loadReferenceData(); }
@@ -477,6 +516,7 @@ const PricingApp = () => {
     if (token && currentPage === 'users' && permissions.includes('view_users')) { loadUsers(); loadRoles(); }
     if (token && currentPage === 'roles' && permissions.includes('view_roles')) loadRoles();
     if (token && currentPage === 'references' && permissions.includes('view_references')) loadReferenceData();
+    if (token && currentPage === 'rate_cuts' && permissions.includes('view_rate_cuts')) { loadRateCuts(); loadReferenceData(); }
   }, [currentPage, token, permissions]);
 
   useEffect(() => {
@@ -633,6 +673,18 @@ const PricingApp = () => {
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
+  const fetchRateCutLogs = async (rc) => {
+      try {
+          const response = await authFetch(`${API_URL}/account/rate-cuts/${encodeURIComponent(rc.location)}/logs`);
+          if (response.ok) { 
+              setRateCutLogsData(await response.json()); 
+              setCurrentLogRateCutLocation(rc.location); 
+              setShowRateCutLogModal(true); 
+          } 
+          else showNotification('Failed to fetch rate cut logs', 'error');
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+  };
+
   // --- Sub-Components ---
   const GateModal = ({ gate, onSave, onClose }) => {
     const [formData, setFormData] = useState(gate || { gate_name: '', from_loc: '', to_loc: '', uom: '', unit: '', cost: '' });
@@ -779,6 +831,39 @@ const PricingApp = () => {
     );
   };
 
+  const RateCutModal = ({ rateCut, onSave, onClose }) => {
+    const [formData, setFormData] = useState(rateCut || { location: '', cost: '' });
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                <h2 className="text-2xl font-bold mb-4">{rateCut ? 'Edit Rate Cut' : 'Add New Rate Cut'}</h2>
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-semibold mb-1">Location <span className="text-red-500">*</span></label>
+                        <select 
+                            value={formData.location} 
+                            onChange={(e) => setFormData({...formData, location: e.target.value})} 
+                            className="w-full p-2 border rounded"
+                            disabled={!!rateCut}
+                        >
+                            <option value="">-- Select Location --</option>
+                            {refLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-semibold mb-1">Cost <span className="text-red-500">*</span></label>
+                        <input type="number" step="any" value={formData.cost} onChange={(e) => setFormData({...formData, cost: e.target.value})} className="w-full p-2 border rounded" />
+                    </div>
+                </div>
+                <div className="flex gap-2 mt-6">
+                    <button onClick={() => onSave(formData)} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700" disabled={!formData.location || formData.cost === ''}>Save</button>
+                    <button onClick={onClose} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
   const ConfirmDialog = ({ message, onConfirm, onCancel }) => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -818,6 +903,7 @@ const PricingApp = () => {
           <button onClick={() => setCurrentPage('calculator')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'calculator' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calculator size={18} /> Calculator</button>
           {permissions.includes('view_gates') && <button onClick={() => setCurrentPage('gates')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Gates</button>}
           {permissions.includes('view_items') && <button onClick={() => setCurrentPage('items')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><FileText size={18} /> Items</button>}
+          {permissions.includes('view_rate_cuts') && <button onClick={() => setCurrentPage('rate_cuts')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'rate_cuts' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Scissors size={18} /> Rate Cuts</button>}
           <button onClick={() => setCurrentPage('history')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><History size={18} /> History</button>
           {permissions.includes('view_references') && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={18} /> References</button>)}
           {permissions.includes('view_users') && (<button onClick={() => setCurrentPage('users')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Users size={18} /> Users</button>)}
@@ -879,6 +965,52 @@ const PricingApp = () => {
             {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} />}
         </div>
       );
+  }
+
+  if (currentPage === 'rate_cuts' && permissions.includes('view_rate_cuts')) {
+    return (
+        <div className="min-h-screen bg-gray-50 p-6">
+            <div className="max-w-6xl mx-auto">
+                {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
+                {renderNavigation()}
+                <div className="bg-white rounded-lg shadow-md p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <h1 className="text-3xl font-bold text-gray-800">Rate Cuts Management</h1>
+                        {permissions.includes('add_rate_cut') && <button onClick={() => { setEditingRateCut(null); setShowRateCutModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Rate Cut</button>}
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full border-collapse border">
+                            <thead className="bg-gray-100">
+                                <tr>
+                                    <th className="border p-3 text-left">Location</th>
+                                    <th className="border p-3 text-left">Cost Cut Amount</th>
+                                    <th className="border p-3 text-center w-32">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rateCuts.length === 0 ? (<tr><td colSpan="3" className="text-center p-4 text-gray-500">No Rate Cuts Found</td></tr>) : 
+                                    rateCuts.map((rc, i) => (
+                                        <tr key={i} className="hover:bg-gray-50">
+                                            <td className="border p-3 font-semibold text-gray-700">{rc.location}</td>
+                                            <td className="border p-3">{formatNumber(rc.cost)}</td>
+                                            <td className="border p-3 text-center">
+                                                <div className="flex justify-center gap-2">
+                                                    <button onClick={() => fetchRateCutLogs(rc)} className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={16} /></button>
+                                                    {permissions.includes('edit_rate_cut') && <button onClick={() => { setEditingRateCut(rc); setShowRateCutModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
+                                                    {permissions.includes('delete_rate_cut') && <button onClick={() => deleteRateCut(rc.location)} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"><Trash2 size={16} /></button>}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {showRateCutModal && <RateCutModal rateCut={editingRateCut} onSave={saveRateCut} onClose={() => setShowRateCutModal(false)} />}
+            {showRateCutLogModal && <LogTableModal logs={rateCutLogsData} title={currentLogRateCutLocation} onClose={() => setShowRateCutLogModal(false)} />}
+        </div>
+    );
   }
 
   if (currentPage === 'references' && permissions.includes('view_references')) {

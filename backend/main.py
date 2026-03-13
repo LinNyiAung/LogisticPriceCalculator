@@ -117,6 +117,15 @@ def startup_db():
             )
         """)
 
+        # Rate Cut Table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Rate_Cut (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [location] TEXT UNIQUE,
+                [cost] REAL
+            )
+        """)
+
         # Safely attempt to add columns for existing databases
         try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [channel] TEXT")
         except sqlite3.OperationalError: pass
@@ -223,6 +232,20 @@ def startup_db():
                 FOREIGN KEY([pricing_id]) REFERENCES Item_Pricing([Pricing ID])
             )
         """)
+
+        # --- Rate Cut Change Log Table ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Rate_Cut_Change_Log (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [location] TEXT,
+                [changed_by] TEXT,
+                [change_date] TEXT,
+                [field_name] TEXT,
+                [old_value] TEXT,
+                [new_value] TEXT,
+                FOREIGN KEY([location]) REFERENCES Rate_Cut([location])
+            )
+        """)
         
         # --- SEED DEFAULTS AND MIGRATE TO GRANULAR PERMISSIONS ---
         cursor.execute("SELECT COUNT(*) FROM Roles")
@@ -234,15 +257,16 @@ def startup_db():
                     'view_gates', 'add_gate', 'edit_gate', 'delete_gate',
                     'view_items', 'add_item', 'edit_item', 'delete_item',
                     'view_references', 'add_reference', 'delete_reference',
-                    'view_all_history', 'delete_history', 'claim_calculation', 'submit_calculation'
+                    'view_all_history', 'delete_history', 'claim_calculation', 'submit_calculation',
+                    'view_rate_cuts', 'add_rate_cut', 'edit_rate_cut', 'delete_rate_cut'
                 ])),
                 ('account', json.dumps([
                     'view_gates', 'add_gate', 'edit_gate', 
                     'view_items', 'add_item', 'edit_item', 
                     'view_references', 'add_reference', 'delete_reference',
-                    'claim_calculation'
+                    'claim_calculation', 'view_rate_cuts', 'add_rate_cut', 'edit_rate_cut'
                 ])),
-                ('logistic', json.dumps(['submit_calculation', 'view_gates', 'view_items', 'view_references',]))
+                ('logistic', json.dumps(['submit_calculation', 'view_gates', 'view_items', 'view_references', 'view_rate_cuts']))
             ]
             cursor.executemany("INSERT INTO Roles (name, permissions) VALUES (?, ?)", default_roles)
 
@@ -285,6 +309,19 @@ def startup_db():
         logger.error(f"Error initializing database: {str(e)}")
 
 # --- Pydantic Models ---
+
+class RateCutData(BaseModel):
+    location: str
+    cost: float
+
+class RateCutLogItem(BaseModel):
+    id: int
+    location: str
+    changed_by: str
+    change_date: str
+    field_name: str
+    old_value: Optional[str]
+    new_value: Optional[str]
 
 class GateData(BaseModel):
     gate_id: Optional[int] = None
@@ -762,7 +799,6 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
                 "unit_cost": unit_cost, "total_cost": item_cost
             })
 
-    # PROPORTIONAL ADDITIONAL CHARGES LOGIC
     if add_charges != 0 and calculated_products:
         total_ctns = sum(p.get('ctns', 0) for p in calculated_products)
         
@@ -785,6 +821,90 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         "calculated_products": calculated_products, "total_cost": total_cost,
         "estimated_total_cost": estimated_total_cost
     }
+
+# --- Rate Cut Endpoints ---
+
+@app.get("/account/rate-cuts")
+def get_rate_cuts(user: dict = Depends(require_permission("view_rate_cuts"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT location, cost FROM Rate_Cut ORDER BY location")
+        rows = cursor.fetchall()
+        conn.close()
+        return [{"location": row[0], "cost": row[1]} for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading rate cuts: {str(e)}")
+
+@app.post("/account/rate-cuts")
+def save_rate_cut(data: RateCutData, user: dict = Depends(get_current_user)):
+    perms = user.get("permissions", [])
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT cost FROM Rate_Cut WHERE location = ?", (data.location,))
+        existing = cursor.fetchone()
+        
+        change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        username = user['username']
+
+        if existing:
+            if "edit_rate_cut" not in perms:
+                conn.close()
+                raise HTTPException(status_code=403, detail="Requires 'edit_rate_cut' permission")
+            
+            old_cost = existing[0]
+            if float(old_cost) != float(data.cost):
+                cursor.execute("""
+                    INSERT INTO Rate_Cut_Change_Log (location, changed_by, change_date, field_name, old_value, new_value)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (data.location, username, change_date, 'Cost', str(old_cost), str(data.cost)))
+
+            cursor.execute("UPDATE Rate_Cut SET cost = ? WHERE location = ?", (data.cost, data.location))
+        else:
+            if "add_rate_cut" not in perms:
+                conn.close()
+                raise HTTPException(status_code=403, detail="Requires 'add_rate_cut' permission")
+            cursor.execute("INSERT INTO Rate_Cut (location, cost) VALUES (?, ?)", (data.location, data.cost))
+            
+        conn.commit()
+        conn.close()
+        return {"message": "Rate cut saved successfully"}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error saving rate cut: {str(e)}")
+
+@app.delete("/account/rate-cuts/{location}")
+def delete_rate_cut(location: str, user: dict = Depends(require_permission("delete_rate_cut"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        # Ensure to delete the changelog history for the rate cut first to maintain integrity
+        cursor.execute("DELETE FROM Rate_Cut_Change_Log WHERE location = ?", (location,))
+        cursor.execute("DELETE FROM Rate_Cut WHERE location = ?", (location,))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Rate cut not found")
+        
+        conn.commit()
+        conn.close()
+        return {"message": "Rate cut deleted successfully"}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting rate cut: {str(e)}")
+
+@app.get("/account/rate-cuts/{location}/logs", response_model=List[RateCutLogItem])
+def get_rate_cut_logs(location: str, user: dict = Depends(get_current_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, location, changed_by, change_date, field_name, old_value, new_value FROM Rate_Cut_Change_Log WHERE location = ? ORDER BY change_date DESC", (location,))
+        rows = cursor.fetchall()
+        logs = [{"id": r[0], "location": r[1], "changed_by": r[2], "change_date": r[3], "field_name": r[4], "old_value": r[5], "new_value": r[6]} for r in rows]
+        conn.close()
+        return logs
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching rate cut logs: {str(e)}")
 
 # --- Reference Management Endpoints ---
 
