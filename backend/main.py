@@ -762,12 +762,18 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
                 "unit_cost": unit_cost, "total_cost": item_cost
             })
 
+    # PROPORTIONAL ADDITIONAL CHARGES LOGIC
     if add_charges != 0 and calculated_products:
-        num_items = len(calculated_products)
-        equal_extra_cost = add_charges / num_items
+        total_ctns = sum(p.get('ctns', 0) for p in calculated_products)
+        
+        
         for p in calculated_products:
-            p['total_cost'] += equal_extra_cost
-            if p['ctns'] > 0: p['unit_cost'] = p['total_cost'] / p['ctns']
+            proportion = p.get('ctns', 0) / total_ctns
+            extra_cost = add_charges * proportion
+            p['total_cost'] += extra_cost
+            if p['ctns'] > 0: 
+                p['unit_cost'] = p['total_cost'] / p['ctns']
+        
 
     calculated_products.sort(key=lambda x: (x.get('sin_no', ''), x['code']))
     total_cost += add_charges
