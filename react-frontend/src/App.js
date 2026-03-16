@@ -598,15 +598,47 @@ const PricingApp = () => {
     const gateInfo = gates.find(g => g.gate_name === gateName);
     if (gateInfo) setCalculationType(gateInfo.calculation_type);
   };
+
   const loadSavedCalculation = async (record) => {
     try {
-      setCurrentPage('calculator'); setCurrentHistoryId(record.id); setSelectedDocNums(record.doc_nums); 
+      setCurrentPage('calculator');
+      setCurrentHistoryId(record.id);
+      setSelectedDocNums(record.doc_nums); 
       await fetchAggregatedProducts(record.doc_nums);
-      setSelectedFrom(record.from_loc); await loadToLocations(record.from_loc); setSelectedTo(record.to_loc);
-      setSelectedGate(record.gate_name); setSelectedChannel(record.channel || ''); setManualTotalCost(record.manual_total_cost || ''); setAdditionalCharges(record.additional_charges || '');
-      setCalculatedProducts([]); setCalculatedTotalCost(record.final_total_cost); setEstimatedTotalCost(null);
-      showNotification(`Loaded calculation record (ID: ${record.id}).`, 'info');
-    } catch (error) { showNotification(`Error loading record: ${error.message}`, 'error'); }
+      setSelectedFrom(record.from_loc); 
+      await loadToLocations(record.from_loc); 
+      setSelectedTo(record.to_loc);
+      setSelectedGate(record.gate_name); 
+      setSelectedChannel(record.channel || ''); 
+      setManualTotalCost(record.manual_total_cost || ''); 
+      setAdditionalCharges(record.additional_charges || '');
+      
+      // We must recalculate here so the UI gets the missing calculated products
+      setIsLoading(true);
+      let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(record.gate_name)}`;
+      record.doc_nums.forEach(id => url += `&doc_nums=${encodeURIComponent(id)}`);
+      if (record.manual_total_cost !== null && record.manual_total_cost !== undefined) {
+          url += `&manual_total_cost=${record.manual_total_cost}`;
+      }
+      if (record.additional_charges) url += `&additional_charges=${record.additional_charges}`;
+      
+      const response = await authFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      if (response.ok) {
+        const data = await response.json();
+        setCalculatedProducts(data.calculated_products);
+        setCalculatedTotalCost(data.total_cost);
+        setEstimatedTotalCost(data.estimated_total_cost);
+        showNotification(`Loaded calculation record (ID: ${record.id}).`, 'success');
+      } else {
+        setCalculatedProducts([]);
+        setCalculatedTotalCost(record.final_total_cost);
+        showNotification('Loaded calculation inputs, but failed to fetch detailed calculated rows.', 'warning');
+      }
+      setIsLoading(false);
+    } catch (error) { 
+      setIsLoading(false);
+      showNotification(`Error loading record: ${error.message}`, 'error'); 
+    }
   };
 
   const handleDownloadHistoryExcel = async (record) => {
