@@ -636,7 +636,7 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         placeholders = ','.join('?' * len(doc_nums))
         query = f"""
             SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(BatchQtyByCtn)
-            FROM PG_TransferDetails 
+            FROM PG_Transfer_Details 
             WHERE DocNum IN ({placeholders}) 
             GROUP BY DocNum, ItemCode
             ORDER BY DocNum, ItemCode
@@ -1824,7 +1824,7 @@ def get_doc_nums():
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT DocNum, MAX(DocDate) FROM PG_TransferDetails WHERE DocNum IS NOT NULL GROUP BY DocNum ORDER BY DocNum DESC")
+        cursor.execute("SELECT DocNum, MAX(DocDate) FROM PG_Transfer_Details WHERE DocNum IS NOT NULL GROUP BY DocNum ORDER BY DocNum DESC")
         rows = cursor.fetchall()
         doc_nums = []
         for row in rows:
@@ -1844,7 +1844,7 @@ def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums"))
         conn = get_dwbi_connection()
         cursor = conn.cursor()
         placeholders = ','.join('?' * len(doc_nums))
-        cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn) FROM PG_TransferDetails WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", doc_nums)
+        cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn) FROM PG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", doc_nums)
         rows = cursor.fetchall()
         products, total_weight = [], 0.0
         for row in rows:
@@ -1860,7 +1860,7 @@ def get_products_by_doc_num(doc_num: str):
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn) FROM PG_TransferDetails WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (doc_num,))
+        cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn) FROM PG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (doc_num,))
         rows = cursor.fetchall()
         if not rows:
             conn.close()
