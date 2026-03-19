@@ -258,7 +258,8 @@ def startup_db():
                     'view_items', 'add_item', 'edit_item', 'delete_item',
                     'view_references', 'add_reference', 'delete_reference',
                     'view_all_history', 'delete_history', 'claim_calculation', 'submit_calculation',
-                    'view_rate_cuts', 'add_rate_cut', 'edit_rate_cut', 'delete_rate_cut'
+                    'view_rate_cuts', 'add_rate_cut', 'edit_rate_cut', 'delete_rate_cut',
+                    'view_daily_report'
                 ])),
                 ('account', json.dumps([
                     'view_gates', 'add_gate', 'edit_gate', 
@@ -985,7 +986,7 @@ def _get_daily_report_data(target_date: str):
     return report_data
 
 @app.get("/account/daily-rate-cut-report")
-def get_daily_rate_cut_report(target_date: Optional[str] = None, user: dict = Depends(require_permission("view_rate_cuts"))):
+def get_daily_rate_cut_report(target_date: Optional[str] = None, user: dict = Depends(require_permission("view_daily_report"))):
     if not target_date:
         target_date = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
     try:

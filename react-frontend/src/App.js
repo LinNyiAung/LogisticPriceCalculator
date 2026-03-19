@@ -30,7 +30,8 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'view_rate_cuts', label: 'View Rate Cuts' },
   { id: 'add_rate_cut', label: 'Add Rate Cut' },
   { id: 'edit_rate_cut', label: 'Edit Rate Cut' },
-  { id: 'delete_rate_cut', label: 'Delete Rate Cut' }
+  { id: 'delete_rate_cut', label: 'Delete Rate Cut' },
+  { id: 'view_daily_report', label: 'View Daily Report' }
 ];
 
 // --- Login Component ---
@@ -545,7 +546,7 @@ const PricingApp = () => {
     if (token && currentPage === 'roles' && permissions.includes('view_roles')) loadRoles();
     if (token && currentPage === 'references' && permissions.includes('view_references')) loadReferenceData();
     if (token && currentPage === 'rate_cuts' && permissions.includes('view_rate_cuts')) { loadRateCuts(); loadReferenceData(); }
-    if (token && currentPage === 'daily_report' && permissions.includes('view_rate_cuts')) { fetchDailyReport(dailyReportDate); }
+    if (token && currentPage === 'daily_report' && permissions.includes('view_daily_report')) { fetchDailyReport(dailyReportDate); }
   }, [currentPage, token, permissions]);
 
   useEffect(() => {
@@ -965,7 +966,7 @@ const PricingApp = () => {
           {permissions.includes('view_gates') && <button onClick={() => setCurrentPage('gates')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Gates</button>}
           {permissions.includes('view_items') && <button onClick={() => setCurrentPage('items')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><FileText size={18} /> Items</button>}
           {permissions.includes('view_rate_cuts') && <button onClick={() => setCurrentPage('rate_cuts')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'rate_cuts' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Scissors size={18} /> Rate Cuts</button>}
-          {permissions.includes('view_rate_cuts') && <button onClick={() => setCurrentPage('daily_report')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'daily_report' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calendar size={18} /> Daily Report</button>}
+          {permissions.includes('view_daily_report') && <button onClick={() => setCurrentPage('daily_report')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'daily_report' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calendar size={18} /> Daily Report</button>}
           <button onClick={() => setCurrentPage('history')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><History size={18} /> History</button>
           {permissions.includes('view_references') && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={18} /> References</button>)}
           {permissions.includes('view_users') && (<button onClick={() => setCurrentPage('users')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Users size={18} /> Users</button>)}
@@ -1076,7 +1077,7 @@ const PricingApp = () => {
   }
 
   // --- NEW DAILY REPORT VIEW ---
-  if (currentPage === 'daily_report' && permissions.includes('view_rate_cuts')) {
+  if (currentPage === 'daily_report' && permissions.includes('view_daily_report')) {
       const filteredDailyReportData = dailyReportData.filter(row => {
         const matchBranch = (row.branch || '').toLowerCase().includes(dailyReportFilters.branch.toLowerCase());
         const matchItemCode = (row.item_code || '').toLowerCase().includes(dailyReportFilters.item_code.toLowerCase());
