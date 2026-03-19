@@ -906,6 +906,94 @@ def get_rate_cut_logs(location: str, user: dict = Depends(get_current_user)):
         return logs
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching rate cut logs: {str(e)}")
 
+# --- Daily Rate Cut Report Endpoints ---
+
+def _get_daily_report_data(target_date: str):
+    # 1. Get Rate Cuts mapping
+    conn_log = get_logistic_connection()
+    cursor_log = conn_log.cursor()
+    cursor_log.execute("SELECT location, cost FROM Rate_Cut")
+    rate_cuts = {row[0].strip().upper(): float(row[1]) for row in cursor_log.fetchall()}
+    conn_log.close()
+
+    # 2. Get DWBI Data, grouping to include Driver Name
+    conn_dwbi = get_dwbi_connection()
+    cursor_dwbi = conn_dwbi.cursor()
+    query = """
+        SELECT Branch, ItemCode, MAX(ItemName), MAX(Principal), MAX(Brand), [Driver Name], SUM(ctnQty)
+        FROM VersaFleetDetail_TC
+        WHERE CONVERT(DATE, [Task Date]) = ? AND [Task Status] = 'successful'
+        GROUP BY Branch, [Driver Name], ItemCode
+    """
+    cursor_dwbi.execute(query, (target_date,))
+    rows = cursor_dwbi.fetchall()
+    conn_dwbi.close()
+
+    # 3. Process Data (Aggregating identical items per driver in Python just to be safe)
+    aggregated_data = {}
+    driver_totals = {}
+    
+    for row in rows:
+        branch = row[0].strip().upper() if row[0] else "UNKNOWN"
+        item_code = row[1].strip() if row[1] else ""
+        item_name = row[2].strip() if row[2] else ""
+        principal = row[3].strip() if row[3] else ""
+        brand = row[4].strip() if row[4] else ""
+        driver_name = row[5].strip() if row[5] else ""
+        ctns = float(row[6]) if row[6] else 0.0
+
+        item_key = (branch, driver_name, item_code)
+
+        if item_key in aggregated_data:
+            aggregated_data[item_key]["ctns"] += ctns
+        else:
+            aggregated_data[item_key] = {
+                "branch": branch,
+                "item_code": item_code,
+                "item_name": item_name,
+                "principal": principal,
+                "brand": brand,
+                "driver_name": driver_name,
+                "ctns": ctns
+            }
+
+        driver_key = (branch, driver_name)
+        driver_totals[driver_key] = driver_totals.get(driver_key, 0.0) + ctns
+
+    report_data = []
+    for item_data in aggregated_data.values():
+        branch = item_data["branch"]
+        driver_name = item_data["driver_name"]
+        driver_ctn_total = driver_totals.get((branch, driver_name), 0.0)
+        branch_cost = rate_cuts.get(branch, 0.0)
+
+        allocated_cost = 0.0
+        cost_per_carton = 0.0
+        if driver_ctn_total > 0 and branch_cost > 0:
+            cost_per_carton = branch_cost / driver_ctn_total
+            allocated_cost = item_data["ctns"] * cost_per_carton
+
+        report_data.append({
+            **item_data,
+            "driver_total_ctns": driver_ctn_total,
+            "branch_cost": branch_cost,
+            "cost_per_carton": cost_per_carton,
+            "allocated_cost": allocated_cost
+        })
+
+    report_data.sort(key=lambda x: (x["branch"], x["driver_name"], x["item_code"]))
+    return report_data
+
+@app.get("/account/daily-rate-cut-report")
+def get_daily_rate_cut_report(target_date: Optional[str] = None, user: dict = Depends(require_permission("view_rate_cuts"))):
+    if not target_date:
+        target_date = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    try:
+        report_data = _get_daily_report_data(target_date)
+        return {"target_date": target_date, "report": report_data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating daily report: {str(e)}")
+
 # --- Reference Management Endpoints ---
 
 @app.get("/references/locations")

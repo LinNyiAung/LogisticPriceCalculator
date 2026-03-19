@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Scissors } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Scissors, Calendar } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -150,6 +150,15 @@ const PricingApp = () => {
   const [rateCuts, setRateCuts] = useState([]);
   const [showRateCutModal, setShowRateCutModal] = useState(false);
   const [editingRateCut, setEditingRateCut] = useState(null);
+
+  // Daily Report State
+  const [dailyReportDate, setDailyReportDate] = useState('');
+  const [dailyReportData, setDailyReportData] = useState([]);
+  const [isDailyReportLoading, setIsDailyReportLoading] = useState(false);
+  const [dailyReportFilters, setDailyReportFilters] = useState({ 
+    branch: '', item_code: '', item_name: '', principal: '', brand: '', driver_name: '',
+    ctns: '', driver_total_ctns: '', branch_cost: '', cost_per_carton: '', allocated_cost: '' 
+  });
 
   // User & Role Management State
   const [usersList, setUsersList] = useState([]);
@@ -321,6 +330,25 @@ const PricingApp = () => {
           const response = await authFetch(`${API_URL}/account/rate-cuts`);
           if (response.ok) { const data = await response.json(); setRateCuts(data); }
       } catch (error) { showNotification(`Error loading rate cuts: ${error.message}`, 'error'); }
+  };
+
+  const fetchDailyReport = async (targetDate) => {
+      setIsDailyReportLoading(true);
+      try {
+          let url = `${API_URL}/account/daily-rate-cut-report`;
+          if (targetDate) url += `?target_date=${encodeURIComponent(targetDate)}`;
+          const response = await authFetch(url);
+          if (response.ok) {
+              const data = await response.json();
+              setDailyReportData(data.report);
+              setDailyReportDate(data.target_date);
+              showNotification(`Report loaded for ${data.target_date}`, 'success');
+          } else {
+              const error = await response.json();
+              showNotification(getErrorMessage(error), 'error');
+          }
+      } catch (error) { showNotification(`Error fetching report: ${error.message}`, 'error'); } 
+      finally { setIsDailyReportLoading(false); }
   };
 
   // --- API Actions ---
@@ -517,6 +545,7 @@ const PricingApp = () => {
     if (token && currentPage === 'roles' && permissions.includes('view_roles')) loadRoles();
     if (token && currentPage === 'references' && permissions.includes('view_references')) loadReferenceData();
     if (token && currentPage === 'rate_cuts' && permissions.includes('view_rate_cuts')) { loadRateCuts(); loadReferenceData(); }
+    if (token && currentPage === 'daily_report' && permissions.includes('view_rate_cuts')) { fetchDailyReport(dailyReportDate); }
   }, [currentPage, token, permissions]);
 
   useEffect(() => {
@@ -936,6 +965,7 @@ const PricingApp = () => {
           {permissions.includes('view_gates') && <button onClick={() => setCurrentPage('gates')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Gates</button>}
           {permissions.includes('view_items') && <button onClick={() => setCurrentPage('items')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><FileText size={18} /> Items</button>}
           {permissions.includes('view_rate_cuts') && <button onClick={() => setCurrentPage('rate_cuts')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'rate_cuts' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Scissors size={18} /> Rate Cuts</button>}
+          {permissions.includes('view_rate_cuts') && <button onClick={() => setCurrentPage('daily_report')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'daily_report' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calendar size={18} /> Daily Report</button>}
           <button onClick={() => setCurrentPage('history')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><History size={18} /> History</button>
           {permissions.includes('view_references') && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={18} /> References</button>)}
           {permissions.includes('view_users') && (<button onClick={() => setCurrentPage('users')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Users size={18} /> Users</button>)}
@@ -1043,6 +1073,124 @@ const PricingApp = () => {
             {showRateCutLogModal && <LogTableModal logs={rateCutLogsData} title={currentLogRateCutLocation} onClose={() => setShowRateCutLogModal(false)} />}
         </div>
     );
+  }
+
+  // --- NEW DAILY REPORT VIEW ---
+  if (currentPage === 'daily_report' && permissions.includes('view_rate_cuts')) {
+      const filteredDailyReportData = dailyReportData.filter(row => {
+        const matchBranch = (row.branch || '').toLowerCase().includes(dailyReportFilters.branch.toLowerCase());
+        const matchItemCode = (row.item_code || '').toLowerCase().includes(dailyReportFilters.item_code.toLowerCase());
+        const matchItemName = (row.item_name || '').toLowerCase().includes(dailyReportFilters.item_name.toLowerCase());
+        const matchPrincipal = (row.principal || '').toLowerCase().includes(dailyReportFilters.principal.toLowerCase());
+        const matchBrand = (row.brand || '').toLowerCase().includes(dailyReportFilters.brand.toLowerCase());
+        const matchDriverName = (row.driver_name || '').toLowerCase().includes(dailyReportFilters.driver_name.toLowerCase());
+        const matchCtns = String(row.ctns || '').toLowerCase().includes(dailyReportFilters.ctns.toLowerCase());
+        const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(dailyReportFilters.driver_total_ctns.toLowerCase());
+        const matchBranchCost = String(row.branch_cost || '').toLowerCase().includes(dailyReportFilters.branch_cost.toLowerCase());
+        const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(dailyReportFilters.cost_per_carton.toLowerCase());
+        const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(dailyReportFilters.allocated_cost.toLowerCase());
+
+        return matchBranch && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchDriverName && matchCtns && matchDriverTotal && matchBranchCost && matchCostPerCarton && matchAllocatedCost;
+      });
+
+      return (
+          <div className="min-h-screen bg-gray-50 p-6">
+              <div className="max-w-full mx-auto">
+                  {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
+                  {renderNavigation()}
+                  <div className="bg-white rounded-lg shadow-md p-6">
+                      <div className="flex items-center justify-between mb-6">
+                          <h1 className="text-3xl font-bold text-gray-800">Daily Allocation Report</h1>
+                          <div className="flex gap-4">
+                              <input 
+                                  type="date" 
+                                  value={dailyReportDate} 
+                                  onChange={(e) => setDailyReportDate(e.target.value)}
+                                  className="border p-2 rounded"
+                              />
+                              <button onClick={() => fetchDailyReport(dailyReportDate)} disabled={isDailyReportLoading} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400">
+                                  {isDailyReportLoading ? 'Loading...' : 'Fetch Report'}
+                              </button>
+                          </div>
+                      </div>
+
+                      <div className="overflow-x-auto border rounded">
+                          <table className="w-full border-collapse">
+                              <thead className="bg-gray-100 sticky top-0">
+                                  <tr>
+                                      <th className="border p-2 text-left">
+                                          <div>Branch</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.branch} onChange={(e) => setDailyReportFilters({...dailyReportFilters, branch: e.target.value})} />
+                                      </th>
+                                      <th className="border p-2 text-left">
+                                          <div>Item Code</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.item_code} onChange={(e) => setDailyReportFilters({...dailyReportFilters, item_code: e.target.value})} />
+                                      </th>
+                                      <th className="border p-2 text-left">
+                                          <div>Item Name</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.item_name} onChange={(e) => setDailyReportFilters({...dailyReportFilters, item_name: e.target.value})} />
+                                      </th>
+                                      <th className="border p-2 text-left">
+                                          <div>Principal</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.principal} onChange={(e) => setDailyReportFilters({...dailyReportFilters, principal: e.target.value})} />
+                                      </th>
+                                      <th className="border p-2 text-left">
+                                          <div>Brand</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.brand} onChange={(e) => setDailyReportFilters({...dailyReportFilters, brand: e.target.value})} />
+                                      </th>
+                                      <th className="border p-2 text-left">
+                                          <div>Driver Name</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.driver_name} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_name: e.target.value})} />
+                                      </th>
+                                      <th className="border p-2 text-right">
+                                          <div>Cartons</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.ctns} onChange={(e) => setDailyReportFilters({...dailyReportFilters, ctns: e.target.value})} />
+                                      </th>
+                                      <th className="border p-2 text-right">
+                                          <div>Driver Total (Ctns)</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.driver_total_ctns} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_total_ctns: e.target.value})} />
+                                      </th>
+                                      <th className="border p-2 text-right">
+                                          <div>Branch Rate Cost</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.branch_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, branch_cost: e.target.value})} />
+                                      </th>
+                                      <th className="border p-2 text-right text-purple-700">
+                                          <div>Cost per Carton</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.cost_per_carton} onChange={(e) => setDailyReportFilters({...dailyReportFilters, cost_per_carton: e.target.value})} />
+                                      </th>
+                                      <th className="border p-2 text-right text-blue-700">
+                                          <div>Allocated Cost</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.allocated_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, allocated_cost: e.target.value})} />
+                                      </th>
+                                  </tr>
+                              </thead>
+                              <tbody>
+                                  {filteredDailyReportData.length === 0 ? (
+                                      <tr><td colSpan="11" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date or matching filters.</td></tr>
+                                  ) : (
+                                      filteredDailyReportData.map((row, idx) => (
+                                          <tr key={idx} className="hover:bg-gray-50 text-sm">
+                                              <td className="border p-2 font-bold text-gray-700">{row.branch}</td>
+                                              <td className="border p-2">{row.item_code}</td>
+                                              <td className="border p-2">{row.item_name}</td>
+                                              <td className="border p-2">{row.principal}</td>
+                                              <td className="border p-2">{row.brand}</td>
+                                              <td className="border p-2">{row.driver_name}</td>
+                                              <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
+                                              <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
+                                              <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>
+                                              <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
+                                              <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
+                                          </tr>
+                                      ))
+                                  )}
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      );
   }
 
   if (currentPage === 'references' && permissions.includes('view_references')) {
