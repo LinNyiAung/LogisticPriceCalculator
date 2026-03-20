@@ -1124,12 +1124,8 @@ const PricingApp = () => {
                                           <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.branch} onChange={(e) => setDailyReportFilters({...dailyReportFilters, branch: e.target.value})} />
                                       </th>
                                       <th className="border p-2 text-left">
-                                          <div>Item Code</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.item_code} onChange={(e) => setDailyReportFilters({...dailyReportFilters, item_code: e.target.value})} />
-                                      </th>
-                                      <th className="border p-2 text-left">
-                                          <div>Item Name</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.item_name} onChange={(e) => setDailyReportFilters({...dailyReportFilters, item_name: e.target.value})} />
+                                          <div>Driver Name</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.driver_name} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_name: e.target.value})} />
                                       </th>
                                       <th className="border p-2 text-left">
                                           <div>Principal</div>
@@ -1140,8 +1136,12 @@ const PricingApp = () => {
                                           <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.brand} onChange={(e) => setDailyReportFilters({...dailyReportFilters, brand: e.target.value})} />
                                       </th>
                                       <th className="border p-2 text-left">
-                                          <div>Driver Name</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.driver_name} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_name: e.target.value})} />
+                                          <div>Item Code</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.item_code} onChange={(e) => setDailyReportFilters({...dailyReportFilters, item_code: e.target.value})} />
+                                      </th>
+                                      <th className="border p-2 text-left">
+                                          <div>Item Name</div>
+                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.item_name} onChange={(e) => setDailyReportFilters({...dailyReportFilters, item_name: e.target.value})} />
                                       </th>
                                       <th className="border p-2 text-right">
                                           <div>Cartons</div>
@@ -1172,11 +1172,11 @@ const PricingApp = () => {
                                       filteredDailyReportData.map((row, idx) => (
                                           <tr key={idx} className="hover:bg-gray-50 text-sm">
                                               <td className="border p-2 font-bold text-gray-700">{row.branch}</td>
-                                              <td className="border p-2">{row.item_code}</td>
-                                              <td className="border p-2">{row.item_name}</td>
+                                              <td className="border p-2">{row.driver_name}</td>
                                               <td className="border p-2">{row.principal}</td>
                                               <td className="border p-2">{row.brand}</td>
-                                              <td className="border p-2">{row.driver_name}</td>
+                                              <td className="border p-2">{row.item_code}</td>
+                                              <td className="border p-2">{row.item_name}</td>
                                               <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                               <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
                                               <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>
