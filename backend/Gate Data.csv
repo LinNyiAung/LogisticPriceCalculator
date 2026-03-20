@@ -1,8 +1,8 @@
 Gate Name,From,To,File Name,UOM,Unit,Cost
-Kyan Taing Aung,YGN,MDY,Item Master MDY.csv,Kg,1000,140000
-Yadana Phyo,YGN,TGI,Item Master TGI.csv,Kg,1000,200000
+Kyan Taing Aung,YGN,MDY,Item Master MDY.csv,Kg,1000,150000
+Yadana Phyo,YGN,TGI,Item Master TGI.csv,Kg,1000,400000
 Sein Myittar,YGN,TGU,Item Master TGU.csv,,,
-U Thaung & Sons,YGN,MGW,Item Master MGW.csv,Kg,1000,168000
+U Thaung & Sons,YGN,MGW,Item Master MGW.csv,Kg,1000,210000
 Aung Zay Paing,YGN,PTN,Item Master PTN.csv,,,
-Kyan Taing Aung,YGN,NPT,Item Master NPT.csv,Kg,1000,120000
+Kyan Taing Aung,YGN,NPT,Item Master NPT.csv,Kg,1000,135000
 Yaung Sin Ni,YGN,MLM,Item Master MLM.csv,,,
