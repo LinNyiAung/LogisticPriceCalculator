@@ -155,10 +155,17 @@ const PricingApp = () => {
   // Daily Report State
   const [dailyReportDate, setDailyReportDate] = useState('');
   const [dailyReportData, setDailyReportData] = useState([]);
+  const [dailyTownshipReportData, setDailyTownshipReportData] = useState([]);
   const [isDailyReportLoading, setIsDailyReportLoading] = useState(false);
+  const [activeDailyTab, setActiveDailyTab] = useState('item'); 
+  
   const [dailyReportFilters, setDailyReportFilters] = useState({ 
     branch: '', item_code: '', item_name: '', principal: '', brand: '', driver_name: '',
     ctns: '', driver_total_ctns: '', branch_cost: '', cost_per_carton: '', allocated_cost: '' 
+  });
+  
+  const [townshipFilters, setTownshipFilters] = useState({ 
+    branch: '', driver_name: '', township: '', customer_code: '', ctns: '', driver_total_ctns: '', branch_cost: '', cost_per_carton: '', allocated_cost: '' 
   });
 
   // User & Role Management State
@@ -341,7 +348,8 @@ const PricingApp = () => {
           const response = await authFetch(url);
           if (response.ok) {
               const data = await response.json();
-              setDailyReportData(data.report);
+              setDailyReportData(data.report || []);
+              setDailyTownshipReportData(data.township_report || []);
               setDailyReportDate(data.target_date);
               showNotification(`Report loaded for ${data.target_date}`, 'success');
           } else {
@@ -1076,7 +1084,7 @@ const PricingApp = () => {
     );
   }
 
-  // --- NEW DAILY REPORT VIEW ---
+  // --- UPDATED DAILY REPORT VIEW WITH TABS ---
   if (currentPage === 'daily_report' && permissions.includes('view_daily_report')) {
       const filteredDailyReportData = dailyReportData.filter(row => {
         const matchBranch = (row.branch || '').toLowerCase().includes(dailyReportFilters.branch.toLowerCase());
@@ -1092,6 +1100,20 @@ const PricingApp = () => {
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(dailyReportFilters.allocated_cost.toLowerCase());
 
         return matchBranch && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchDriverName && matchCtns && matchDriverTotal && matchBranchCost && matchCostPerCarton && matchAllocatedCost;
+      });
+
+      const filteredTownshipReportData = dailyTownshipReportData.filter(row => {
+        const matchBranch = (row.branch || '').toLowerCase().includes(townshipFilters.branch.toLowerCase());
+        const matchDriver = (row.driver_name || '').toLowerCase().includes(townshipFilters.driver_name.toLowerCase());
+        const matchTownship = (row.township || '').toLowerCase().includes(townshipFilters.township.toLowerCase());
+        const matchCustomer = (row.customer_code || '').toLowerCase().includes(townshipFilters.customer_code.toLowerCase());
+        const matchCtns = String(row.ctns || '').toLowerCase().includes(townshipFilters.ctns.toLowerCase());
+        const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(townshipFilters.driver_total_ctns.toLowerCase());
+        const matchBranchCost = String(row.branch_cost || '').toLowerCase().includes(townshipFilters.branch_cost.toLowerCase());
+        const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(townshipFilters.cost_per_carton.toLowerCase());
+        const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(townshipFilters.allocated_cost.toLowerCase());
+        
+        return matchBranch && matchDriver && matchTownship && matchCustomer && matchCtns && matchDriverTotal && matchBranchCost && matchCostPerCarton && matchAllocatedCost;
       });
 
       return (
@@ -1115,79 +1137,177 @@ const PricingApp = () => {
                           </div>
                       </div>
 
-                      <div className="overflow-x-auto border rounded">
-                          <table className="w-full border-collapse">
-                              <thead className="bg-gray-100 sticky top-0">
-                                  <tr>
-                                      <th className="border p-2 text-left">
-                                          <div>Branch</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.branch} onChange={(e) => setDailyReportFilters({...dailyReportFilters, branch: e.target.value})} />
-                                      </th>
-                                      <th className="border p-2 text-left">
-                                          <div>Driver Name</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.driver_name} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_name: e.target.value})} />
-                                      </th>
-                                      <th className="border p-2 text-left">
-                                          <div>Principal</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.principal} onChange={(e) => setDailyReportFilters({...dailyReportFilters, principal: e.target.value})} />
-                                      </th>
-                                      <th className="border p-2 text-left">
-                                          <div>Brand</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.brand} onChange={(e) => setDailyReportFilters({...dailyReportFilters, brand: e.target.value})} />
-                                      </th>
-                                      <th className="border p-2 text-left">
-                                          <div>Item Code</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.item_code} onChange={(e) => setDailyReportFilters({...dailyReportFilters, item_code: e.target.value})} />
-                                      </th>
-                                      <th className="border p-2 text-left">
-                                          <div>Item Name</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.item_name} onChange={(e) => setDailyReportFilters({...dailyReportFilters, item_name: e.target.value})} />
-                                      </th>
-                                      <th className="border p-2 text-right">
-                                          <div>Cartons</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.ctns} onChange={(e) => setDailyReportFilters({...dailyReportFilters, ctns: e.target.value})} />
-                                      </th>
-                                      <th className="border p-2 text-right">
-                                          <div>Driver Total (Ctns)</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.driver_total_ctns} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_total_ctns: e.target.value})} />
-                                      </th>
-                                      <th className="border p-2 text-right">
-                                          <div>Branch Rate Cost</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.branch_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, branch_cost: e.target.value})} />
-                                      </th>
-                                      <th className="border p-2 text-right text-purple-700">
-                                          <div>Cost per Carton</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.cost_per_carton} onChange={(e) => setDailyReportFilters({...dailyReportFilters, cost_per_carton: e.target.value})} />
-                                      </th>
-                                      <th className="border p-2 text-right text-blue-700">
-                                          <div>Allocated Cost</div>
-                                          <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.allocated_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, allocated_cost: e.target.value})} />
-                                      </th>
-                                  </tr>
-                              </thead>
-                              <tbody>
-                                  {filteredDailyReportData.length === 0 ? (
-                                      <tr><td colSpan="11" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date or matching filters.</td></tr>
-                                  ) : (
-                                      filteredDailyReportData.map((row, idx) => (
-                                          <tr key={idx} className="hover:bg-gray-50 text-sm">
-                                              <td className="border p-2 font-bold text-gray-700">{row.branch}</td>
-                                              <td className="border p-2">{row.driver_name}</td>
-                                              <td className="border p-2">{row.principal}</td>
-                                              <td className="border p-2">{row.brand}</td>
-                                              <td className="border p-2">{row.item_code}</td>
-                                              <td className="border p-2">{row.item_name}</td>
-                                              <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
-                                              <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
-                                              <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>
-                                              <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
-                                              <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
-                                          </tr>
-                                      ))
-                                  )}
-                              </tbody>
-                          </table>
+                      {/* --- TAB NAVIGATION --- */}
+                      <div className="flex border-b mb-6 border-gray-200">
+                          <button
+                              className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${
+                                  activeDailyTab === 'item' 
+                                      ? 'border-blue-600 text-blue-600 bg-blue-50' 
+                                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                              }`}
+                              onClick={() => setActiveDailyTab('item')}
+                          >
+                              Allocation by Item
+                          </button>
+                          <button
+                              className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${
+                                  activeDailyTab === 'township' 
+                                      ? 'border-blue-600 text-blue-600 bg-blue-50' 
+                                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                              }`}
+                              onClick={() => setActiveDailyTab('township')}
+                          >
+                              Allocation by Township & Customer
+                          </button>
                       </div>
+
+                      {/* --- ITEM LEVEL TABLE TAB CONTENT --- */}
+                      {activeDailyTab === 'item' && (
+                          <div className="animation-fade-in">
+                              <div className="overflow-x-auto border rounded mb-8">
+                                  <table className="w-full border-collapse">
+                                      <thead className="bg-gray-100 sticky top-0">
+                                          <tr>
+                                              <th className="border p-2 text-left">
+                                                  <div>Branch</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.branch} onChange={(e) => setDailyReportFilters({...dailyReportFilters, branch: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Driver Name</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.driver_name} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_name: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Principal</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.principal} onChange={(e) => setDailyReportFilters({...dailyReportFilters, principal: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Brand</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.brand} onChange={(e) => setDailyReportFilters({...dailyReportFilters, brand: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Item Code</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.item_code} onChange={(e) => setDailyReportFilters({...dailyReportFilters, item_code: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Item Name</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.item_name} onChange={(e) => setDailyReportFilters({...dailyReportFilters, item_name: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right">
+                                                  <div>Cartons</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.ctns} onChange={(e) => setDailyReportFilters({...dailyReportFilters, ctns: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right">
+                                                  <div>Driver Total (Ctns)</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.driver_total_ctns} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_total_ctns: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right">
+                                                  <div>Branch Rate Cost</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.branch_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, branch_cost: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right text-purple-700">
+                                                  <div>Cost per Carton</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.cost_per_carton} onChange={(e) => setDailyReportFilters({...dailyReportFilters, cost_per_carton: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right text-blue-700">
+                                                  <div>Allocated Cost</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.allocated_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, allocated_cost: e.target.value})} />
+                                              </th>
+                                          </tr>
+                                      </thead>
+                                      <tbody>
+                                          {filteredDailyReportData.length === 0 ? (
+                                              <tr><td colSpan="11" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date or matching filters.</td></tr>
+                                          ) : (
+                                              filteredDailyReportData.map((row, idx) => (
+                                                  <tr key={idx} className="hover:bg-gray-50 text-sm">
+                                                      <td className="border p-2 font-bold text-gray-700">{row.branch}</td>
+                                                      <td className="border p-2">{row.driver_name}</td>
+                                                      <td className="border p-2">{row.principal}</td>
+                                                      <td className="border p-2">{row.brand}</td>
+                                                      <td className="border p-2">{row.item_code}</td>
+                                                      <td className="border p-2">{row.item_name}</td>
+                                                      <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
+                                                      <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
+                                                      <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>
+                                                      <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
+                                                      <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
+                                                  </tr>
+                                              ))
+                                          )}
+                                      </tbody>
+                                  </table>
+                              </div>
+                          </div>
+                      )}
+
+                      {/* --- TOWNSHIP LEVEL TABLE TAB CONTENT --- */}
+                      {activeDailyTab === 'township' && (
+                          <div className="animation-fade-in">
+                              <div className="overflow-x-auto border rounded">
+                                  <table className="w-full border-collapse">
+                                      <thead className="bg-gray-100 sticky top-0">
+                                          <tr>
+                                              <th className="border p-2 text-left">
+                                                  <div>Branch</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={townshipFilters.branch} onChange={(e) => setTownshipFilters({...townshipFilters, branch: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Driver Name</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={townshipFilters.driver_name} onChange={(e) => setTownshipFilters({...townshipFilters, driver_name: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Township</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={townshipFilters.township} onChange={(e) => setTownshipFilters({...townshipFilters, township: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Customer Code</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={townshipFilters.customer_code} onChange={(e) => setTownshipFilters({...townshipFilters, customer_code: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right">
+                                                  <div>Customer Total (Ctns)</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.ctns} onChange={(e) => setTownshipFilters({...townshipFilters, ctns: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right">
+                                                  <div>Driver Total (Ctns)</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.driver_total_ctns} onChange={(e) => setTownshipFilters({...townshipFilters, driver_total_ctns: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right">
+                                                  <div>Branch Rate Cost</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.branch_cost} onChange={(e) => setTownshipFilters({...townshipFilters, branch_cost: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right text-purple-700">
+                                                  <div>Cost per Carton</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.cost_per_carton} onChange={(e) => setTownshipFilters({...townshipFilters, cost_per_carton: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right text-blue-700">
+                                                  <div>Allocated Cost</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.allocated_cost} onChange={(e) => setTownshipFilters({...townshipFilters, allocated_cost: e.target.value})} />
+                                              </th>
+                                          </tr>
+                                      </thead>
+                                      <tbody>
+                                          {filteredTownshipReportData.length === 0 ? (
+                                              <tr><td colSpan="9" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
+                                          ) : (
+                                              filteredTownshipReportData.map((row, idx) => (
+                                                  <tr key={idx} className="hover:bg-gray-50 text-sm">
+                                                      <td className="border p-2 font-bold text-gray-700">{row.branch}</td>
+                                                      <td className="border p-2">{row.driver_name}</td>
+                                                      <td className="border p-2">{row.township}</td>
+                                                      <td className="border p-2">{row.customer_code}</td>
+                                                      <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
+                                                      <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
+                                                      <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>
+                                                      <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
+                                                      <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
+                                                  </tr>
+                                              ))
+                                          )}
+                                      </tbody>
+                                  </table>
+                              </div>
+                          </div>
+                      )}
                   </div>
               </div>
           </div>

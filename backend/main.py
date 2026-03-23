@@ -802,15 +802,12 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
 
     if add_charges != 0 and calculated_products:
         total_ctns = sum(p.get('ctns', 0) for p in calculated_products)
-        
-        
         for p in calculated_products:
             proportion = p.get('ctns', 0) / total_ctns
             extra_cost = add_charges * proportion
             p['total_cost'] += extra_cost
             if p['ctns'] > 0: 
                 p['unit_cost'] = p['total_cost'] / p['ctns']
-        
 
     calculated_products.sort(key=lambda x: (x.get('sin_no', ''), x['code']))
     total_cost += add_charges
@@ -880,8 +877,6 @@ def delete_rate_cart(location: str, user: dict = Depends(require_permission("del
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        
-        # Ensure to delete the changelog history for the rate cart first to maintain integrity
         cursor.execute("DELETE FROM Rate_Cart_Change_Log WHERE location = ?", (location,))
         cursor.execute("DELETE FROM Rate_Cart WHERE location = ?", (location,))
         
@@ -917,23 +912,23 @@ def _get_daily_report_data(target_date: str):
     rate_carts = {row[0].strip().upper(): float(row[1]) for row in cursor_log.fetchall()}
     conn_log.close()
 
-    # 2. Get DWBI Data, grouping to include Driver Name
+    # 2. Get DWBI Data
     conn_dwbi = get_dwbi_connection()
     cursor_dwbi = conn_dwbi.cursor()
     query = """
-        SELECT Branch, ItemCode, MAX(ItemName), MAX(Principal), MAX(Brand), [Driver Name], SUM(ctnQty)
+        SELECT Branch, ItemCode, MAX(ItemName), MAX(Principal), MAX(Brand), [Driver Name], SUM(ctnQty), CustomerCode, MAX(ContactPerson), Township
         FROM VersaFleetDetail_TC
         WHERE CONVERT(DATE, [Task Date]) = ? AND [Task Status] = 'successful'
-        GROUP BY Branch, [Driver Name], ItemCode
+        GROUP BY Branch, [Driver Name], ItemCode, CustomerCode, Township
     """
     cursor_dwbi.execute(query, (target_date,))
     rows = cursor_dwbi.fetchall()
     conn_dwbi.close()
 
-    # 3. Process Data (Aggregating identical items per driver in Python just to be safe)
-    aggregated_data = {}
+    # 3. Process Data
+    granular_data = []
     driver_totals = {}
-    
+
     for row in rows:
         branch = row[0].strip().upper() if row[0] else "UNKNOWN"
         item_code = row[1].strip() if row[1] else ""
@@ -942,56 +937,79 @@ def _get_daily_report_data(target_date: str):
         brand = row[4].strip() if row[4] else ""
         driver_name = row[5].strip() if row[5] else ""
         ctns = float(row[6]) if row[6] else 0.0
+        customer_code = row[7].strip() if row[7] else "UNKNOWN"
+        contact_person = row[8].strip() if row[8] else ""
+        township = row[9].strip() if row[9] else "UNKNOWN"
 
-        item_key = (branch, driver_name, item_code)
-
-        if item_key in aggregated_data:
-            aggregated_data[item_key]["ctns"] += ctns
-        else:
-            aggregated_data[item_key] = {
-                "branch": branch,
-                "item_code": item_code,
-                "item_name": item_name,
-                "principal": principal,
-                "brand": brand,
-                "driver_name": driver_name,
-                "ctns": ctns
-            }
-
+        granular_data.append({
+            "branch": branch, "item_code": item_code, "item_name": item_name,
+            "principal": principal, "brand": brand, "driver_name": driver_name,
+            "ctns": ctns, "customer_code": customer_code, "contact_person": contact_person,
+            "township": township
+        })
+        
         driver_key = (branch, driver_name)
         driver_totals[driver_key] = driver_totals.get(driver_key, 0.0) + ctns
 
-    report_data = []
-    for item_data in aggregated_data.values():
-        branch = item_data["branch"]
-        driver_name = item_data["driver_name"]
-        driver_ctn_total = driver_totals.get((branch, driver_name), 0.0)
-        branch_cost = rate_carts.get(branch, 0.0)
+    item_report_dict = {}
+    township_report_dict = {}
 
-        allocated_cost = 0.0
-        cost_per_carton = 0.0
-        if driver_ctn_total > 0 and branch_cost > 0:
-            cost_per_carton = branch_cost / driver_ctn_total
-            allocated_cost = item_data["ctns"] * cost_per_carton
+    for g in granular_data:
+        b, d = g["branch"], g["driver_name"]
+        d_total = driver_totals.get((b, d), 0.0)
+        b_cost = rate_carts.get(b, 0.0)
+        
+        cost_per_ctn = (b_cost / d_total) if d_total > 0 else 0.0
+        allocated_cost = g["ctns"] * cost_per_ctn
 
-        report_data.append({
-            **item_data,
-            "driver_total_ctns": driver_ctn_total,
-            "branch_cost": branch_cost,
-            "cost_per_carton": cost_per_carton,
-            "allocated_cost": allocated_cost
-        })
+        # Item Level Report (Original Table Structure)
+        i_key = (b, d, g["item_code"])
+        if i_key not in item_report_dict:
+            item_report_dict[i_key] = {
+                "branch": b, "driver_name": d, "item_code": g["item_code"],
+                "item_name": g["item_name"], "principal": g["principal"], "brand": g["brand"],
+                "ctns": 0.0, "allocated_cost": 0.0, "cost_per_carton": cost_per_ctn,
+                "driver_total_ctns": d_total, "branch_cost": b_cost
+            }
+        item_report_dict[i_key]["ctns"] += g["ctns"]
+        item_report_dict[i_key]["allocated_cost"] += allocated_cost
 
-    report_data.sort(key=lambda x: (x["branch"], x["driver_name"], x["item_code"]))
-    return report_data
+        # Township Level Report (New Table Structure, including all requested columns)
+        t_key = (g["branch"], g["township"], g["customer_code"], g["driver_name"])
+        if t_key not in township_report_dict:
+            township_report_dict[t_key] = {
+                "branch": b,
+                "driver_name": g["driver_name"],
+                "township": g["township"], 
+                "customer_code": g["customer_code"],
+                "contact_person": g["contact_person"], 
+                "ctns": 0.0, 
+                "driver_total_ctns": d_total,
+                "branch_cost": b_cost,
+                "cost_per_carton": cost_per_ctn,
+                "allocated_cost": 0.0
+            }
+        township_report_dict[t_key]["ctns"] += g["ctns"]
+        township_report_dict[t_key]["allocated_cost"] += allocated_cost
+
+    item_report_list = list(item_report_dict.values())
+    item_report_list.sort(key=lambda x: (x["branch"], x["driver_name"], x["item_code"]))
+
+    township_report_list = list(township_report_dict.values())
+    township_report_list.sort(key=lambda x: (x["branch"], x["driver_name"], x["township"], x["customer_code"]))
+
+    return {
+        "item_report": item_report_list,
+        "township_report": township_report_list
+    }
 
 @app.get("/account/daily-rate-cut-report")
 def get_daily_rate_cart_report(target_date: Optional[str] = None, user: dict = Depends(require_permission("view_daily_report"))):
     if not target_date:
         target_date = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
     try:
-        report_data = _get_daily_report_data(target_date)
-        return {"target_date": target_date, "report": report_data}
+        data = _get_daily_report_data(target_date)
+        return {"target_date": target_date, "report": data["item_report"], "township_report": data["township_report"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating daily report: {str(e)}")
 
