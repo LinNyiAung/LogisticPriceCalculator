@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Scissors, Calendar } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Scissors, Calendar, ShoppingCart, Percent } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -27,10 +27,10 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'submit_calculation', label: 'Submit Calculation' },
   { id: 'claim_calculation', label: 'Claim Calculation' },
   { id: 'delete_history', label: 'Delete History' },
-  { id: 'view_rate_cuts', label: 'View Rate Cuts' },
-  { id: 'add_rate_cut', label: 'Add Rate Cut' },
-  { id: 'edit_rate_cut', label: 'Edit Rate Cut' },
-  { id: 'delete_rate_cut', label: 'Delete Rate Cut' },
+  { id: 'view_rate_carts', label: 'View Rate Carts' },
+  { id: 'add_rate_cart', label: 'Add Rate Cart' },
+  { id: 'edit_rate_cart', label: 'Edit Rate Cart' },
+  { id: 'delete_rate_cart', label: 'Delete Rate Cart' },
   { id: 'view_daily_report', label: 'View Daily Report' }
 ];
 
@@ -147,10 +147,10 @@ const PricingApp = () => {
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
   const [historyFilters, setHistoryFilters] = useState({ id_status: '', date: '', route: '', doc_nums: '', total_cost: '', author: '' });
 
-  // Rate Cut State
-  const [rateCuts, setRateCuts] = useState([]);
-  const [showRateCutModal, setShowRateCutModal] = useState(false);
-  const [editingRateCut, setEditingRateCut] = useState(null);
+  // Rate Cart State
+  const [rateCarts, setRateCarts] = useState([]);
+  const [showRateCartModal, setShowRateCartModal] = useState(false);
+  const [editingRateCart, setEditingRateCart] = useState(null);
 
   // Daily Report State
   const [dailyReportDate, setDailyReportDate] = useState('');
@@ -186,9 +186,9 @@ const PricingApp = () => {
   const [itemLogsData, setItemLogsData] = useState([]);
   const [currentLogItemName, setCurrentLogItemName] = useState('');
 
-  const [showRateCutLogModal, setShowRateCutLogModal] = useState(false);
-  const [rateCutLogsData, setRateCutLogsData] = useState([]);
-  const [currentLogRateCutLocation, setCurrentLogRateCutLocation] = useState('');
+  const [showRateCartLogModal, setShowRateCartLogModal] = useState(false);
+  const [rateCartLogsData, setRateCartLogsData] = useState([]);
+  const [currentLogRateCartLocation, setCurrentLogRateCartLocation] = useState('');
 
   // --- Formatting & UI Helpers ---
   const formatNumber = (num) => {
@@ -326,11 +326,11 @@ const PricingApp = () => {
       } catch (error) { showNotification('Error loading reference data', 'error'); }
   }
 
-  const loadRateCuts = async () => {
+  const loadRateCarts = async () => {
       try {
           const response = await authFetch(`${API_URL}/account/rate-cuts`);
-          if (response.ok) { const data = await response.json(); setRateCuts(data); }
-      } catch (error) { showNotification(`Error loading rate cuts: ${error.message}`, 'error'); }
+          if (response.ok) { const data = await response.json(); setRateCarts(data); }
+      } catch (error) { showNotification(`Error loading rate carts: ${error.message}`, 'error'); }
   };
 
   const fetchDailyReport = async (targetDate) => {
@@ -509,23 +509,23 @@ const PricingApp = () => {
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
-  const saveRateCut = async (data) => {
+  const saveRateCart = async (data) => {
     if (!data.location || data.cost === '') { showNotification('Both fields are required', 'error'); return; }
     try {
         const response = await authFetch(`${API_URL}/account/rate-cuts`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ location: data.location, cost: parseFloat(data.cost) })
         });
-        if (response.ok) { showNotification('Rate cut saved', 'success'); loadRateCuts(); setShowRateCutModal(false); }
+        if (response.ok) { showNotification('Rate cart saved', 'success'); loadRateCarts(); setShowRateCartModal(false); }
         else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
-  const deleteRateCut = async (location) => {
-      if (!window.confirm(`Delete rate cut for ${location}?`)) return;
+  const deleteRateCart = async (location) => {
+      if (!window.confirm(`Delete rate cart for ${location}?`)) return;
       try {
           const response = await authFetch(`${API_URL}/account/rate-cuts/${encodeURIComponent(location)}`, { method: 'DELETE' });
-          if (response.ok) { showNotification('Deleted successfully', 'success'); loadRateCuts(); }
+          if (response.ok) { showNotification('Deleted successfully', 'success'); loadRateCarts(); }
           else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
       } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
@@ -545,7 +545,7 @@ const PricingApp = () => {
     if (token && currentPage === 'users' && permissions.includes('view_users')) { loadUsers(); loadRoles(); }
     if (token && currentPage === 'roles' && permissions.includes('view_roles')) loadRoles();
     if (token && currentPage === 'references' && permissions.includes('view_references')) loadReferenceData();
-    if (token && currentPage === 'rate_cuts' && permissions.includes('view_rate_cuts')) { loadRateCuts(); loadReferenceData(); }
+    if (token && currentPage === 'rate_carts' && permissions.includes('view_rate_carts')) { loadRateCarts(); loadReferenceData(); }
     if (token && currentPage === 'daily_report' && permissions.includes('view_daily_report')) { fetchDailyReport(dailyReportDate); }
   }, [currentPage, token, permissions]);
 
@@ -735,15 +735,15 @@ const PricingApp = () => {
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
-  const fetchRateCutLogs = async (rc) => {
+  const fetchRateCartLogs = async (rc) => {
       try {
           const response = await authFetch(`${API_URL}/account/rate-cuts/${encodeURIComponent(rc.location)}/logs`);
           if (response.ok) { 
-              setRateCutLogsData(await response.json()); 
-              setCurrentLogRateCutLocation(rc.location); 
-              setShowRateCutLogModal(true); 
+              setRateCartLogsData(await response.json()); 
+              setCurrentLogRateCartLocation(rc.location); 
+              setShowRateCartLogModal(true); 
           } 
-          else showNotification('Failed to fetch rate cut logs', 'error');
+          else showNotification('Failed to fetch rate cart logs', 'error');
       } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
@@ -893,12 +893,12 @@ const PricingApp = () => {
     );
   };
 
-  const RateCutModal = ({ rateCut, onSave, onClose }) => {
-    const [formData, setFormData] = useState(rateCut || { location: '', cost: '' });
+  const RateCartModal = ({ rateCart, onSave, onClose }) => {
+    const [formData, setFormData] = useState(rateCart || { location: '', cost: '' });
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
-                <h2 className="text-2xl font-bold mb-4">{rateCut ? 'Edit Rate Cut' : 'Add New Rate Cut'}</h2>
+                <h2 className="text-2xl font-bold mb-4">{rateCart ? 'Edit Rate Cart' : 'Add New Rate Cart'}</h2>
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-semibold mb-1">Location <span className="text-red-500">*</span></label>
@@ -906,7 +906,7 @@ const PricingApp = () => {
                             value={formData.location} 
                             onChange={(e) => setFormData({...formData, location: e.target.value})} 
                             className="w-full p-2 border rounded"
-                            disabled={!!rateCut}
+                            disabled={!!rateCart}
                         >
                             <option value="">-- Select Location --</option>
                             {refLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}
@@ -965,7 +965,7 @@ const PricingApp = () => {
           <button onClick={() => setCurrentPage('calculator')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'calculator' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calculator size={18} /> Calculator</button>
           {permissions.includes('view_gates') && <button onClick={() => setCurrentPage('gates')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Gates</button>}
           {permissions.includes('view_items') && <button onClick={() => setCurrentPage('items')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><FileText size={18} /> Items</button>}
-          {permissions.includes('view_rate_cuts') && <button onClick={() => setCurrentPage('rate_cuts')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'rate_cuts' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Scissors size={18} /> Rate Cuts</button>}
+          {permissions.includes('view_rate_carts') && <button onClick={() => setCurrentPage('rate_carts')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'rate_carts' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Percent size={18} /> Rate Carts</button>}
           {permissions.includes('view_daily_report') && <button onClick={() => setCurrentPage('daily_report')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'daily_report' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calendar size={18} /> Daily Report</button>}
           <button onClick={() => setCurrentPage('history')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><History size={18} /> History</button>
           {permissions.includes('view_references') && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={18} /> References</button>)}
@@ -1030,7 +1030,7 @@ const PricingApp = () => {
       );
   }
 
-  if (currentPage === 'rate_cuts' && permissions.includes('view_rate_cuts')) {
+  if (currentPage === 'rate_carts' && permissions.includes('view_rate_carts')) {
     return (
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-6xl mx-auto">
@@ -1038,8 +1038,8 @@ const PricingApp = () => {
                 {renderNavigation()}
                 <div className="bg-white rounded-lg shadow-md p-6">
                     <div className="flex items-center justify-between mb-6">
-                        <h1 className="text-3xl font-bold text-gray-800">Rate Cuts Management</h1>
-                        {permissions.includes('add_rate_cut') && <button onClick={() => { setEditingRateCut(null); setShowRateCutModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Rate Cut</button>}
+                        <h1 className="text-3xl font-bold text-gray-800">Rate Carts Management</h1>
+                        {permissions.includes('add_rate_cart') && <button onClick={() => { setEditingRateCart(null); setShowRateCartModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Rate Cart</button>}
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full border-collapse border">
@@ -1051,16 +1051,16 @@ const PricingApp = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {rateCuts.length === 0 ? (<tr><td colSpan="3" className="text-center p-4 text-gray-500">No Rate Cuts Found</td></tr>) : 
-                                    rateCuts.map((rc, i) => (
+                                {rateCarts.length === 0 ? (<tr><td colSpan="3" className="text-center p-4 text-gray-500">No Rate Carts Found</td></tr>) : 
+                                    rateCarts.map((rc, i) => (
                                         <tr key={i} className="hover:bg-gray-50">
                                             <td className="border p-3 font-semibold text-gray-700">{rc.location}</td>
                                             <td className="border p-3">{formatNumber(rc.cost)}</td>
                                             <td className="border p-3 text-center">
                                                 <div className="flex justify-center gap-2">
-                                                    <button onClick={() => fetchRateCutLogs(rc)} className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={16} /></button>
-                                                    {permissions.includes('edit_rate_cut') && <button onClick={() => { setEditingRateCut(rc); setShowRateCutModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
-                                                    {permissions.includes('delete_rate_cut') && <button onClick={() => deleteRateCut(rc.location)} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"><Trash2 size={16} /></button>}
+                                                    <button onClick={() => fetchRateCartLogs(rc)} className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={16} /></button>
+                                                    {permissions.includes('edit_rate_cart') && <button onClick={() => { setEditingRateCart(rc); setShowRateCartModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
+                                                    {permissions.includes('delete_rate_cart') && <button onClick={() => deleteRateCart(rc.location)} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"><Trash2 size={16} /></button>}
                                                 </div>
                                             </td>
                                         </tr>
@@ -1070,8 +1070,8 @@ const PricingApp = () => {
                     </div>
                 </div>
             </div>
-            {showRateCutModal && <RateCutModal rateCut={editingRateCut} onSave={saveRateCut} onClose={() => setShowRateCutModal(false)} />}
-            {showRateCutLogModal && <LogTableModal logs={rateCutLogsData} title={currentLogRateCutLocation} onClose={() => setShowRateCutLogModal(false)} />}
+            {showRateCartModal && <RateCartModal rateCart={editingRateCart} onSave={saveRateCart} onClose={() => setShowRateCartModal(false)} />}
+            {showRateCartLogModal && <LogTableModal logs={rateCartLogsData} title={currentLogRateCartLocation} onClose={() => setShowRateCartLogModal(false)} />}
         </div>
     );
   }

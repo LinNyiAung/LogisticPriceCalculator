@@ -117,9 +117,9 @@ def startup_db():
             )
         """)
 
-        # Rate Cut Table
+        # Rate Cart Table
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Rate_Cut (
+            CREATE TABLE IF NOT EXISTS Rate_Cart (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [location] TEXT UNIQUE,
                 [cost] REAL
@@ -233,9 +233,9 @@ def startup_db():
             )
         """)
 
-        # --- Rate Cut Change Log Table ---
+        # --- Rate Cart Change Log Table ---
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Rate_Cut_Change_Log (
+            CREATE TABLE IF NOT EXISTS Rate_Cart_Change_Log (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [location] TEXT,
                 [changed_by] TEXT,
@@ -243,7 +243,7 @@ def startup_db():
                 [field_name] TEXT,
                 [old_value] TEXT,
                 [new_value] TEXT,
-                FOREIGN KEY([location]) REFERENCES Rate_Cut([location])
+                FOREIGN KEY([location]) REFERENCES Rate_Cart([location])
             )
         """)
         
@@ -258,16 +258,16 @@ def startup_db():
                     'view_items', 'add_item', 'edit_item', 'delete_item',
                     'view_references', 'add_reference', 'delete_reference',
                     'view_all_history', 'delete_history', 'claim_calculation', 'submit_calculation',
-                    'view_rate_cuts', 'add_rate_cut', 'edit_rate_cut', 'delete_rate_cut',
+                    'view_rate_carts', 'add_rate_cart', 'edit_rate_cart', 'delete_rate_cart',
                     'view_daily_report'
                 ])),
                 ('account', json.dumps([
                     'view_gates', 'add_gate', 'edit_gate', 
                     'view_items', 'add_item', 'edit_item', 
                     'view_references', 'add_reference', 'delete_reference',
-                    'claim_calculation', 'view_rate_cuts', 'add_rate_cut', 'edit_rate_cut'
+                    'claim_calculation', 'view_rate_carts', 'add_rate_cart', 'edit_rate_cart'
                 ])),
-                ('logistic', json.dumps(['submit_calculation', 'view_gates', 'view_items', 'view_references', 'view_rate_cuts']))
+                ('logistic', json.dumps(['submit_calculation', 'view_gates', 'view_items', 'view_references', 'view_rate_carts']))
             ]
             cursor.executemany("INSERT INTO Roles (name, permissions) VALUES (?, ?)", default_roles)
 
@@ -311,11 +311,11 @@ def startup_db():
 
 # --- Pydantic Models ---
 
-class RateCutData(BaseModel):
+class RateCartData(BaseModel):
     location: str
     cost: float
 
-class RateCutLogItem(BaseModel):
+class RateCartLogItem(BaseModel):
     id: int
     location: str
     changed_by: str
@@ -823,98 +823,98 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         "estimated_total_cost": estimated_total_cost
     }
 
-# --- Rate Cut Endpoints ---
+# --- Rate Cart Endpoints ---
 
 @app.get("/account/rate-cuts")
-def get_rate_cuts(user: dict = Depends(require_permission("view_rate_cuts"))):
+def get_rate_carts(user: dict = Depends(require_permission("view_rate_carts"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT location, cost FROM Rate_Cut ORDER BY location")
+        cursor.execute("SELECT location, cost FROM Rate_Cart ORDER BY location")
         rows = cursor.fetchall()
         conn.close()
         return [{"location": row[0], "cost": row[1]} for row in rows]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading rate cuts: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error loading rate carts: {str(e)}")
 
 @app.post("/account/rate-cuts")
-def save_rate_cut(data: RateCutData, user: dict = Depends(get_current_user)):
+def save_rate_cart(data: RateCartData, user: dict = Depends(get_current_user)):
     perms = user.get("permissions", [])
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT cost FROM Rate_Cut WHERE location = ?", (data.location,))
+        cursor.execute("SELECT cost FROM Rate_Cart WHERE location = ?", (data.location,))
         existing = cursor.fetchone()
         
         change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         username = user['username']
 
         if existing:
-            if "edit_rate_cut" not in perms:
+            if "edit_rate_cart" not in perms:
                 conn.close()
-                raise HTTPException(status_code=403, detail="Requires 'edit_rate_cut' permission")
+                raise HTTPException(status_code=403, detail="Requires 'edit_rate_cart' permission")
             
             old_cost = existing[0]
             if float(old_cost) != float(data.cost):
                 cursor.execute("""
-                    INSERT INTO Rate_Cut_Change_Log (location, changed_by, change_date, field_name, old_value, new_value)
+                    INSERT INTO Rate_Cart_Change_Log (location, changed_by, change_date, field_name, old_value, new_value)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (data.location, username, change_date, 'Cost', str(old_cost), str(data.cost)))
 
-            cursor.execute("UPDATE Rate_Cut SET cost = ? WHERE location = ?", (data.cost, data.location))
+            cursor.execute("UPDATE Rate_Cart SET cost = ? WHERE location = ?", (data.cost, data.location))
         else:
-            if "add_rate_cut" not in perms:
+            if "add_rate_cart" not in perms:
                 conn.close()
-                raise HTTPException(status_code=403, detail="Requires 'add_rate_cut' permission")
-            cursor.execute("INSERT INTO Rate_Cut (location, cost) VALUES (?, ?)", (data.location, data.cost))
+                raise HTTPException(status_code=403, detail="Requires 'add_rate_cart' permission")
+            cursor.execute("INSERT INTO Rate_Cart (location, cost) VALUES (?, ?)", (data.location, data.cost))
             
         conn.commit()
         conn.close()
-        return {"message": "Rate cut saved successfully"}
+        return {"message": "Rate cart saved successfully"}
     except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail=f"Error saving rate cut: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error saving rate cart: {str(e)}")
 
 @app.delete("/account/rate-cuts/{location}")
-def delete_rate_cut(location: str, user: dict = Depends(require_permission("delete_rate_cut"))):
+def delete_rate_cart(location: str, user: dict = Depends(require_permission("delete_rate_cart"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # Ensure to delete the changelog history for the rate cut first to maintain integrity
-        cursor.execute("DELETE FROM Rate_Cut_Change_Log WHERE location = ?", (location,))
-        cursor.execute("DELETE FROM Rate_Cut WHERE location = ?", (location,))
+        # Ensure to delete the changelog history for the rate cart first to maintain integrity
+        cursor.execute("DELETE FROM Rate_Cart_Change_Log WHERE location = ?", (location,))
+        cursor.execute("DELETE FROM Rate_Cart WHERE location = ?", (location,))
         
         if cursor.rowcount == 0:
             conn.close()
-            raise HTTPException(status_code=404, detail="Rate cut not found")
+            raise HTTPException(status_code=404, detail="Rate cart not found")
         
         conn.commit()
         conn.close()
-        return {"message": "Rate cut deleted successfully"}
+        return {"message": "Rate cart deleted successfully"}
     except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting rate cut: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting rate cart: {str(e)}")
 
-@app.get("/account/rate-cuts/{location}/logs", response_model=List[RateCutLogItem])
-def get_rate_cut_logs(location: str, user: dict = Depends(get_current_user)):
+@app.get("/account/rate-cuts/{location}/logs", response_model=List[RateCartLogItem])
+def get_rate_cart_logs(location: str, user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, location, changed_by, change_date, field_name, old_value, new_value FROM Rate_Cut_Change_Log WHERE location = ? ORDER BY change_date DESC", (location,))
+        cursor.execute("SELECT id, location, changed_by, change_date, field_name, old_value, new_value FROM Rate_Cart_Change_Log WHERE location = ? ORDER BY change_date DESC", (location,))
         rows = cursor.fetchall()
         logs = [{"id": r[0], "location": r[1], "changed_by": r[2], "change_date": r[3], "field_name": r[4], "old_value": r[5], "new_value": r[6]} for r in rows]
         conn.close()
         return logs
-    except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching rate cut logs: {str(e)}")
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching rate cart logs: {str(e)}")
 
-# --- Daily Rate Cut Report Endpoints ---
+# --- Daily Rate Cart Report Endpoints ---
 
 def _get_daily_report_data(target_date: str):
-    # 1. Get Rate Cuts mapping
+    # 1. Get Rate Carts mapping
     conn_log = get_logistic_connection()
     cursor_log = conn_log.cursor()
-    cursor_log.execute("SELECT location, cost FROM Rate_Cut")
-    rate_cuts = {row[0].strip().upper(): float(row[1]) for row in cursor_log.fetchall()}
+    cursor_log.execute("SELECT location, cost FROM Rate_Cart")
+    rate_carts = {row[0].strip().upper(): float(row[1]) for row in cursor_log.fetchall()}
     conn_log.close()
 
     # 2. Get DWBI Data, grouping to include Driver Name
@@ -966,7 +966,7 @@ def _get_daily_report_data(target_date: str):
         branch = item_data["branch"]
         driver_name = item_data["driver_name"]
         driver_ctn_total = driver_totals.get((branch, driver_name), 0.0)
-        branch_cost = rate_cuts.get(branch, 0.0)
+        branch_cost = rate_carts.get(branch, 0.0)
 
         allocated_cost = 0.0
         cost_per_carton = 0.0
@@ -986,7 +986,7 @@ def _get_daily_report_data(target_date: str):
     return report_data
 
 @app.get("/account/daily-rate-cut-report")
-def get_daily_rate_cut_report(target_date: Optional[str] = None, user: dict = Depends(require_permission("view_daily_report"))):
+def get_daily_rate_cart_report(target_date: Optional[str] = None, user: dict = Depends(require_permission("view_daily_report"))):
     if not target_date:
         target_date = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
     try:
