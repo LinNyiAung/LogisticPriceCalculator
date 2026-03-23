@@ -628,7 +628,7 @@ def determine_calculation_type_sql(gate_id):
         logger.error(f"Error determining calc type: {str(e)}")
         return "unknown"
 
-def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, additional_charges=0.0):
+def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, manual_total_cost=None, additional_charges=0.0):
     add_charges = float(additional_charges) if additional_charges is not None else 0.0
 
     try:
@@ -654,7 +654,13 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
     try:
         conn_log = get_logistic_connection()
         cursor_log = conn_log.cursor()
-        cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
+        
+        # Use From and To locations if provided to pinpoint the exact gate if names are duplicated
+        if from_loc and to_loc:
+            cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit] FROM Gate WHERE [Gate Name] = ? AND [From] = ? AND [To] = ?", (gate_name, from_loc, to_loc))
+        else:
+            cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
+            
         gate_row = cursor_log.fetchone()
         
         cursor_log.execute("SELECT [Log-Pric], [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code")
@@ -675,8 +681,8 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
         raise Exception(f"Gate {gate_name} not found")
         
     gate_id = gate_row[0]
-    from_loc = gate_row[1]
-    to_loc = gate_row[2]
+    matched_from_loc = gate_row[1]
+    matched_to_loc = gate_row[2]
     cost = float(gate_row[3] or 0)
     gate_unit = float(gate_row[4]) if gate_row[4] else 1.0
     
@@ -814,8 +820,8 @@ def _perform_calculation_logic(gate_name, doc_nums, manual_total_cost=None, addi
     estimated_total_cost += add_charges
     
     return {
-        "calculation_type": calc_type, "gate_name": gate_name, "from_loc": from_loc,
-        "to_loc": to_loc, "cost": cost, "additional_charges": add_charges,
+        "calculation_type": calc_type, "gate_name": gate_name, "from_loc": matched_from_loc,
+        "to_loc": matched_to_loc, "cost": cost, "additional_charges": add_charges,
         "calculated_products": calculated_products, "total_cost": total_cost,
         "estimated_total_cost": estimated_total_cost
     }
@@ -1294,6 +1300,7 @@ def download_history_excel(record_id: int):
         try:
             calc_result = _perform_calculation_logic(
                 gate_name=record['gate_name'], doc_nums=record['doc_nums'],
+                from_loc=record['from_loc'], to_loc=record['to_loc'],
                 manual_total_cost=record['manual_total_cost'], additional_charges=record['additional_charges']
             )
         except Exception as e: raise HTTPException(status_code=500, detail=f"Error recalculating data: {str(e)}")
@@ -1612,12 +1619,13 @@ def save_gate(gate_data: GateData, user: dict = Depends(get_current_user)):
         conn = get_logistic_connection()
         cursor = conn.cursor()
 
-        if gate_data.original_gate_name:
+        # Check by gate_id instead of original_gate_name to prevent overwrite issues when names overlap
+        if gate_data.gate_id is not None:
             if "edit_gate" not in perms:
                 conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'edit_gate' permission")
             
-            cursor.execute("SELECT [Gate ID], [UOM], [Unit], [Cost] FROM Gate WHERE [Gate Name] = ?", (gate_data.original_gate_name,))
+            cursor.execute("SELECT [Gate ID], [UOM], [Unit], [Cost] FROM Gate WHERE [Gate ID] = ?", (gate_data.gate_id,))
             current_row = cursor.fetchone()
             
             if current_row:
@@ -1641,8 +1649,8 @@ def save_gate(gate_data: GateData, user: dict = Depends(get_current_user)):
                     cursor.executemany("INSERT INTO Gate_Change_Log (gate_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
 
             cursor.execute("""
-                UPDATE Gate SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Cost] = ? WHERE [Gate Name] = ?
-            """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, gate_data.original_gate_name))
+                UPDATE Gate SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Cost] = ? WHERE [Gate ID] = ?
+            """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, gate_data.gate_id))
         else:
             if "add_gate" not in perms:
                 conn.close()
@@ -1828,13 +1836,22 @@ def get_to_locations(from_loc: Optional[str] = None):
 @app.post("/calculate-with-gate")
 def calculate_with_gate(
     gate_name: str, 
+    from_loc: Optional[str] = Query(None),
+    to_loc: Optional[str] = Query(None),
     doc_nums: List[str] = Query(...),
     manual_total_cost: Optional[float] = None, 
     additional_charges: Optional[float] = 0.0
 ):
     try:
         if not doc_nums: raise HTTPException(status_code=400, detail="No Doc Nums provided")
-        return _perform_calculation_logic(gate_name=gate_name, doc_nums=doc_nums, manual_total_cost=manual_total_cost, additional_charges=additional_charges)
+        return _perform_calculation_logic(
+            gate_name=gate_name, 
+            doc_nums=doc_nums, 
+            from_loc=from_loc,
+            to_loc=to_loc,
+            manual_total_cost=manual_total_cost, 
+            additional_charges=additional_charges
+        )
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")
 

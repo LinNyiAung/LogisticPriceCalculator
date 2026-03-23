@@ -421,12 +421,19 @@ const PricingApp = () => {
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
+  // ✅ Updated saveGate to ensure gate_id is passed correctly for editing
   const saveGate = async (gateData) => {
     if (!gateData.gate_name?.trim() || !gateData.from_loc || !gateData.to_loc) { showNotification('Required fields missing.', 'error'); return; }
     try {
-      const payload = { ...gateData, unit: gateData.unit === '' ? null : parseInt(gateData.unit), cost: gateData.cost === '' ? null : parseFloat(gateData.cost), original_gate_name: originalGateName };
+      const payload = { 
+        ...gateData, 
+        gate_id: editingGate ? editingGate.gate_id : null,
+        unit: gateData.unit === '' ? null : parseInt(gateData.unit), 
+        cost: gateData.cost === '' ? null : parseFloat(gateData.cost)
+      };
+      
       const response = await authFetch(`${API_URL}/account/gates`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (response.ok) { showNotification('Gate saved', 'success'); loadGates(); loadFromLocations(); setShowAddGateModal(false); setEditingGate(null); setOriginalGateName(null); } 
+      if (response.ok) { showNotification('Gate saved', 'success'); loadGates(); loadFromLocations(); setShowAddGateModal(false); setEditingGate(null); } 
       else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
@@ -582,11 +589,13 @@ const PricingApp = () => {
   }, [selectedGate, calculationType, products, gates, token, currentPage]);
 
   // --- Utility Fetch/Calculations Functions ---
+  
+  // ✅ Updated calculateCosts to pass from_loc and to_loc
   const calculateCosts = async () => {
     if (selectedDocNums.length === 0 || !selectedFrom || !selectedTo || !selectedGate || !selectedChannel) { showNotification('Please select Doc Num(s), From, To, Gate, and Channel', 'error'); return; }
     setIsLoading(true);
     try {
-      let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(selectedGate)}`;
+      let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(selectedGate)}&from_loc=${encodeURIComponent(selectedFrom)}&to_loc=${encodeURIComponent(selectedTo)}`;
       selectedDocNums.forEach(id => url += `&doc_nums=${encodeURIComponent(id)}`);
       if (manualTotalCost && isManualTotalCostEnabled) url += `&manual_total_cost=${manualTotalCost}`;
       if (additionalCharges) url += `&additional_charges=${additionalCharges}`;
@@ -633,10 +642,12 @@ const PricingApp = () => {
   const handleToChange = (val) => { setSelectedTo(val); setSelectedGate(''); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); };
   const handleGateChange = (gateName) => {
     setSelectedGate(gateName); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost('');
-    const gateInfo = gates.find(g => g.gate_name === gateName);
+    // Safely attempt to match the first found for calculation type label
+    const gateInfo = gates.find(g => g.gate_name === gateName && g.from_loc === selectedFrom && g.to_loc === selectedTo);
     if (gateInfo) setCalculationType(gateInfo.calculation_type);
   };
 
+  // ✅ Updated loadSavedCalculation to pass from_loc and to_loc
   const loadSavedCalculation = async (record) => {
     try {
       setCurrentPage('calculator');
@@ -653,7 +664,7 @@ const PricingApp = () => {
       
       // We must recalculate here so the UI gets the missing calculated products
       setIsLoading(true);
-      let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(record.gate_name)}`;
+      let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(record.gate_name)}&from_loc=${encodeURIComponent(record.from_loc)}&to_loc=${encodeURIComponent(record.to_loc)}`;
       record.doc_nums.forEach(id => url += `&doc_nums=${encodeURIComponent(id)}`);
       if (record.manual_total_cost !== null && record.manual_total_cost !== undefined) {
           url += `&manual_total_cost=${record.manual_total_cost}`;
@@ -1573,7 +1584,7 @@ const PricingApp = () => {
           )}
 
           {products.length > 0 && selectedGate && (() => {
-            const currentGate = gates.find(g => g.gate_name === selectedGate);
+            const currentGate = gates.find(g => g.gate_name === selectedGate && g.from_loc === selectedFrom && g.to_loc === selectedTo);
             return (
               <div className="bg-blue-50 rounded-lg border-2 border-blue-300 p-6 mb-6">
                 <div className="flex items-center justify-between flex-wrap gap-4">
