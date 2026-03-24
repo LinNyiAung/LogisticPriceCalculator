@@ -386,7 +386,8 @@ const PricingApp = () => {
       const payload = {
         id: isUpdate ? currentHistoryId : null, gate_name: selectedGate, from_loc: selectedFrom, to_loc: selectedTo,
         doc_nums: selectedDocNums.map(String), manual_total_cost: (manualTotalCost && isManualTotalCostEnabled) ? parseFloat(manualTotalCost) : null,
-        additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0, final_total_cost: calculatedTotalCost, channel: selectedChannel, status: "saved"
+        additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0, final_total_cost: calculatedTotalCost, channel: selectedChannel, status: "saved",
+        calculated_products: calculatedProducts
       };
       const response = await authFetch(`${API_URL}/history/save`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (response.ok) { showNotification('Calculation saved successfully', 'success'); loadHistory(); } 
@@ -421,7 +422,6 @@ const PricingApp = () => {
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
-  // ✅ Updated saveGate to ensure gate_id is passed correctly for editing
   const saveGate = async (gateData) => {
     if (!gateData.gate_name?.trim() || !gateData.from_loc || !gateData.to_loc) { showNotification('Required fields missing.', 'error'); return; }
     try {
@@ -590,7 +590,6 @@ const PricingApp = () => {
 
   // --- Utility Fetch/Calculations Functions ---
   
-  // ✅ Updated calculateCosts to pass from_loc and to_loc
   const calculateCosts = async () => {
     if (selectedDocNums.length === 0 || !selectedFrom || !selectedTo || !selectedGate || !selectedChannel) { showNotification('Please select Doc Num(s), From, To, Gate, and Channel', 'error'); return; }
     setIsLoading(true);
@@ -647,41 +646,81 @@ const PricingApp = () => {
     if (gateInfo) setCalculationType(gateInfo.calculation_type);
   };
 
-  // ✅ Updated loadSavedCalculation to pass from_loc and to_loc
+  // UPDATED: Attempt to load from PG (Live DWBI) first. If it fails, fallback to SQLite.
   const loadSavedCalculation = async (record) => {
     try {
       setCurrentPage('calculator');
-      setCurrentHistoryId(record.id);
-      setSelectedDocNums(record.doc_nums); 
-      await fetchAggregatedProducts(record.doc_nums);
-      setSelectedFrom(record.from_loc); 
-      await loadToLocations(record.from_loc); 
-      setSelectedTo(record.to_loc);
-      setSelectedGate(record.gate_name); 
-      setSelectedChannel(record.channel || ''); 
-      setManualTotalCost(record.manual_total_cost || ''); 
-      setAdditionalCharges(record.additional_charges || '');
-      
-      // We must recalculate here so the UI gets the missing calculated products
       setIsLoading(true);
-      let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(record.gate_name)}&from_loc=${encodeURIComponent(record.from_loc)}&to_loc=${encodeURIComponent(record.to_loc)}`;
-      record.doc_nums.forEach(id => url += `&doc_nums=${encodeURIComponent(id)}`);
-      if (record.manual_total_cost !== null && record.manual_total_cost !== undefined) {
-          url += `&manual_total_cost=${record.manual_total_cost}`;
-      }
-      if (record.additional_charges) url += `&additional_charges=${record.additional_charges}`;
-      
-      const response = await authFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      setCurrentHistoryId(record.id);
+
+      // Fetch the full detailed record from the local backend endpoint
+      const response = await authFetch(`${API_URL}/history/${record.id}`);
       if (response.ok) {
-        const data = await response.json();
-        setCalculatedProducts(data.calculated_products);
-        setCalculatedTotalCost(data.total_cost);
-        setEstimatedTotalCost(data.estimated_total_cost);
-        showNotification(`Loaded calculation record (ID: ${record.id}).`, 'success');
+        const fullRecord = await response.json();
+        
+        setSelectedDocNums(fullRecord.doc_nums); 
+        setSelectedFrom(fullRecord.from_loc); 
+        await loadToLocations(fullRecord.from_loc); 
+        setSelectedTo(fullRecord.to_loc);
+        setSelectedGate(fullRecord.gate_name); 
+        setSelectedChannel(fullRecord.channel || ''); 
+        setManualTotalCost(fullRecord.manual_total_cost || ''); 
+        setAdditionalCharges(fullRecord.additional_charges || '');
+        
+        let loadedFromPG = false;
+        
+        try {
+            // STEP 1: ATTEMPT TO FETCH FRESH DATA FROM PG_TRANSFER_DETAILS
+            const queryString = fullRecord.doc_nums.map(id => `doc_nums=${encodeURIComponent(id)}`).join('&');
+            const pgResponse = await authFetch(`${API_URL}/products-by-doc-nums?${queryString}`);
+            
+            if (pgResponse.ok) {
+                const pgData = await pgResponse.json();
+                
+                if (pgData.products && pgData.products.length > 0) {
+                    // Data is still available in PG_Transfer_Details!
+                    setProducts(pgData.products);
+                    setTotalWeight(pgData.total_weight || 0);
+                    
+                    // Recalculate using PG live data to get all pricing logic
+                    let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(fullRecord.gate_name)}&from_loc=${encodeURIComponent(fullRecord.from_loc)}&to_loc=${encodeURIComponent(fullRecord.to_loc)}`;
+                    fullRecord.doc_nums.forEach(id => url += `&doc_nums=${encodeURIComponent(id)}`);
+                    if (fullRecord.manual_total_cost !== null && fullRecord.manual_total_cost !== undefined) {
+                        url += `&manual_total_cost=${fullRecord.manual_total_cost}`;
+                    }
+                    if (fullRecord.additional_charges) url += `&additional_charges=${fullRecord.additional_charges}`;
+                    
+                    const calcResponse = await authFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                    
+                    if (calcResponse.ok) {
+                        const calcData = await calcResponse.json();
+                        setCalculatedProducts(calcData.calculated_products);
+                        setCalculatedTotalCost(calcData.total_cost);
+                        setEstimatedTotalCost(calcData.estimated_total_cost);
+                        loadedFromPG = true;
+                        showNotification(`Loaded and verified with live PG_Transfer_Details (ID: ${fullRecord.id}).`, 'success');
+                    }
+                }
+            }
+        } catch (e) {
+            console.log("DWBI check failed, falling back to local DB...", e);
+        }
+
+        if (!loadedFromPG) {
+            // STEP 2: FALLBACK TO LOCAL SQLITE SNAPSHOT (if PG data was deleted)
+            if (fullRecord.calculated_products && fullRecord.calculated_products.length > 0) {
+                setCalculatedProducts(fullRecord.calculated_products);
+                setProducts(fullRecord.calculated_products); // To display the grid and details properly
+                const calculatedWeight = fullRecord.calculated_products.reduce((acc, curr) => acc + (curr.weight || 0), 0);
+                setTotalWeight(calculatedWeight);
+                setCalculatedTotalCost(fullRecord.final_total_cost);
+                showNotification(`Data cleared from external DB. Loaded saved snapshot from local DB (ID: ${fullRecord.id}).`, 'info');
+            } else {
+                showNotification('Data purged from PG and no local saved products found. Cannot load calculation details.', 'error');
+            }
+        }
       } else {
-        setCalculatedProducts([]);
-        setCalculatedTotalCost(record.final_total_cost);
-        showNotification('Loaded calculation inputs, but failed to fetch detailed calculated rows.', 'warning');
+         showNotification('Failed to fetch full record details', 'error');
       }
       setIsLoading(false);
     } catch (error) { 
@@ -1095,7 +1134,6 @@ const PricingApp = () => {
     );
   }
 
-  // --- UPDATED DAILY REPORT VIEW WITH TABS ---
   if (currentPage === 'daily_report' && permissions.includes('view_daily_report')) {
       const filteredDailyReportData = dailyReportData.filter(row => {
         const matchBranch = (row.branch || '').toLowerCase().includes(dailyReportFilters.branch.toLowerCase());
@@ -1561,9 +1599,27 @@ const PricingApp = () => {
             </div>
             <div className="flex flex-wrap gap-2">
               {selectedDocNums.length === 0 && (<p className="text-gray-500 text-sm italic">No Doc Nums selected</p>)}
+              
+              {/* UPDATED: Graceful fallback for displaying missing Date attributes */}
               {selectedDocNums.map(id => {
-                const docObj = docNums.find(d => d.doc_num === id);
-                return (<div key={id} className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full border border-blue-200"><span className="font-semibold">{docObj?.doc_date ? `${id} - ${docObj.doc_date}` : id}</span><button onClick={() => handleRemoveDocNum(id)} className="hover:text-red-600 transition"><X size={16} /></button></div>);
+                const docObj = docNums.find(d => String(d.doc_num) === String(id));
+                let displayDate = docObj ? docObj.doc_date : null;
+
+                // Fallback: If not found in fresh live external data (DWBI purged), look up the loaded calculated products state!
+                if (!displayDate && calculatedProducts && calculatedProducts.length > 0) {
+                    const matchedProd = calculatedProducts.find(p => String(p.sin_no) === String(id));
+                    if (matchedProd && matchedProd.doc_date) {
+                        const dateStr = String(matchedProd.doc_date);
+                        displayDate = dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr;
+                    }
+                }
+
+                return (
+                    <div key={id} className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full border border-blue-200">
+                        <span className="font-semibold">{displayDate ? `${id} - ${displayDate}` : id}</span>
+                        <button onClick={() => handleRemoveDocNum(id)} className="hover:text-red-600 transition"><X size={16} /></button>
+                    </div>
+                );
               })}
             </div>
           </div>

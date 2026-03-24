@@ -113,7 +113,8 @@ def startup_db():
                 [submitted_by] TEXT,
                 [submitted_at] TEXT,
                 [claimed_by] TEXT,
-                [claimed_at] TEXT
+                [claimed_at] TEXT,
+                [calculated_products] TEXT
             )
         """)
 
@@ -140,6 +141,8 @@ def startup_db():
         try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [claimed_by] TEXT")
         except sqlite3.OperationalError: pass
         try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [claimed_at] TEXT")
+        except sqlite3.OperationalError: pass
+        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [calculated_products] TEXT")
         except sqlite3.OperationalError: pass
         
         # --- User Table ---
@@ -373,6 +376,7 @@ class CalculationSaveRequest(BaseModel):
     final_total_cost: float
     channel: Optional[str] = ""
     status: Optional[str] = "saved"
+    calculated_products: List[Any] = []
 
 class ReferenceItem(BaseModel):
     name: str
@@ -716,6 +720,15 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
         ton_cost_total = 0.0
         
         for row in pick_rows:
+            # Safely stringify the DocDate directly here to ensure format consistency
+            doc_date_val = row[4]
+            if isinstance(doc_date_val, datetime.datetime):
+                doc_date_str = doc_date_val.strftime("%Y-%m-%d")
+            elif isinstance(doc_date_val, str) and len(doc_date_val) >= 10:
+                doc_date_str = doc_date_val[:10]
+            else:
+                doc_date_str = str(doc_date_val) if doc_date_val else ""
+
             principal_val = row[6] or ""
             bc_info = branch_code_map.get(principal_val.strip().lower(), {})
             sd_info = sd_code_map.get(principal_val.strip().lower(), {})
@@ -725,8 +738,8 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
                 "name": row[1] if row[1] else "",
                 "uom": row[2] if row[2] else "",
                 "weight": float(row[3]) if row[3] else 0.0,
-                "doc_date": row[4],         
-                "sin_no": row[5],           
+                "doc_date": doc_date_str,         
+                "sin_no": str(row[5]) if row[5] else "",           
                 "principal": principal_val,   
                 "ctns": round(float(row[7])) if row[7] else 0,
                 "b_code": bc_info.get("Code", ""),
@@ -780,6 +793,15 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
 
     elif calc_type == "direct_pricing":
         for row in pick_rows:
+            # Safely stringify the DocDate directly here
+            doc_date_val = row[4]
+            if isinstance(doc_date_val, datetime.datetime):
+                doc_date_str = doc_date_val.strftime("%Y-%m-%d")
+            elif isinstance(doc_date_val, str) and len(doc_date_val) >= 10:
+                doc_date_str = doc_date_val[:10]
+            else:
+                doc_date_str = str(doc_date_val) if doc_date_val else ""
+
             item_code = row[0] if row[0] else ""
             pricing_info = item_pricing.get(item_code, {})
             
@@ -797,8 +819,8 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
             
             calculated_products.append({
                 "code": item_code, "name": row[1] if row[1] else "", "ctns": ctns,
-                "uom": row[2] if row[2] else "", "weight": weight, "doc_date": row[4],       
-                "sin_no": row[5], "principal": principal_val, "b_code": bc_info.get("Code", ""),
+                "uom": row[2] if row[2] else "", "weight": weight, "doc_date": doc_date_str,       
+                "sin_no": str(row[5]) if row[5] else "", "principal": principal_val, "b_code": bc_info.get("Code", ""),
                 "b_name": bc_info.get("Name", ""), "b_dept": bc_info.get("Dept", ""),
                 "b_principal": bc_info.get("Principal", ""), "b_desc": bc_info.get("Description", ""),
                 "s_dept": sd_info.get("Dept", ""), "s_principal": sd_info.get("Principal", ""),
@@ -1156,6 +1178,7 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
         conn = get_logistic_connection()
         cursor = conn.cursor()
         doc_nums_json = json.dumps(data.doc_nums)
+        calculated_products_json = json.dumps(data.calculated_products)
         created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         if data.id:
@@ -1167,12 +1190,12 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
                 UPDATE Calculation_History 
                 SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
                     doc_nums = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?, channel = ?,
-                    status = ?
+                    status = ?, calculated_products = ?
                 WHERE id = ?
             """, (
                 created_at, data.gate_name, data.from_loc, data.to_loc,
                 doc_nums_json, data.manual_total_cost, data.additional_charges, 
-                data.final_total_cost, data.channel, data.status, data.id
+                data.final_total_cost, data.channel, data.status, calculated_products_json, data.id
             ))
             message = "Calculation updated successfully"
         else:
@@ -1185,11 +1208,12 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
             cursor.execute("""
                 INSERT INTO Calculation_History 
                 ([id], [created_at], [gate_name], [from_loc], [to_loc], 
-                 [doc_nums], [manual_total_cost], [additional_charges], [final_total_cost], [channel], [status], [created_by])
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 [doc_nums], [manual_total_cost], [additional_charges], [final_total_cost], [channel], [status], [created_by], [calculated_products])
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 new_id, created_at, data.gate_name, data.from_loc, data.to_loc,
-                doc_nums_json, data.manual_total_cost, data.additional_charges, data.final_total_cost, data.channel, data.status, user["username"]
+                doc_nums_json, data.manual_total_cost, data.additional_charges, data.final_total_cost, 
+                data.channel, data.status, user["username"], calculated_products_json
             ))
             message = "Calculation saved successfully"
         
@@ -1229,6 +1253,25 @@ def claim_history_item(record_id: int, user: dict = Depends(require_permission("
         return {"message": "Calculation claimed successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error claiming record: {str(e)}")
 
+@app.get("/history/{record_id}")
+def get_history_record(record_id: int, user: dict = Depends(get_current_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM Calculation_History WHERE id = ?", (record_id,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Record not found")
+        
+        columns = [desc[0] for desc in cursor.description]
+        record = dict(zip(columns, row))
+        record['doc_nums'] = json.loads(record['doc_nums']) if record['doc_nums'] else []
+        record['calculated_products'] = json.loads(record['calculated_products']) if record.get('calculated_products') else []
+        conn.close()
+        return record
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/history")
 def get_history(user: dict = Depends(get_current_user)):
     try:
@@ -1250,18 +1293,15 @@ def get_history(user: dict = Depends(get_current_user)):
             cursor.execute("SELECT * FROM Calculation_History WHERE created_by = ? OR created_by IS NULL ORDER BY created_at DESC", (username,))
             
         rows = cursor.fetchall()
+        columns = [desc[0] for desc in cursor.description]
         history = []
         for row in rows:
-            history.append({
-                "id": row[0], "created_at": row[1], "gate_name": row[2], "from_loc": row[3], "to_loc": row[4],
-                "doc_nums": json.loads(row[5]), "manual_total_cost": row[6], "additional_charges": row[7],
-                "final_total_cost": row[8], "channel": row[9], "status": row[10] if len(row) > 10 else 'saved',
-                "created_by": row[11] if len(row) > 11 else 'unknown',
-                "submitted_by": row[12] if len(row) > 12 else None,
-                "submitted_at": row[13] if len(row) > 13 else None,
-                "claimed_by": row[14] if len(row) > 14 else None,
-                "claimed_at": row[15] if len(row) > 15 else None
-            })
+            record_dict = dict(zip(columns, row))
+            record_dict["doc_nums"] = json.loads(record_dict["doc_nums"]) if record_dict["doc_nums"] else []
+            # Do not return 'calculated_products' in the list to save bandwidth. It's fetched via GET /history/{id}
+            if "calculated_products" in record_dict:
+                del record_dict["calculated_products"]
+            history.append(record_dict)
         conn.close()
         return {"history": history}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading history: {str(e)}")
@@ -1288,24 +1328,32 @@ def download_history_excel(record_id: int):
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM Calculation_History WHERE id = ?", (record_id,))
         row = cursor.fetchone()
+        
+        if not row:
+            conn.close()
+            raise HTTPException(status_code=404, detail="History record not found")
+            
+        columns = [desc[0] for desc in cursor.description]
+        record = dict(zip(columns, row))
+        record['doc_nums'] = json.loads(record['doc_nums']) if record['doc_nums'] else []
         conn.close()
 
-        if not row: raise HTTPException(status_code=404, detail="History record not found")
-
-        record = {
-            "id": row[0], "gate_name": row[2], "from_loc": row[3], "to_loc": row[4],
-            "doc_nums": json.loads(row[5]), "manual_total_cost": row[6], "additional_charges": row[7], "channel": row[9] 
-        }
-
+        products = []
+        # ATTEMPT TO FETCH FROM DWBI FIRST (LIVE DATA)
         try:
             calc_result = _perform_calculation_logic(
                 gate_name=record['gate_name'], doc_nums=record['doc_nums'],
                 from_loc=record['from_loc'], to_loc=record['to_loc'],
                 manual_total_cost=record['manual_total_cost'], additional_charges=record['additional_charges']
             )
-        except Exception as e: raise HTTPException(status_code=500, detail=f"Error recalculating data: {str(e)}")
+            products = calc_result['calculated_products']
+        except Exception as e:
+            # IF DWBI FAILS (E.G. DATA WAS DELETED AFTER 3 WEEKS), FALLBACK TO LOCAL SQLITE SAVED DB
+            if record.get('calculated_products'):
+                products = json.loads(record['calculated_products'])
+            else:
+                raise HTTPException(status_code=500, detail=f"Data purged from DWBI and no local save found: {str(e)}")
 
-        products = calc_result['calculated_products']
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Cost Details"
@@ -1360,8 +1408,8 @@ def download_history_excel(record_id: int):
             ws.cell(row=row_num, column=6, value=item.get('b_code', '')).border = border
             ws.cell(row=row_num, column=7, value=item.get('b_name', '')).border = border
             ws.cell(row=row_num, column=8, value=item.get('principal', '')).border = border
-            ws.cell(row=row_num, column=9, value=item['code']).border = border
-            ws.cell(row=row_num, column=10, value=item['name']).border = border
+            ws.cell(row=row_num, column=9, value=item.get('code', '')).border = border
+            ws.cell(row=row_num, column=10, value=item.get('name', '')).border = border
             ws.cell(row=row_num, column=11, value=ctns_formatted).border = border
             
             ctn_price_cell = ws.cell(row=row_num, column=12, value=price_per_ctn) 
@@ -1372,7 +1420,7 @@ def download_history_excel(record_id: int):
             amt_cell.number_format = '#,##0.00'
             amt_cell.border = border
 
-            weight_cell = ws.cell(row=row_num, column=14, value=item['weight']) 
+            weight_cell = ws.cell(row=row_num, column=14, value=item.get('weight', 0)) 
             weight_cell.number_format = '#,##0.00'
             weight_cell.border = border
 
