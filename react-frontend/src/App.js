@@ -165,7 +165,7 @@ const PricingApp = () => {
   });
   
   const [townshipFilters, setTownshipFilters] = useState({ 
-    branch: '', driver_name: '', township: '', customer_code: '', ctns: '', driver_total_ctns: '', branch_cost: '', cost_per_carton: '', allocated_cost: '' 
+    branch: '', driver_name: '', township: '', customer_code: '', ctns: '', driver_total_ctns: '', branch_cost: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '' 
   });
 
   // User & Role Management State
@@ -1159,10 +1159,12 @@ const PricingApp = () => {
         const matchCtns = String(row.ctns || '').toLowerCase().includes(townshipFilters.ctns.toLowerCase());
         const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(townshipFilters.driver_total_ctns.toLowerCase());
         const matchBranchCost = String(row.branch_cost || '').toLowerCase().includes(townshipFilters.branch_cost.toLowerCase());
+        const matchTotalDropPoints = String(row.total_drop_points || '').toLowerCase().includes(townshipFilters.total_drop_points.toLowerCase());
+        const matchCostPerDropPoint = String(row.cost_per_drop_point || '').toLowerCase().includes(townshipFilters.cost_per_drop_point.toLowerCase());
         const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(townshipFilters.cost_per_carton.toLowerCase());
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(townshipFilters.allocated_cost.toLowerCase());
         
-        return matchBranch && matchDriver && matchTownship && matchCustomer && matchCtns && matchDriverTotal && matchBranchCost && matchCostPerCarton && matchAllocatedCost;
+        return matchBranch && matchDriver && matchTownship && matchCustomer && matchCtns && matchDriverTotal && matchBranchCost && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost;
       });
 
       return (
@@ -1324,6 +1326,14 @@ const PricingApp = () => {
                                                   <div>Branch Rate Cost</div>
                                                   <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.branch_cost} onChange={(e) => setTownshipFilters({...townshipFilters, branch_cost: e.target.value})} />
                                               </th>
+                                              <th className="border p-2 text-right">
+                                                  <div>Total Drop Points</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.total_drop_points} onChange={(e) => setTownshipFilters({...townshipFilters, total_drop_points: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right text-orange-700">
+                                                  <div>Cost per Drop Point</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.cost_per_drop_point} onChange={(e) => setTownshipFilters({...townshipFilters, cost_per_drop_point: e.target.value})} />
+                                              </th>
                                               <th className="border p-2 text-right text-purple-700">
                                                   <div>Cost per Carton</div>
                                                   <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.cost_per_carton} onChange={(e) => setTownshipFilters({...townshipFilters, cost_per_carton: e.target.value})} />
@@ -1336,7 +1346,7 @@ const PricingApp = () => {
                                       </thead>
                                       <tbody>
                                           {filteredTownshipReportData.length === 0 ? (
-                                              <tr><td colSpan="9" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
+                                              <tr><td colSpan="11" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
                                           ) : (
                                               filteredTownshipReportData.map((row, idx) => (
                                                   <tr key={idx} className="hover:bg-gray-50 text-sm">
@@ -1347,6 +1357,8 @@ const PricingApp = () => {
                                                       <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                       <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
                                                       <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>
+                                                      <td className="border p-2 text-right text-gray-500">{formatNumber(row.total_drop_points)}</td>
+                                                      <td className="border p-2 text-right font-bold text-orange-600">{formatNumber(row.cost_per_drop_point)}</td>
                                                       <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
                                                       <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
                                                   </tr>

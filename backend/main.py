@@ -956,6 +956,7 @@ def _get_daily_report_data(target_date: str):
     # 3. Process Data
     granular_data = []
     driver_totals = {}
+    driver_customers = {} # Track unique customers per driver
 
     for row in rows:
         branch = row[0].strip().upper() if row[0] else "UNKNOWN"
@@ -978,6 +979,10 @@ def _get_daily_report_data(target_date: str):
         
         driver_key = (branch, driver_name)
         driver_totals[driver_key] = driver_totals.get(driver_key, 0.0) + ctns
+        
+        if driver_key not in driver_customers:
+            driver_customers[driver_key] = set()
+        driver_customers[driver_key].add(customer_code)
 
     item_report_dict = {}
     township_report_dict = {}
@@ -989,6 +994,10 @@ def _get_daily_report_data(target_date: str):
         
         cost_per_ctn = (b_cost / d_total) if d_total > 0 else 0.0
         allocated_cost = g["ctns"] * cost_per_ctn
+
+        # Calculate Drop Point data
+        d_total_customers = len(driver_customers.get((b, d), set()))
+        cost_per_drop_point = (b_cost / d_total_customers) if d_total_customers > 0 else 0.0
 
         # Item Level Report (Original Table Structure)
         i_key = (b, d, g["item_code"])
@@ -1015,7 +1024,9 @@ def _get_daily_report_data(target_date: str):
                 "driver_total_ctns": d_total,
                 "branch_cost": b_cost,
                 "cost_per_carton": cost_per_ctn,
-                "allocated_cost": 0.0
+                "allocated_cost": 0.0,
+                "total_drop_points": d_total_customers,
+                "cost_per_drop_point": cost_per_drop_point
             }
         township_report_dict[t_key]["ctns"] += g["ctns"]
         township_report_dict[t_key]["allocated_cost"] += allocated_cost
