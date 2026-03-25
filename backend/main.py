@@ -943,8 +943,9 @@ def _get_daily_report_data(target_date: str):
     # 2. Get DWBI Data
     conn_dwbi = get_dwbi_connection()
     cursor_dwbi = conn_dwbi.cursor()
+    # Updated query to include SUM(SalesAmount) as the 11th selected item
     query = """
-        SELECT Branch, ItemCode, MAX(ItemName), MAX(Principal), MAX(Brand), [Driver Name], SUM(ctnQty), CustomerCode, MAX(ContactPerson), Township
+        SELECT Branch, ItemCode, MAX(ItemName), MAX(Principal), MAX(Brand), [Driver Name], SUM(ctnQty), CustomerCode, MAX(ContactPerson), Township, SUM(SalesAmount)
         FROM VersaFleetDetail_TC
         WHERE CONVERT(DATE, [Task Date]) = ? AND [Task Status] = 'successful'
         GROUP BY Branch, [Driver Name], ItemCode, CustomerCode, Township
@@ -969,12 +970,13 @@ def _get_daily_report_data(target_date: str):
         customer_code = row[7].strip() if row[7] else "UNKNOWN"
         contact_person = row[8].strip() if row[8] else ""
         township = row[9].strip() if row[9] else "UNKNOWN"
+        sales_amount = float(row[10]) if row[10] else 0.0
 
         granular_data.append({
             "branch": branch, "item_code": item_code, "item_name": item_name,
             "principal": principal, "brand": brand, "driver_name": driver_name,
             "ctns": ctns, "customer_code": customer_code, "contact_person": contact_person,
-            "township": township
+            "township": township, "sales_amount": sales_amount
         })
         
         driver_key = (branch, driver_name)
@@ -999,19 +1001,20 @@ def _get_daily_report_data(target_date: str):
         d_total_customers = len(driver_customers.get((b, d), set()))
         cost_per_drop_point = (b_cost / d_total_customers) if d_total_customers > 0 else 0.0
 
-        # Item Level Report (Original Table Structure)
+        # Item Level Report 
         i_key = (b, d, g["item_code"])
         if i_key not in item_report_dict:
             item_report_dict[i_key] = {
                 "branch": b, "driver_name": d, "item_code": g["item_code"],
                 "item_name": g["item_name"], "principal": g["principal"], "brand": g["brand"],
                 "ctns": 0.0, "allocated_cost": 0.0, "cost_per_carton": cost_per_ctn,
-                "driver_total_ctns": d_total, "branch_cost": b_cost
+                "driver_total_ctns": d_total, "branch_cost": b_cost, "sales_amount": 0.0
             }
         item_report_dict[i_key]["ctns"] += g["ctns"]
         item_report_dict[i_key]["allocated_cost"] += allocated_cost
+        item_report_dict[i_key]["sales_amount"] += g["sales_amount"]
 
-        # Township Level Report (New Table Structure, including all requested columns)
+        # Township Level Report
         t_key = (g["branch"], g["township"], g["customer_code"], g["driver_name"])
         if t_key not in township_report_dict:
             township_report_dict[t_key] = {
@@ -1026,10 +1029,12 @@ def _get_daily_report_data(target_date: str):
                 "cost_per_carton": cost_per_ctn,
                 "allocated_cost": 0.0,
                 "total_drop_points": d_total_customers,
-                "cost_per_drop_point": cost_per_drop_point
+                "cost_per_drop_point": cost_per_drop_point,
+                "sales_amount": 0.0
             }
         township_report_dict[t_key]["ctns"] += g["ctns"]
         township_report_dict[t_key]["allocated_cost"] += allocated_cost
+        township_report_dict[t_key]["sales_amount"] += g["sales_amount"]
 
     item_report_list = list(item_report_dict.values())
     item_report_list.sort(key=lambda x: (x["branch"], x["driver_name"], x["item_code"]))

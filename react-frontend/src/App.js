@@ -161,11 +161,11 @@ const PricingApp = () => {
   
   const [dailyReportFilters, setDailyReportFilters] = useState({ 
     branch: '', item_code: '', item_name: '', principal: '', brand: '', driver_name: '',
-    ctns: '', driver_total_ctns: '', branch_cost: '', cost_per_carton: '', allocated_cost: '' 
+    ctns: '', driver_total_ctns: '', branch_cost: '', cost_per_carton: '', allocated_cost: '', sales_amount: '' 
   });
   
   const [townshipFilters, setTownshipFilters] = useState({ 
-    branch: '', driver_name: '', township: '', customer_code: '', ctns: '', driver_total_ctns: '', branch_cost: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '' 
+    branch: '', driver_name: '', township: '', customer_code: '', ctns: '', driver_total_ctns: '', branch_cost: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: '' 
   });
 
   // User & Role Management State
@@ -1147,8 +1147,9 @@ const PricingApp = () => {
         const matchBranchCost = String(row.branch_cost || '').toLowerCase().includes(dailyReportFilters.branch_cost.toLowerCase());
         const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(dailyReportFilters.cost_per_carton.toLowerCase());
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(dailyReportFilters.allocated_cost.toLowerCase());
+        const matchSalesAmount = String(row.sales_amount || '').toLowerCase().includes(dailyReportFilters.sales_amount.toLowerCase());
 
-        return matchBranch && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchDriverName && matchCtns && matchDriverTotal && matchBranchCost && matchCostPerCarton && matchAllocatedCost;
+        return matchBranch && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchDriverName && matchCtns && matchDriverTotal && matchBranchCost && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
       });
 
       const filteredTownshipReportData = dailyTownshipReportData.filter(row => {
@@ -1163,8 +1164,9 @@ const PricingApp = () => {
         const matchCostPerDropPoint = String(row.cost_per_drop_point || '').toLowerCase().includes(townshipFilters.cost_per_drop_point.toLowerCase());
         const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(townshipFilters.cost_per_carton.toLowerCase());
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(townshipFilters.allocated_cost.toLowerCase());
+        const matchSalesAmount = String(row.sales_amount || '').toLowerCase().includes(townshipFilters.sales_amount.toLowerCase());
         
-        return matchBranch && matchDriver && matchTownship && matchCustomer && matchCtns && matchDriverTotal && matchBranchCost && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost;
+        return matchBranch && matchDriver && matchTownship && matchCustomer && matchCtns && matchDriverTotal && matchBranchCost && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
       });
 
       return (
@@ -1263,11 +1265,15 @@ const PricingApp = () => {
                                                   <div>Allocated Cost</div>
                                                   <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.allocated_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, allocated_cost: e.target.value})} />
                                               </th>
+                                              <th className="border p-2 text-right text-green-700">
+                                                  <div>Sales Amount</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.sales_amount} onChange={(e) => setDailyReportFilters({...dailyReportFilters, sales_amount: e.target.value})} />
+                                              </th>
                                           </tr>
                                       </thead>
                                       <tbody>
                                           {filteredDailyReportData.length === 0 ? (
-                                              <tr><td colSpan="11" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date or matching filters.</td></tr>
+                                              <tr><td colSpan="12" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date or matching filters.</td></tr>
                                           ) : (
                                               filteredDailyReportData.map((row, idx) => (
                                                   <tr key={idx} className="hover:bg-gray-50 text-sm">
@@ -1282,6 +1288,7 @@ const PricingApp = () => {
                                                       <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>
                                                       <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
                                                       <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
+                                                      <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.sales_amount)}</td>
                                                   </tr>
                                               ))
                                           )}
@@ -1342,11 +1349,15 @@ const PricingApp = () => {
                                                   <div>Allocated Cost</div>
                                                   <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.allocated_cost} onChange={(e) => setTownshipFilters({...townshipFilters, allocated_cost: e.target.value})} />
                                               </th>
+                                              <th className="border p-2 text-right text-green-700">
+                                                  <div>Sales Amount</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.sales_amount} onChange={(e) => setTownshipFilters({...townshipFilters, sales_amount: e.target.value})} />
+                                              </th>
                                           </tr>
                                       </thead>
                                       <tbody>
                                           {filteredTownshipReportData.length === 0 ? (
-                                              <tr><td colSpan="11" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
+                                              <tr><td colSpan="12" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
                                           ) : (
                                               filteredTownshipReportData.map((row, idx) => (
                                                   <tr key={idx} className="hover:bg-gray-50 text-sm">
@@ -1361,6 +1372,7 @@ const PricingApp = () => {
                                                       <td className="border p-2 text-right font-bold text-orange-600">{formatNumber(row.cost_per_drop_point)}</td>
                                                       <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
                                                       <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
+                                                      <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.sales_amount)}</td>
                                                   </tr>
                                               ))
                                           )}
