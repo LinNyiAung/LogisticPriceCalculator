@@ -197,6 +197,26 @@ const PricingApp = () => {
   const [rateCartLogsData, setRateCartLogsData] = useState([]);
   const [currentLogRateCartLocation, setCurrentLogRateCartLocation] = useState('');
 
+  // --- Pagination (Load More) State ---
+  const INITIAL_LOAD_COUNT = 50;
+  const [visibleCounts, setVisibleCounts] = useState({
+    history: INITIAL_LOAD_COUNT,
+    items: INITIAL_LOAD_COUNT,
+    dailyItem: INITIAL_LOAD_COUNT,
+    dailyTownship: INITIAL_LOAD_COUNT
+  });
+
+  const loadMore = (key) => {
+    setVisibleCounts(prev => ({ ...prev, [key]: prev[key] + INITIAL_LOAD_COUNT }));
+  };
+
+  // Reset pagination when search filters change
+  useEffect(() => { setVisibleCounts(prev => ({ ...prev, history: INITIAL_LOAD_COUNT })); }, [historyFilters]);
+  useEffect(() => { setVisibleCounts(prev => ({ ...prev, items: INITIAL_LOAD_COUNT })); }, [itemFilters]);
+  useEffect(() => { setVisibleCounts(prev => ({ ...prev, dailyItem: INITIAL_LOAD_COUNT })); }, [dailyReportFilters]);
+  useEffect(() => { setVisibleCounts(prev => ({ ...prev, dailyTownship: INITIAL_LOAD_COUNT })); }, [townshipFilters]);
+
+
   // --- Formatting & UI Helpers ---
   const formatNumber = (num) => {
     if (num === null || num === undefined || num === '') return '-';
@@ -646,7 +666,6 @@ const PricingApp = () => {
     if (gateInfo) setCalculationType(gateInfo.calculation_type);
   };
 
-  // UPDATED: Attempt to load from PG (Live DWBI) first. If it fails, fallback to SQLite.
   const loadSavedCalculation = async (record) => {
     try {
       setCurrentPage('calculator');
@@ -1169,6 +1188,9 @@ const PricingApp = () => {
         return matchBranch && matchDriver && matchTownship && matchCustomer && matchCtns && matchDriverTotal && matchBranchCost && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
       });
 
+      const displayedDailyItem = filteredDailyReportData.slice(0, visibleCounts.dailyItem);
+      const displayedDailyTownship = filteredTownshipReportData.slice(0, visibleCounts.dailyTownship);
+
       return (
           <div className="min-h-screen bg-gray-50 p-6">
               <div className="max-w-full mx-auto">
@@ -1217,7 +1239,7 @@ const PricingApp = () => {
                       {/* --- ITEM LEVEL TABLE TAB CONTENT --- */}
                       {activeDailyTab === 'item' && (
                           <div className="animation-fade-in">
-                              <div className="overflow-x-auto border rounded mb-8">
+                              <div className="overflow-x-auto border rounded mb-4">
                                   <table className="w-full border-collapse">
                                       <thead className="bg-gray-100 sticky top-0">
                                           <tr>
@@ -1272,10 +1294,10 @@ const PricingApp = () => {
                                           </tr>
                                       </thead>
                                       <tbody>
-                                          {filteredDailyReportData.length === 0 ? (
+                                          {displayedDailyItem.length === 0 ? (
                                               <tr><td colSpan="12" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date or matching filters.</td></tr>
                                           ) : (
-                                              filteredDailyReportData.map((row, idx) => (
+                                              displayedDailyItem.map((row, idx) => (
                                                   <tr key={idx} className="hover:bg-gray-50 text-sm">
                                                       <td className="border p-2 font-bold text-gray-700">{row.branch}</td>
                                                       <td className="border p-2">{row.driver_name}</td>
@@ -1295,13 +1317,20 @@ const PricingApp = () => {
                                       </tbody>
                                   </table>
                               </div>
+                              {visibleCounts.dailyItem < filteredDailyReportData.length && (
+                                  <div className="flex justify-center mb-6">
+                                      <button onClick={() => loadMore('dailyItem')} className="px-6 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
+                                          Load More ({filteredDailyReportData.length - visibleCounts.dailyItem} remaining)
+                                      </button>
+                                  </div>
+                              )}
                           </div>
                       )}
 
                       {/* --- TOWNSHIP LEVEL TABLE TAB CONTENT --- */}
                       {activeDailyTab === 'township' && (
                           <div className="animation-fade-in">
-                              <div className="overflow-x-auto border rounded">
+                              <div className="overflow-x-auto border rounded mb-4">
                                   <table className="w-full border-collapse">
                                       <thead className="bg-gray-100 sticky top-0">
                                           <tr>
@@ -1356,10 +1385,10 @@ const PricingApp = () => {
                                           </tr>
                                       </thead>
                                       <tbody>
-                                          {filteredTownshipReportData.length === 0 ? (
+                                          {displayedDailyTownship.length === 0 ? (
                                               <tr><td colSpan="12" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
                                           ) : (
-                                              filteredTownshipReportData.map((row, idx) => (
+                                              displayedDailyTownship.map((row, idx) => (
                                                   <tr key={idx} className="hover:bg-gray-50 text-sm">
                                                       <td className="border p-2 font-bold text-gray-700">{row.branch}</td>
                                                       <td className="border p-2">{row.driver_name}</td>
@@ -1379,6 +1408,13 @@ const PricingApp = () => {
                                       </tbody>
                                   </table>
                               </div>
+                              {visibleCounts.dailyTownship < filteredTownshipReportData.length && (
+                                  <div className="flex justify-center mb-6">
+                                      <button onClick={() => loadMore('dailyTownship')} className="px-6 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
+                                          Load More ({filteredTownshipReportData.length - visibleCounts.dailyTownship} remaining)
+                                      </button>
+                                  </div>
+                              )}
                           </div>
                       )}
                   </div>
@@ -1424,6 +1460,8 @@ const PricingApp = () => {
       return matchIdStatus && matchDate && matchRoute && matchDocNums && matchTotalCost && matchAuthor;
     });
 
+    const displayedHistory = filteredHistory.slice(0, visibleCounts.history);
+
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
@@ -1431,7 +1469,7 @@ const PricingApp = () => {
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h1 className="text-3xl font-bold text-gray-800 mb-6">Calculation History</h1>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto mb-4">
               <table className="w-full border-collapse border">
                 <thead className="bg-gray-100">
                   <tr>
@@ -1444,7 +1482,7 @@ const PricingApp = () => {
                     <th className="border p-2 text-center align-top">Actions</th>
                   </tr>
                 </thead>
-                <tbody>{filteredHistory.length === 0 ? (<tr><td colSpan="7" className="text-center p-4 text-gray-500">No matching calculations found.</td></tr>) : (filteredHistory.map((record) => (
+                <tbody>{displayedHistory.length === 0 ? (<tr><td colSpan="7" className="text-center p-4 text-gray-500">No matching calculations found.</td></tr>) : (displayedHistory.map((record) => (
                     <tr key={record.id} className="hover:bg-gray-50">
                         <td className="border p-3"><span className="text-sm text-gray-600 font-bold block mb-1">#{record.id}</span><span className={`px-2 py-1 rounded text-xs font-bold uppercase ${record.status === 'claimed' ? 'bg-blue-100 text-blue-700' : record.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{record.status}</span></td>
                         <td className="border p-3 text-sm text-gray-600"><div className="font-semibold">{record.created_at}</div></td>
@@ -1469,6 +1507,13 @@ const PricingApp = () => {
                 </tbody>
               </table>
             </div>
+            {visibleCounts.history < filteredHistory.length && (
+                <div className="flex justify-center mb-2">
+                    <button onClick={() => loadMore('history')} className="px-6 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
+                        Load More ({filteredHistory.length - visibleCounts.history} remaining)
+                    </button>
+                </div>
+            )}
           </div>
         </div>
       </div>
@@ -1511,6 +1556,8 @@ const PricingApp = () => {
       return matchCode && matchName && matchPrincipal && matchBrand && matchCost;
     });
 
+    const displayedItems = filteredItems.slice(0, visibleCounts.items);
+
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
@@ -1538,35 +1585,44 @@ const PricingApp = () => {
             </div>
 
             {selectedGateForPricing && (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse border text-sm">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="border p-2 text-left"><div>Item Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_code} onChange={(e) => setItemFilters({...itemFilters, item_code: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Item Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_name} onChange={(e) => setItemFilters({...itemFilters, item_name: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.principal} onChange={(e) => setItemFilters({...itemFilters, principal: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Brand</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.brand} onChange={(e) => setItemFilters({...itemFilters, brand: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Transport Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.transportation_cost} onChange={(e) => setItemFilters({...itemFilters, transportation_cost: e.target.value})} /></th>
-                      <th className="border p-2 text-left">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredItems.map((item, index) => (
-                      <tr key={index}>
-                        <td className="border p-2">{item.item_code}</td><td className="border p-2">{item.item_name}</td><td className="border p-2">{item.principal}</td><td className="border p-2">{item.brand}</td><td className="border p-2">{formatNumber(item.transportation_cost)}</td>
-                        <td className="border p-2">
-                          <div className="flex gap-2">
-                                <button onClick={() => fetchItemLogs(item)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
-                                {permissions.includes('edit_item') && <button onClick={() => { setOriginalItemCode(item.item_code); setEditingItem(item); setShowAddItemModal(true); }} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={14} /></button>}
-                                {permissions.includes('delete_item') && <button onClick={() => deleteItem(item.item_code)} className="p-1 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={14} /></button>}
-                          </div>
-                        </td>
+              <>
+                <div className="overflow-x-auto mb-4">
+                  <table className="w-full border-collapse border text-sm">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="border p-2 text-left"><div>Item Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_code} onChange={(e) => setItemFilters({...itemFilters, item_code: e.target.value})} /></th>
+                        <th className="border p-2 text-left"><div>Item Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_name} onChange={(e) => setItemFilters({...itemFilters, item_name: e.target.value})} /></th>
+                        <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.principal} onChange={(e) => setItemFilters({...itemFilters, principal: e.target.value})} /></th>
+                        <th className="border p-2 text-left"><div>Brand</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.brand} onChange={(e) => setItemFilters({...itemFilters, brand: e.target.value})} /></th>
+                        <th className="border p-2 text-left"><div>Transport Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.transportation_cost} onChange={(e) => setItemFilters({...itemFilters, transportation_cost: e.target.value})} /></th>
+                        <th className="border p-2 text-left">Actions</th>
                       </tr>
-                    ))}
-                    {filteredItems.length === 0 && (<tr><td colSpan="6" className="text-center p-4 text-gray-500 italic">No items found matching your filters.</td></tr>)}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {displayedItems.map((item, index) => (
+                        <tr key={index}>
+                          <td className="border p-2">{item.item_code}</td><td className="border p-2">{item.item_name}</td><td className="border p-2">{item.principal}</td><td className="border p-2">{item.brand}</td><td className="border p-2">{formatNumber(item.transportation_cost)}</td>
+                          <td className="border p-2">
+                            <div className="flex gap-2">
+                                  <button onClick={() => fetchItemLogs(item)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
+                                  {permissions.includes('edit_item') && <button onClick={() => { setOriginalItemCode(item.item_code); setEditingItem(item); setShowAddItemModal(true); }} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={14} /></button>}
+                                  {permissions.includes('delete_item') && <button onClick={() => deleteItem(item.item_code)} className="p-1 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={14} /></button>}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {displayedItems.length === 0 && (<tr><td colSpan="6" className="text-center p-4 text-gray-500 italic">No items found matching your filters.</td></tr>)}
+                    </tbody>
+                  </table>
+                </div>
+                {visibleCounts.items < filteredItems.length && (
+                    <div className="flex justify-center mb-2">
+                        <button onClick={() => loadMore('items')} className="px-6 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
+                            Load More ({filteredItems.length - visibleCounts.items} remaining)
+                        </button>
+                    </div>
+                )}
+              </>
             )}
           </div>
           {showAddItemModal && <ItemModal item={editingItem} onSave={saveItem} onClose={() => { setShowAddItemModal(false); setEditingItem(null); setOriginalItemCode(null); }} />}
