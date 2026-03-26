@@ -165,7 +165,7 @@ const PricingApp = () => {
   });
   
   const [townshipFilters, setTownshipFilters] = useState({ 
-    branch: '', driver_name: '', township: '', customer_code: '', ctns: '', driver_total_ctns: '', branch_cost: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: '' 
+    branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', driver_total_ctns: '', branch_cost: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: '' 
   });
 
   // User & Role Management State
@@ -1176,6 +1176,7 @@ const PricingApp = () => {
         const matchDriver = (row.driver_name || '').toLowerCase().includes(townshipFilters.driver_name.toLowerCase());
         const matchTownship = (row.township || '').toLowerCase().includes(townshipFilters.township.toLowerCase());
         const matchCustomer = (row.customer_code || '').toLowerCase().includes(townshipFilters.customer_code.toLowerCase());
+        const matchContactPerson = (row.contact_person || '').toLowerCase().includes(townshipFilters.contact_person.toLowerCase());
         const matchCtns = String(row.ctns || '').toLowerCase().includes(townshipFilters.ctns.toLowerCase());
         const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(townshipFilters.driver_total_ctns.toLowerCase());
         const matchBranchCost = String(row.branch_cost || '').toLowerCase().includes(townshipFilters.branch_cost.toLowerCase());
@@ -1185,7 +1186,7 @@ const PricingApp = () => {
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(townshipFilters.allocated_cost.toLowerCase());
         const matchSalesAmount = String(row.sales_amount || '').toLowerCase().includes(townshipFilters.sales_amount.toLowerCase());
         
-        return matchBranch && matchDriver && matchTownship && matchCustomer && matchCtns && matchDriverTotal && matchBranchCost && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
+        return matchBranch && matchDriver && matchTownship && matchCustomer && matchContactPerson && matchCtns && matchDriverTotal && matchBranchCost && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
       });
 
       const displayedDailyItem = filteredDailyReportData.slice(0, visibleCounts.dailyItem);
@@ -1350,6 +1351,10 @@ const PricingApp = () => {
                                                   <div>Customer Code</div>
                                                   <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={townshipFilters.customer_code} onChange={(e) => setTownshipFilters({...townshipFilters, customer_code: e.target.value})} />
                                               </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Contact Person</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={townshipFilters.contact_person} onChange={(e) => setTownshipFilters({...townshipFilters, contact_person: e.target.value})} />
+                                              </th>
                                               <th className="border p-2 text-right">
                                                   <div>Customer Total (Ctns)</div>
                                                   <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.ctns} onChange={(e) => setTownshipFilters({...townshipFilters, ctns: e.target.value})} />
@@ -1386,7 +1391,7 @@ const PricingApp = () => {
                                       </thead>
                                       <tbody>
                                           {displayedDailyTownship.length === 0 ? (
-                                              <tr><td colSpan="12" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
+                                              <tr><td colSpan="13" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
                                           ) : (
                                               displayedDailyTownship.map((row, idx) => (
                                                   <tr key={idx} className="hover:bg-gray-50 text-sm">
@@ -1394,6 +1399,7 @@ const PricingApp = () => {
                                                       <td className="border p-2">{row.driver_name}</td>
                                                       <td className="border p-2">{row.township}</td>
                                                       <td className="border p-2">{row.customer_code}</td>
+                                                      <td className="border p-2">{row.contact_person}</td>
                                                       <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                       <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
                                                       <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>

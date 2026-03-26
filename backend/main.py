@@ -968,7 +968,15 @@ def _get_daily_report_data(target_date: str):
         driver_name = row[5].strip() if row[5] else ""
         ctns = float(row[6]) if row[6] else 0.0
         customer_code = row[7].strip() if row[7] else "UNKNOWN"
-        contact_person = row[8].strip() if row[8] else ""
+        
+        # --- NEW LOGIC: Clean the Contact Person string ---
+        contact_person_raw = row[8].strip() if row[8] else ""
+        if " - " in contact_person_raw:
+            contact_person = contact_person_raw.split(" - ", 1)[-1].strip()
+        else:
+            contact_person = contact_person_raw
+        # -------------------------------------------------
+        
         township = row[9].strip() if row[9] else "UNKNOWN"
         sales_amount = float(row[10]) if row[10] else 0.0
 
