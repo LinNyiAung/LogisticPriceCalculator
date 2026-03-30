@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Scissors, Calendar, ShoppingCart, Percent } from 'lucide-react';
-
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Scissors, Calendar, ShoppingCart, Percent, BarChart2 } from 'lucide-react';
 const API_URL = 'http://localhost:8000';
 
 const AVAILABLE_PERMISSIONS = [
+  { id: 'view_dashboard', label: 'View Dashboard' },
   { id: 'view_users', label: 'View Users' },
   { id: 'add_user', label: 'Add User' },
   { id: 'edit_user', label: 'Edit User' },
@@ -99,6 +99,20 @@ const PricingApp = () => {
   const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || null);
   const [username, setUsername] = useState(localStorage.getItem('username') || '');
   const [permissions, setPermissions] = useState(JSON.parse(localStorage.getItem('permissions')) || []);
+
+
+  // --- Dashboard State ---
+  const [dashboardData, setDashboardData] = useState([]);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(false);
+  const [dashboardSearchTerm, setDashboardSearchTerm] = useState('');
+  
+  // Set default month to current local month (YYYY-MM)
+  const getCurrentMonthString = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  };
+  const [dashboardMonth, setDashboardMonth] = useState(getCurrentMonthString());
+
 
   // App State
   const [currentPage, setCurrentPage] = useState('calculator');
@@ -360,6 +374,25 @@ const PricingApp = () => {
       } catch (error) { showNotification(`Error loading rate carts: ${error.message}`, 'error'); }
   };
 
+
+  const fetchDashboardData = async (monthToFetch) => {
+    setIsDashboardLoading(true);
+    try {
+      const response = await authFetch(`${API_URL}/dashboard/brand-allocation-cost?target_month=${encodeURIComponent(monthToFetch)}`);
+      if (response.ok) {
+        const result = await response.json();
+        setDashboardData(result.data || []);
+      } else {
+        const error = await response.json();
+        showNotification(getErrorMessage(error), 'error');
+      }
+    } catch (error) {
+      showNotification(`Error fetching dashboard: ${error.message}`, 'error');
+    } finally {
+      setIsDashboardLoading(false);
+    }
+  };
+
   const fetchDailyReport = async (targetDate) => {
       setIsDailyReportLoading(true);
       try {
@@ -582,7 +615,10 @@ const PricingApp = () => {
     if (token && currentPage === 'references' && permissions.includes('view_references')) loadReferenceData();
     if (token && currentPage === 'rate_carts' && permissions.includes('view_rate_carts')) { loadRateCarts(); loadReferenceData(); }
     if (token && currentPage === 'daily_report' && permissions.includes('view_daily_report')) { fetchDailyReport(dailyReportDate); }
-  }, [currentPage, token, permissions]);
+    if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { 
+        fetchDashboardData(dashboardMonth); 
+    }
+  }, [currentPage, token, permissions]); // Only trigger on page load or auth change
 
   useEffect(() => {
     const checkManualCostStatus = async () => {
@@ -1044,6 +1080,7 @@ const PricingApp = () => {
           {permissions.includes('view_items') && <button onClick={() => setCurrentPage('items')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><FileText size={18} /> Items</button>}
           {permissions.includes('view_rate_carts') && <button onClick={() => setCurrentPage('rate_carts')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'rate_carts' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Percent size={18} /> Rate Carts</button>}
           {permissions.includes('view_daily_report') && <button onClick={() => setCurrentPage('daily_report')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'daily_report' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calendar size={18} /> Daily Report</button>}
+          {permissions.includes('view_dashboard') && <button onClick={() => setCurrentPage('dashboard')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><BarChart2 size={18} /> Dashboard</button>}
           <button onClick={() => setCurrentPage('history')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><History size={18} /> History</button>
           {permissions.includes('view_references') && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={18} /> References</button>)}
           {permissions.includes('view_users') && (<button onClick={() => setCurrentPage('users')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Users size={18} /> Users</button>)}
@@ -1059,6 +1096,104 @@ const PricingApp = () => {
 
   // --- Views ---
   if (!token) return <LoginScreen onLogin={handleLogin} />;
+
+
+  if (currentPage === 'dashboard' && permissions.includes('view_dashboard')) {
+    const filteredDashboardData = dashboardData.filter(row => 
+      row.brand.toLowerCase().includes(dashboardSearchTerm.toLowerCase())
+    );
+
+    const month0Label = dashboardData.length > 0 ? dashboardData[0].month_0_label : 'Selected Month';
+    const month1Label = dashboardData.length > 0 ? dashboardData[0].month_1_label : '1 Month Ago';
+    const month2Label = dashboardData.length > 0 ? dashboardData[0].month_2_label : '2 Months Ago';
+
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
+          {renderNavigation()}
+          
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h1 className="text-3xl font-bold text-gray-800">Management Dashboard</h1>
+              <div className="flex items-center gap-4">
+                  <input 
+                      type="month"
+                      value={dashboardMonth}
+                      onChange={(e) => {
+                          setDashboardMonth(e.target.value);
+                          fetchDashboardData(e.target.value);
+                      }}
+                      className="border p-2 rounded-lg"
+                  />
+                  <button onClick={() => fetchDashboardData(dashboardMonth)} disabled={isDashboardLoading} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400">
+                    {isDashboardLoading ? 'Refreshing...' : 'Refresh Data'}
+                  </button>
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Average Allocated Cost per Brand</h2>
+              
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full border-collapse">
+                  <thead className="bg-gray-100 sticky top-0">
+                    <tr>
+                      <th className="border p-3 text-left">
+                        <div>Brand</div>
+                        <input type="text" placeholder="Filter brand..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dashboardSearchTerm} onChange={(e) => setDashboardSearchTerm(e.target.value)} />
+                      </th>
+                      <th className="border p-3 text-right">
+                        <div className="text-blue-700">{month0Label} Avg (MMK)</div>
+                        <div className="text-xs text-gray-500 font-normal">Per Carton</div>
+                      </th>
+                      <th className="border p-3 text-right">
+                        <div className="text-purple-700">{month1Label} Avg (MMK)</div>
+                        <div className="text-xs text-gray-500 font-normal">Per Carton</div>
+                      </th>
+                      <th className="border p-3 text-right">
+                        <div className="text-orange-700">{month2Label} Avg (MMK)</div>
+                        <div className="text-xs text-gray-500 font-normal">Per Carton</div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {isDashboardLoading ? (
+                      <tr><td colSpan="4" className="text-center p-8 text-gray-500 font-semibold">Calculating dashboard data... this may take a moment.</td></tr>
+                    ) : filteredDashboardData.length === 0 ? (
+                      <tr><td colSpan="4" className="text-center p-6 text-gray-500 italic">No brand data available for this period.</td></tr>
+                    ) : (
+                      filteredDashboardData.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                          <td className="border p-3 font-bold text-gray-800">{row.brand}</td>
+                          <td className="border p-3 text-right">
+                            <span className="font-semibold text-blue-700">{formatNumber(row['month_0_avg_cost'])}</span>
+                            <div className="text-xs text-gray-400 mt-1">Total Ctns: {formatNumber(row['month_0_total_ctns'])} ctns</div>
+                            <div className="text-xs text-gray-400 mt-1">Total Cost: {formatNumber(row['month_0_total_cost'])} mmk</div>
+                          </td>
+                          <td className="border p-3 text-right">
+                            <span className="font-semibold text-purple-700">{formatNumber(row['month_1_avg_cost'])}</span>
+                            <div className="text-xs text-gray-400 mt-1">Total Ctns: {formatNumber(row['month_1_total_ctns'])} ctns</div>
+                            <div className="text-xs text-gray-400 mt-1">Total Cost: {formatNumber(row['month_1_total_cost'])} mmk</div>
+                          </td>
+                          <td className="border p-3 text-right">
+                            <span className="font-semibold text-orange-700">{formatNumber(row['month_2_avg_cost'])}</span>
+                            <div className="text-xs text-gray-400 mt-1">Total Ctns: {formatNumber(row['month_2_total_ctns'])} ctns</div>
+                            <div className="text-xs text-gray-400 mt-1">Total Cost: {formatNumber(row['month_2_total_cost'])} mmk</div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (currentPage === 'roles' && permissions.includes('view_roles')) {
     return (
