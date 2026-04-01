@@ -1231,7 +1231,7 @@ const PricingApp = () => {
                     <tr>
                       <th className="border p-4 text-left font-bold text-gray-600 uppercase text-sm tracking-wider">Brand</th>
                       <th className="border p-4 text-right">
-                        <div className="text-blue-700 font-bold">{month0Label}</div>
+                        <div className="text-orange-700 font-bold">{month2Label}</div>
                         <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
                       </th>
                       <th className="border p-4 text-right">
@@ -1239,7 +1239,7 @@ const PricingApp = () => {
                         <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
                       </th>
                       <th className="border p-4 text-right">
-                        <div className="text-orange-700 font-bold">{month2Label}</div>
+                        <div className="text-blue-700 font-bold">{month0Label}</div>
                         <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
                       </th>
                     </tr>
@@ -1253,9 +1253,9 @@ const PricingApp = () => {
                       <tr className="bg-white hover:bg-gray-50 transition-colors">
                         <td className="border p-4 font-black text-gray-800 text-xl">{selectedRow.brand}</td>
                         <td className="border p-4 text-right">
-                          <span className="font-black text-2xl text-blue-700">{formatNumber(selectedRow['month_0_avg_cost'])}</span>
-                          <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedRow['month_0_total_ctns'])}</span></div>
-                          <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedRow['month_0_total_cost'])}</span> mmk</div>
+                          <span className="font-bold text-xl text-orange-700">{formatNumber(selectedRow['month_2_avg_cost'])}</span>
+                          <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedRow['month_2_total_ctns'])}</span></div>
+                          <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedRow['month_2_total_cost'])}</span> mmk</div>
                         </td>
                         <td className="border p-4 text-right">
                           <span className="font-bold text-xl text-purple-700">{formatNumber(selectedRow['month_1_avg_cost'])}</span>
@@ -1263,9 +1263,9 @@ const PricingApp = () => {
                           <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedRow['month_1_total_cost'])}</span> mmk</div>
                         </td>
                         <td className="border p-4 text-right">
-                          <span className="font-bold text-xl text-orange-700">{formatNumber(selectedRow['month_2_avg_cost'])}</span>
-                          <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedRow['month_2_total_ctns'])}</span></div>
-                          <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedRow['month_2_total_cost'])}</span> mmk</div>
+                          <span className="font-black text-2xl text-blue-700">{formatNumber(selectedRow['month_0_avg_cost'])}</span>
+                          <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedRow['month_0_total_ctns'])}</span></div>
+                          <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedRow['month_0_total_cost'])}</span> mmk</div>
                         </td>
                       </tr>
                     )}
