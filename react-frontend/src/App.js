@@ -100,17 +100,28 @@ const PricingApp = () => {
   const [username, setUsername] = useState(localStorage.getItem('username') || '');
   const [permissions, setPermissions] = useState(JSON.parse(localStorage.getItem('permissions')) || []);
 
+
+  // --- Dashboard State ---
+  const [dashboardTab, setDashboardTab] = useState('allocation'); // NEW: 'allocation' or 'calculated'
+  
   // --- Dashboard State ---
   const [dashboardData, setDashboardData] = useState([]);
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
   const [selectedDashboardBrand, setSelectedDashboardBrand] = useState(''); 
+
+
+  const [calcDashboardData, setCalcDashboardData] = useState([]);
+  const [isCalcDashboardLoading, setIsCalcDashboardLoading] = useState(false);
+  const [selectedCalcDashboardBrand, setSelectedCalcDashboardBrand] = useState('');
   
   // Set default month to current local month (YYYY-MM)
   const getCurrentMonthString = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   };
+  
   const [dashboardMonth, setDashboardMonth] = useState(getCurrentMonthString());
+  const [calcDashboardMonth, setCalcDashboardMonth] = useState(getCurrentMonthString()); // NEW
 
   // App State
   const [currentPage, setCurrentPage] = useState('calculator');
@@ -395,6 +406,32 @@ const PricingApp = () => {
     }
   };
 
+
+  // NEW: Fetch Calculated Dashboard Data
+  const fetchCalcDashboardData = async (monthToFetch) => {
+    setIsCalcDashboardLoading(true);
+    try {
+      const response = await authFetch(`${API_URL}/dashboard/calculated-brand-cost?target_month=${encodeURIComponent(monthToFetch)}`);
+      if (response.ok) {
+        const result = await response.json();
+        setCalcDashboardData(result.data || []);
+        
+        if (result.data && result.data.length > 0) {
+            setSelectedCalcDashboardBrand(result.data[0].brand);
+        } else {
+            setSelectedCalcDashboardBrand('');
+        }
+      } else {
+        const error = await response.json();
+        showNotification(getErrorMessage(error), 'error');
+      }
+    } catch (error) {
+      showNotification(`Error fetching calculated dashboard: ${error.message}`, 'error');
+    } finally {
+      setIsCalcDashboardLoading(false);
+    }
+  };
+
   const fetchDailyReport = async (targetDate) => {
       setIsDailyReportLoading(true);
       try {
@@ -617,10 +654,16 @@ const PricingApp = () => {
     if (token && currentPage === 'references' && permissions.includes('view_references')) loadReferenceData();
     if (token && currentPage === 'rate_carts' && permissions.includes('view_rate_carts')) { loadRateCarts(); loadReferenceData(); }
     if (token && currentPage === 'daily_report' && permissions.includes('view_daily_report')) { fetchDailyReport(dailyReportDate); }
+    
+    // UPDATED: Dashboard Fetch Logic
     if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { 
-        fetchDashboardData(dashboardMonth); 
+        if (dashboardTab === 'allocation') {
+            fetchDashboardData(dashboardMonth); 
+        } else if (dashboardTab === 'calculated') {
+            fetchCalcDashboardData(calcDashboardMonth);
+        }
     }
-  }, [currentPage, token, permissions]); 
+  }, [currentPage, token, permissions, dashboardTab]); // Added dashboardTab dependency
 
   useEffect(() => {
     const checkManualCostStatus = async () => {
@@ -1095,12 +1138,26 @@ const PricingApp = () => {
 
 
   if (currentPage === 'dashboard' && permissions.includes('view_dashboard')) {
-    const month0Label = dashboardData.length > 0 ? dashboardData[0].month_0_label : 'Selected Month';
-    const month1Label = dashboardData.length > 0 ? dashboardData[0].month_1_label : '1 Month Ago';
-    const month2Label = dashboardData.length > 0 ? dashboardData[0].month_2_label : '2 Months Ago';
+    
+    // --- Dynamic Data Mapping based on Active Tab ---
+    const activeData = dashboardTab === 'allocation' ? dashboardData : calcDashboardData;
+    const activeLoading = dashboardTab === 'allocation' ? isDashboardLoading : isCalcDashboardLoading;
+    const activeSelectedBrand = dashboardTab === 'allocation' ? selectedDashboardBrand : selectedCalcDashboardBrand;
+    const setActiveSelectedBrand = dashboardTab === 'allocation' ? setSelectedDashboardBrand : setSelectedCalcDashboardBrand;
+    const activeMonth = dashboardTab === 'allocation' ? dashboardMonth : calcDashboardMonth;
+    const setActiveMonth = dashboardTab === 'allocation' ? setDashboardMonth : setCalcDashboardMonth;
+    const activeFetch = dashboardTab === 'allocation' ? fetchDashboardData : fetchCalcDashboardData;
+    
+    // Theme mappings (Tailwind needs full class names, no dynamic string interpolation for colors)
+    const theme = dashboardTab === 'allocation' 
+        ? { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', selectText: 'text-blue-900', btn: 'bg-blue-600 hover:bg-blue-700', activeTab: 'border-blue-600 text-blue-600 bg-blue-50' }
+        : { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-800', selectText: 'text-green-900', btn: 'bg-green-600 hover:bg-green-700', activeTab: 'border-green-600 text-green-600 bg-green-50' };
 
-    // Find the currently selected brand row
-    const selectedRow = dashboardData.find(r => r.brand === selectedDashboardBrand) || dashboardData[0];
+    const month0Label = activeData.length > 0 ? activeData[0].month_0_label : 'Selected Month';
+    const month1Label = activeData.length > 0 ? activeData[0].month_1_label : '1 Month Ago';
+    const month2Label = activeData.length > 0 ? activeData[0].month_2_label : '2 Months Ago';
+
+    const selectedRow = activeData.find(r => r.brand === activeSelectedBrand) || activeData[0];
 
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -1109,46 +1166,64 @@ const PricingApp = () => {
           {renderNavigation()}
           
           <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 border-b pb-4">
-              <h1 className="text-3xl font-bold text-gray-800">Brand Allocation Dashboard</h1>
-              
-              {/* --- NEW: Universal Dashboard Controls --- */}
-              <div className="flex flex-wrap items-center gap-4">
-                  {!isDashboardLoading && dashboardData.length > 0 && (
-                      <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-lg border border-blue-200">
-                          <label className="text-sm font-semibold text-blue-800 whitespace-nowrap">Selected Brand:</label>
-                          <select
-                              value={selectedDashboardBrand}
-                              onChange={(e) => setSelectedDashboardBrand(e.target.value)}
-                              className="p-1 bg-transparent focus:outline-none font-bold text-blue-900 cursor-pointer text-lg"
-                          >
-                              {dashboardData.map(r => (
-                                  <option key={r.brand} value={r.brand}>{r.brand}</option>
-                              ))}
-                          </select>
-                      </div>
-                  )}
-
-                  <div className="flex items-center gap-2">
-                      <input 
-                          type="month"
-                          value={dashboardMonth}
-                          onChange={(e) => {
-                              setDashboardMonth(e.target.value);
-                              fetchDashboardData(e.target.value);
-                          }}
-                          className="border p-2 rounded-lg"
-                      />
-                      <button onClick={() => fetchDashboardData(dashboardMonth)} disabled={isDashboardLoading} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400">
-                        {isDashboardLoading ? 'Refreshing...' : 'Refresh'}
-                      </button>
-                  </div>
-              </div>
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-2 gap-4">
+              <h1 className="text-3xl font-bold text-gray-800">Logistic Cost Dashboard</h1>
             </div>
 
-            {/* --- Table Section (Single Selected Brand) --- */}
+            {/* --- TAB NAVIGATION --- */}
+            <div className="flex border-b mb-6 border-gray-200">
+                <button
+                    className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${dashboardTab === 'allocation' ? theme.activeTab : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                    onClick={() => setDashboardTab('allocation')}
+                >
+                    Daily Report Allocation
+                </button>
+                <button
+                    className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${dashboardTab === 'calculated' ? theme.activeTab : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                    onClick={() => setDashboardTab('calculated')}
+                >
+                    Submitted Calculated Cost
+                </button>
+            </div>
+            
+            {/* --- Dashboard Controls --- */}
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4 mb-8">
+                <div>
+                    {!activeLoading && activeData.length > 0 && (
+                        <div className={`flex items-center gap-2 ${theme.bg} px-4 py-2 rounded-lg border ${theme.border}`}>
+                            <label className={`text-sm font-semibold ${theme.text} whitespace-nowrap`}>Selected Brand:</label>
+                            <select
+                                value={activeSelectedBrand}
+                                onChange={(e) => setActiveSelectedBrand(e.target.value)}
+                                className={`p-1 bg-transparent focus:outline-none font-bold ${theme.selectText} cursor-pointer text-lg`}
+                            >
+                                {activeData.map(r => (
+                                    <option key={r.brand} value={r.brand}>{r.brand}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <input 
+                        type="month"
+                        value={activeMonth}
+                        onChange={(e) => {
+                            setActiveMonth(e.target.value);
+                            activeFetch(e.target.value);
+                        }}
+                        className="border p-2 rounded-lg"
+                    />
+                    <button onClick={() => activeFetch(activeMonth)} disabled={activeLoading} className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition disabled:bg-gray-400 ${theme.btn}`}>
+                    {activeLoading ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                </div>
+            </div>
+
+            {/* --- Table Section --- */}
             <div className="mb-10">
-              <h2 className="text-xl font-bold text-gray-700 mb-4">3-Month Average Allocated Cost</h2>
+              <h2 className="text-xl font-bold text-gray-700 mb-4">3-Month Average Cost Summary</h2>
               
               <div className="overflow-x-auto border rounded-lg shadow-sm">
                 <table className="w-full border-collapse">
@@ -1170,7 +1245,7 @@ const PricingApp = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {isDashboardLoading ? (
+                    {activeLoading ? (
                       <tr><td colSpan="4" className="text-center p-8 text-gray-500 font-semibold">Calculating dashboard data... this may take a moment.</td></tr>
                     ) : !selectedRow ? (
                       <tr><td colSpan="4" className="text-center p-6 text-gray-500 italic">No brand data available for this period.</td></tr>
@@ -1199,11 +1274,11 @@ const PricingApp = () => {
               </div>
             </div>
 
-            {/* --- Selected Single Brand 12-Month Trend Section --- */}
+            {/* --- 12-Month Trend Section --- */}
             <div className="mb-4">
               <h2 className="text-xl font-bold text-gray-700 mb-4">12-Month Cost Trend Analysis</h2>
 
-              {isDashboardLoading ? (
+              {activeLoading ? (
                  <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg">Loading trends...</div>
               ) : !selectedRow ? (
                  <div className="text-center p-6 text-gray-500 italic border rounded-lg">No trend data available.</div>
@@ -1215,11 +1290,12 @@ const PricingApp = () => {
                         }
 
                         const maxVal = Math.max(...selectedRow.trend.map(d => d.avg_cost));
+                        const barColor = dashboardTab === 'allocation' ? 'bg-blue' : 'bg-green';
 
                         return (
                             <div className="w-full">
                                 <div className="flex justify-between items-center mb-8">
-                                    <h3 className="font-bold text-2xl text-blue-800">{selectedRow.brand} Trend</h3>
+                                    <h3 className={`font-bold text-2xl ${theme.text}`}>{selectedRow.brand} Trend</h3>
                                 </div>
                                 
                                 <div className="flex items-end justify-between h-72 w-full gap-2 sm:gap-4 border-b-2 border-gray-200 pb-2 relative px-2">
@@ -1227,7 +1303,6 @@ const PricingApp = () => {
                                         const heightPct = maxVal > 0 ? (tData.avg_cost / maxVal) * 100 : 0;
                                         const isCurrentMonth = tIdx === selectedRow.trend.length - 1;
                                         
-                                        // Format Month Abbreviation
                                         let monthAbbr = tData.month;
                                         try {
                                             const dateObj = new Date(tData.month + "-01T00:00:00");
@@ -1245,7 +1320,7 @@ const PricingApp = () => {
                                                 </div>
                                                 {/* Bar Segment */}
                                                 <div 
-                                                    className={`w-full max-w-[60px] rounded-t-md transition-all duration-300 ${isCurrentMonth ? 'bg-blue-600 shadow-md' : 'bg-blue-300 hover:bg-blue-500 hover:shadow-md'}`}
+                                                    className={`w-full max-w-[60px] rounded-t-md transition-all duration-300 ${isCurrentMonth ? `${barColor}-600 shadow-md` : `${barColor}-300 hover:${barColor}-500 hover:shadow-md`}`}
                                                     style={{ height: `${Math.max(heightPct, 5)}%`, minHeight: '6px' }}
                                                 ></div>
                                                 {/* X-axis label */}

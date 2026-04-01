@@ -2163,6 +2163,146 @@ def get_brand_allocation_cost_dashboard(target_month: Optional[str] = None, user
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating dashboard data: {str(e)}")
+    
+    
+@app.get("/dashboard/calculated-brand-cost")
+def get_calculated_brand_cost_dashboard(target_month: Optional[str] = None, user: dict = Depends(require_permission("view_dashboard"))):
+    """
+    Returns the Average Calculated Cost per Brand based on submitted/claimed Calculation History.
+    Covers the selected month and the 11 preceding months (12 months total).
+    """
+    try:
+        # 1. Setup date thresholds
+        if not target_month:
+            target_month = datetime.datetime.now().strftime("%Y-%m")
+        
+        try:
+            year, month = map(int, target_month.split('-'))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid target_month format. Use YYYY-MM")
+
+        # Generate a list of the last 12 months (Current target month at index 0, oldest at index 11)
+        months_list = []
+        temp_year, temp_month = year, month
+        for _ in range(12):
+            months_list.append(f"{temp_year:04d}-{temp_month:02d}")
+            temp_month -= 1
+            if temp_month == 0:
+                temp_month = 12
+                temp_year -= 1
+
+        valid_months = set(months_list)
+
+        # Labels for the 3-month tabular view
+        month0_label = months_list[0]
+        month1_label = months_list[1]
+        month2_label = months_list[2]
+
+        # 2. Fetch data from local SQLite Calculation_History
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        # Fetch products from calculations that are submitted or claimed by logistics
+        cursor.execute("""
+            SELECT calculated_products, COALESCE(submitted_at, created_at) 
+            FROM Calculation_History 
+            WHERE status IN ('submitted', 'claimed')
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+
+        # 3. Process and Bucket Data
+        brands_data = {}
+
+        for row in rows:
+            if not row[0]:
+                continue
+            
+            try:
+                products = json.loads(row[0])
+            except Exception:
+                continue
+            
+            # Fallback to the calculation submission/creation date if the item's doc_date is missing
+            fallback_date = row[1][:10] if row[1] else "" 
+            
+            for p in products:
+                brand = p.get("brand", "").strip() or "UNKNOWN"
+                
+                try:
+                    ctns = float(p.get("ctns", 0) or 0)
+                    cost = float(p.get("total_cost", 0) or 0)
+                except ValueError:
+                    continue
+
+                if ctns <= 0:
+                    continue
+                    
+                doc_date_str = str(p.get("doc_date", ""))
+                if len(doc_date_str) >= 7:
+                    task_month = doc_date_str[:7]
+                elif len(fallback_date) >= 7:
+                    task_month = fallback_date[:7]
+                else:
+                    continue
+
+                # Bucket into exact timeframe
+                if task_month in valid_months:
+                    if brand not in brands_data:
+                        brands_data[brand] = {m: {"cost": 0.0, "ctns": 0.0} for m in months_list}
+
+                    brands_data[brand][task_month]["cost"] += cost
+                    brands_data[brand][task_month]["ctns"] += ctns
+
+        # 4. Format Final Response & Calculate Averages
+        dashboard_results = []
+        for brand, data in brands_data.items():
+            result = {
+                "brand": brand,
+                "month_0_label": month0_label,
+                "month_1_label": month1_label,
+                "month_2_label": month2_label
+            }
+            
+            # --- Retro-compatibility for the 3-month table ---
+            for idx in range(3):
+                m_label = months_list[idx]
+                t_cost = data[m_label]["cost"]
+                t_ctns = data[m_label]["ctns"]
+                avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
+                
+                result[f"month_{idx}_avg_cost"] = round(avg_cost, 2)
+                result[f"month_{idx}_total_ctns"] = round(t_ctns, 2)
+                result[f"month_{idx}_total_cost"] = round(t_cost, 2)
+                
+            # --- New 12-Month Trend Array (Sorted chronologically oldest to newest) ---
+            trend_data = []
+            for m_label in reversed(months_list):
+                t_cost = data[m_label]["cost"]
+                t_ctns = data[m_label]["ctns"]
+                avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
+                
+                trend_data.append({
+                    "month": m_label,
+                    "avg_cost": round(avg_cost, 2),
+                    "total_ctns": round(t_ctns, 2),
+                    "total_cost": round(t_cost, 2)
+                })
+            
+            result["trend"] = trend_data
+            dashboard_results.append(result)
+
+        # Sort by selected month (Month 0) Total Cartons descending
+        dashboard_results.sort(key=lambda x: x["month_0_total_ctns"], reverse=True)
+
+        return {
+            "status": "success", 
+            "target_month": month0_label,
+            "data": dashboard_results
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating calculated dashboard data: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
