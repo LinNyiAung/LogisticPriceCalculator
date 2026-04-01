@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Scissors, Calendar, ShoppingCart, Percent, BarChart2 } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Calendar, Percent, BarChart2 } from 'lucide-react';
 const API_URL = 'http://localhost:8000';
 
 const AVAILABLE_PERMISSIONS = [
@@ -1952,7 +1952,11 @@ const PricingApp = () => {
                   <table className="w-full border-collapse border">
                     <thead className="bg-gray-100">
                       <tr>
-                        <th className="border p-2 text-left">Item Code</th><th className="border p-2 text-left">Description</th><th className="border p-2 text-left">Cartons</th><th className="border p-2 text-left">Weight</th><th className="border p-2 text-left">UOM</th>
+                        <th className="border p-2 text-left">Item Code</th>
+                        <th className="border p-2 text-left">Description</th>
+                        <th className="border p-2 text-left">Cartons</th>
+                        <th className="border p-2 text-left">Weight</th>
+                        <th className="border p-2 text-left">UOM</th>
                         {hasDirectPricingItems && (<th className="border p-2 text-left">System Rate (Ctn)</th>)}
                         {hasCalculated && (<th className="border p-2 text-left">Calculated Rate (Ctn)</th>)}
                         {hasCalculated && (<th className="border p-2 text-left">Cost (MMK)</th>)}
@@ -1961,7 +1965,11 @@ const PricingApp = () => {
                     <tbody>
                       {tableData.map((product, index) => (
                         <tr key={index}>
-                          <td className="border p-2">{product.code}</td><td className="border p-2">{product.name}</td><td className="border p-2">{product.ctns}</td><td className="border p-2">{formatNumber(product.weight)}</td><td className="border p-2">Kg</td>
+                          <td className="border p-2">{product.code}</td>
+                          <td className="border p-2">{product.name}</td>
+                          <td className="border p-2">{product.ctns}</td>
+                          <td className="border p-2">{formatNumber(product.weight)}</td>
+                          <td className="border p-2">Kg</td>
                           {hasDirectPricingItems && (<td className="border p-2">{product.system_rate !== undefined && product.system_rate !== null ? formatNumber(product.system_rate) : '-'}</td>)}
                           {hasCalculated && (<td className="border p-2">{product.display_calculated_rate !== undefined && product.display_calculated_rate !== null ? formatNumber(product.display_calculated_rate) : '-'}</td>)}
                           {hasCalculated && (<td className="border p-2 font-semibold">{product.total_cost !== undefined ? formatNumber(product.total_cost) : '-'}</td>)}

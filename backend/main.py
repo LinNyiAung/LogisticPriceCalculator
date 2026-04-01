@@ -641,7 +641,7 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
         cursor_dwbi = conn_dwbi.cursor()
         placeholders = ','.join('?' * len(doc_nums))
         query = f"""
-            SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(BatchQtyByCtn)
+            SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(BatchQtyByCtn), MAX(Brand)
             FROM PG_Transfer_Details 
             WHERE DocNum IN ({placeholders}) 
             GROUP BY DocNum, ItemCode
@@ -731,6 +731,7 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
                 doc_date_str = str(doc_date_val) if doc_date_val else ""
 
             principal_val = row[6] or ""
+            brand_val = row[8] or ""
             bc_info = branch_code_map.get(principal_val.strip().lower(), {})
             sd_info = sd_code_map.get(principal_val.strip().lower(), {})
 
@@ -741,7 +742,8 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
                 "weight": float(row[3]) if row[3] else 0.0,
                 "doc_date": doc_date_str,         
                 "sin_no": str(row[5]) if row[5] else "",           
-                "principal": principal_val,   
+                "principal": principal_val,
+                "brand": brand_val,
                 "ctns": round(float(row[7])) if row[7] else 0,
                 "b_code": bc_info.get("Code", ""),
                 "b_name": bc_info.get("Name", ""),
@@ -809,6 +811,7 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
             weight = float(row[3]) if row[3] else 0.0
             ctns = round(float(row[7])) if row[7] else 0
             principal_val = row[6] or ""
+            brand_val = row[8] or ""
             bc_info = branch_code_map.get(principal_val.strip().lower(), {})
             sd_info = sd_code_map.get(principal_val.strip().lower(), {})
 
@@ -821,11 +824,12 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
             calculated_products.append({
                 "code": item_code, "name": row[1] if row[1] else "", "ctns": ctns,
                 "uom": row[2] if row[2] else "", "weight": weight, "doc_date": doc_date_str,       
-                "sin_no": str(row[5]) if row[5] else "", "principal": principal_val, "b_code": bc_info.get("Code", ""),
-                "b_name": bc_info.get("Name", ""), "b_dept": bc_info.get("Dept", ""),
-                "b_principal": bc_info.get("Principal", ""), "b_desc": bc_info.get("Description", ""),
-                "s_dept": sd_info.get("Dept", ""), "s_principal": sd_info.get("Principal", ""),
-                "calculation_type": "direct", "system_rate": unit_cost if unit_cost > 0 else None,
+                "sin_no": str(row[5]) if row[5] else "", "principal": principal_val, "brand": brand_val,
+                "b_code": bc_info.get("Code", ""), "b_name": bc_info.get("Name", ""), 
+                "b_dept": bc_info.get("Dept", ""), "b_principal": bc_info.get("Principal", ""), 
+                "b_desc": bc_info.get("Description", ""), "s_dept": sd_info.get("Dept", ""), 
+                "s_principal": sd_info.get("Principal", ""), "calculation_type": "direct", 
+                "system_rate": unit_cost if unit_cost > 0 else None,
                 "unit_cost": unit_cost, "total_cost": item_cost
             })
 
@@ -1384,7 +1388,7 @@ def download_history_excel(record_id: int):
         ws.title = "Cost Details"
 
         headers = [
-            "No", "Claim Date", "Delivery Date", "SIN No", "Area", "Code", "Name", "Principal", "Item Code", "Item", "Ctns", 
+            "No", "Claim Date", "Delivery Date", "SIN No", "Area", "Code", "Name", "Principal", "Brand", "Item Code", "Item", "Ctns", 
             "Price", "Total Amount", "Weight", "UOM", "Gate", "Channel", "Month", "Year", "Description for Account", 
             "Description with cnts and price", "Branch", "B-Dept", "B-Principal", "S-Dept", "S-Principal", "Calculation ID"
         ]
@@ -1433,35 +1437,36 @@ def download_history_excel(record_id: int):
             ws.cell(row=row_num, column=6, value=item.get('b_code', '')).border = border
             ws.cell(row=row_num, column=7, value=item.get('b_name', '')).border = border
             ws.cell(row=row_num, column=8, value=item.get('principal', '')).border = border
-            ws.cell(row=row_num, column=9, value=item.get('code', '')).border = border
-            ws.cell(row=row_num, column=10, value=item.get('name', '')).border = border
-            ws.cell(row=row_num, column=11, value=ctns_formatted).border = border
+            ws.cell(row=row_num, column=9, value=item.get('brand', '')).border = border
+            ws.cell(row=row_num, column=10, value=item.get('code', '')).border = border
+            ws.cell(row=row_num, column=11, value=item.get('name', '')).border = border
+            ws.cell(row=row_num, column=12, value=ctns_formatted).border = border
             
-            ctn_price_cell = ws.cell(row=row_num, column=12, value=price_per_ctn) 
+            ctn_price_cell = ws.cell(row=row_num, column=13, value=price_per_ctn) 
             ctn_price_cell.number_format = '#,##0.00'
             ctn_price_cell.border = border
 
-            amt_cell = ws.cell(row=row_num, column=13, value=total_cost_val) 
+            amt_cell = ws.cell(row=row_num, column=14, value=total_cost_val) 
             amt_cell.number_format = '#,##0.00'
             amt_cell.border = border
 
-            weight_cell = ws.cell(row=row_num, column=14, value=item.get('weight', 0)) 
+            weight_cell = ws.cell(row=row_num, column=15, value=item.get('weight', 0)) 
             weight_cell.number_format = '#,##0.00'
             weight_cell.border = border
 
-            ws.cell(row=row_num, column=15, value="Kg").border = border
-            ws.cell(row=row_num, column=16, value=record['gate_name']).border = border
-            ws.cell(row=row_num, column=17, value=record.get('channel', '')).border = border
-            ws.cell(row=row_num, column=18, value=claim_month).border = border
-            ws.cell(row=row_num, column=19, value=claim_year).border = border
-            ws.cell(row=row_num, column=20, value=b_desc).border = border
-            ws.cell(row=row_num, column=21, value=concat_desc).border = border
-            ws.cell(row=row_num, column=22, value=record['to_loc']).border = border
-            ws.cell(row=row_num, column=23, value=item.get('b_dept', '')).border = border
-            ws.cell(row=row_num, column=24, value=item.get('b_principal', '')).border = border
-            ws.cell(row=row_num, column=25, value=item.get('s_dept', '')).border = border
-            ws.cell(row=row_num, column=26, value=item.get('s_principal', '')).border = border
-            ws.cell(row=row_num, column=27, value=record['id']).border = border
+            ws.cell(row=row_num, column=16, value="Kg").border = border
+            ws.cell(row=row_num, column=17, value=record['gate_name']).border = border
+            ws.cell(row=row_num, column=18, value=record.get('channel', '')).border = border
+            ws.cell(row=row_num, column=19, value=claim_month).border = border
+            ws.cell(row=row_num, column=20, value=claim_year).border = border
+            ws.cell(row=row_num, column=21, value=b_desc).border = border
+            ws.cell(row=row_num, column=22, value=concat_desc).border = border
+            ws.cell(row=row_num, column=23, value=record['to_loc']).border = border
+            ws.cell(row=row_num, column=24, value=item.get('b_dept', '')).border = border
+            ws.cell(row=row_num, column=25, value=item.get('b_principal', '')).border = border
+            ws.cell(row=row_num, column=26, value=item.get('s_dept', '')).border = border
+            ws.cell(row=row_num, column=27, value=item.get('s_principal', '')).border = border
+            ws.cell(row=row_num, column=28, value=record['id']).border = border
 
         for col in ws.columns:
             max_length = 0
@@ -1953,13 +1958,13 @@ def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums"))
         conn = get_dwbi_connection()
         cursor = conn.cursor()
         placeholders = ','.join('?' * len(doc_nums))
-        cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn) FROM PG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", doc_nums)
+        cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand) FROM PG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", doc_nums)
         rows = cursor.fetchall()
         products, total_weight = [], 0.0
         for row in rows:
             weight = float(row[3]) if row[3] else 0.0
             total_weight += weight
-            products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": round(float(row[5])) if len(row) > 5 and row[5] is not None else 0})
+            products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": round(float(row[5])) if len(row) > 5 and row[5] is not None else 0, "brand": row[6] or ""})
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
@@ -1969,7 +1974,7 @@ def get_products_by_doc_num(doc_num: str):
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn) FROM PG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (doc_num,))
+        cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand) FROM PG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (doc_num,))
         rows = cursor.fetchall()
         if not rows:
             conn.close()
@@ -1978,7 +1983,7 @@ def get_products_by_doc_num(doc_num: str):
         for row in rows:
             weight = float(row[3]) if row[3] else 0.0
             total_weight += weight
-            products.append({"item_code": row[0] or "", "description": row[1] or "", "uom": row[2] or "", "item_weight": weight, "ctns": round(float(row[5])) if len(row) > 5 and row[5] is not None else 0})
+            products.append({"item_code": row[0] or "", "description": row[1] or "", "uom": row[2] or "", "item_weight": weight, "ctns": round(float(row[5])) if len(row) > 5 and row[5] is not None else 0, "brand": row[6] or ""})
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
