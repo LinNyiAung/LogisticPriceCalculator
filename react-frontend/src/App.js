@@ -100,11 +100,10 @@ const PricingApp = () => {
   const [username, setUsername] = useState(localStorage.getItem('username') || '');
   const [permissions, setPermissions] = useState(JSON.parse(localStorage.getItem('permissions')) || []);
 
-
   // --- Dashboard State ---
   const [dashboardData, setDashboardData] = useState([]);
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
-  const [dashboardSearchTerm, setDashboardSearchTerm] = useState('');
+  const [selectedDashboardBrand, setSelectedDashboardBrand] = useState(''); 
   
   // Set default month to current local month (YYYY-MM)
   const getCurrentMonthString = () => {
@@ -112,7 +111,6 @@ const PricingApp = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   };
   const [dashboardMonth, setDashboardMonth] = useState(getCurrentMonthString());
-
 
   // App State
   const [currentPage, setCurrentPage] = useState('calculator');
@@ -224,12 +222,10 @@ const PricingApp = () => {
     setVisibleCounts(prev => ({ ...prev, [key]: prev[key] + INITIAL_LOAD_COUNT }));
   };
 
-  // Reset pagination when search filters change
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, history: INITIAL_LOAD_COUNT })); }, [historyFilters]);
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, items: INITIAL_LOAD_COUNT })); }, [itemFilters]);
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, dailyItem: INITIAL_LOAD_COUNT })); }, [dailyReportFilters]);
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, dailyTownship: INITIAL_LOAD_COUNT })); }, [townshipFilters]);
-
 
   // --- Formatting & UI Helpers ---
   const formatNumber = (num) => {
@@ -382,6 +378,12 @@ const PricingApp = () => {
       if (response.ok) {
         const result = await response.json();
         setDashboardData(result.data || []);
+        
+        if (result.data && result.data.length > 0) {
+            setSelectedDashboardBrand(result.data[0].brand);
+        } else {
+            setSelectedDashboardBrand('');
+        }
       } else {
         const error = await response.json();
         showNotification(getErrorMessage(error), 'error');
@@ -618,7 +620,7 @@ const PricingApp = () => {
     if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { 
         fetchDashboardData(dashboardMonth); 
     }
-  }, [currentPage, token, permissions]); // Only trigger on page load or auth change
+  }, [currentPage, token, permissions]); 
 
   useEffect(() => {
     const checkManualCostStatus = async () => {
@@ -697,7 +699,6 @@ const PricingApp = () => {
   const handleToChange = (val) => { setSelectedTo(val); setSelectedGate(''); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); };
   const handleGateChange = (gateName) => {
     setSelectedGate(gateName); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost('');
-    // Safely attempt to match the first found for calculation type label
     const gateInfo = gates.find(g => g.gate_name === gateName && g.from_loc === selectedFrom && g.to_loc === selectedTo);
     if (gateInfo) setCalculationType(gateInfo.calculation_type);
   };
@@ -708,7 +709,6 @@ const PricingApp = () => {
       setIsLoading(true);
       setCurrentHistoryId(record.id);
 
-      // Fetch the full detailed record from the local backend endpoint
       const response = await authFetch(`${API_URL}/history/${record.id}`);
       if (response.ok) {
         const fullRecord = await response.json();
@@ -725,7 +725,6 @@ const PricingApp = () => {
         let loadedFromPG = false;
         
         try {
-            // STEP 1: ATTEMPT TO FETCH FRESH DATA FROM PG_TRANSFER_DETAILS
             const queryString = fullRecord.doc_nums.map(id => `doc_nums=${encodeURIComponent(id)}`).join('&');
             const pgResponse = await authFetch(`${API_URL}/products-by-doc-nums?${queryString}`);
             
@@ -733,11 +732,9 @@ const PricingApp = () => {
                 const pgData = await pgResponse.json();
                 
                 if (pgData.products && pgData.products.length > 0) {
-                    // Data is still available in PG_Transfer_Details!
                     setProducts(pgData.products);
                     setTotalWeight(pgData.total_weight || 0);
                     
-                    // Recalculate using PG live data to get all pricing logic
                     let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(fullRecord.gate_name)}&from_loc=${encodeURIComponent(fullRecord.from_loc)}&to_loc=${encodeURIComponent(fullRecord.to_loc)}`;
                     fullRecord.doc_nums.forEach(id => url += `&doc_nums=${encodeURIComponent(id)}`);
                     if (fullRecord.manual_total_cost !== null && fullRecord.manual_total_cost !== undefined) {
@@ -762,10 +759,9 @@ const PricingApp = () => {
         }
 
         if (!loadedFromPG) {
-            // STEP 2: FALLBACK TO LOCAL SQLITE SNAPSHOT (if PG data was deleted)
             if (fullRecord.calculated_products && fullRecord.calculated_products.length > 0) {
                 setCalculatedProducts(fullRecord.calculated_products);
-                setProducts(fullRecord.calculated_products); // To display the grid and details properly
+                setProducts(fullRecord.calculated_products); 
                 const calculatedWeight = fullRecord.calculated_products.reduce((acc, curr) => acc + (curr.weight || 0), 0);
                 setTotalWeight(calculatedWeight);
                 setCalculatedTotalCost(fullRecord.final_total_cost);
@@ -1099,13 +1095,12 @@ const PricingApp = () => {
 
 
   if (currentPage === 'dashboard' && permissions.includes('view_dashboard')) {
-    const filteredDashboardData = dashboardData.filter(row => 
-      row.brand.toLowerCase().includes(dashboardSearchTerm.toLowerCase())
-    );
-
     const month0Label = dashboardData.length > 0 ? dashboardData[0].month_0_label : 'Selected Month';
     const month1Label = dashboardData.length > 0 ? dashboardData[0].month_1_label : '1 Month Ago';
     const month2Label = dashboardData.length > 0 ? dashboardData[0].month_2_label : '2 Months Ago';
+
+    // Find the currently selected brand row
+    const selectedRow = dashboardData.find(r => r.brand === selectedDashboardBrand) || dashboardData[0];
 
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -1114,79 +1109,157 @@ const PricingApp = () => {
           {renderNavigation()}
           
           <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h1 className="text-3xl font-bold text-gray-800">Management Dashboard</h1>
-              <div className="flex items-center gap-4">
-                  <input 
-                      type="month"
-                      value={dashboardMonth}
-                      onChange={(e) => {
-                          setDashboardMonth(e.target.value);
-                          fetchDashboardData(e.target.value);
-                      }}
-                      className="border p-2 rounded-lg"
-                  />
-                  <button onClick={() => fetchDashboardData(dashboardMonth)} disabled={isDashboardLoading} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400">
-                    {isDashboardLoading ? 'Refreshing...' : 'Refresh Data'}
-                  </button>
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 border-b pb-4">
+              <h1 className="text-3xl font-bold text-gray-800">Brand Allocation Dashboard</h1>
+              
+              {/* --- NEW: Universal Dashboard Controls --- */}
+              <div className="flex flex-wrap items-center gap-4">
+                  {!isDashboardLoading && dashboardData.length > 0 && (
+                      <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-lg border border-blue-200">
+                          <label className="text-sm font-semibold text-blue-800 whitespace-nowrap">Selected Brand:</label>
+                          <select
+                              value={selectedDashboardBrand}
+                              onChange={(e) => setSelectedDashboardBrand(e.target.value)}
+                              className="p-1 bg-transparent focus:outline-none font-bold text-blue-900 cursor-pointer text-lg"
+                          >
+                              {dashboardData.map(r => (
+                                  <option key={r.brand} value={r.brand}>{r.brand}</option>
+                              ))}
+                          </select>
+                      </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                      <input 
+                          type="month"
+                          value={dashboardMonth}
+                          onChange={(e) => {
+                              setDashboardMonth(e.target.value);
+                              fetchDashboardData(e.target.value);
+                          }}
+                          className="border p-2 rounded-lg"
+                      />
+                      <button onClick={() => fetchDashboardData(dashboardMonth)} disabled={isDashboardLoading} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400">
+                        {isDashboardLoading ? 'Refreshing...' : 'Refresh'}
+                      </button>
+                  </div>
               </div>
             </div>
 
-            <div className="mb-8">
-              <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Average Allocated Cost per Brand</h2>
+            {/* --- Table Section (Single Selected Brand) --- */}
+            <div className="mb-10">
+              <h2 className="text-xl font-bold text-gray-700 mb-4">3-Month Average Allocated Cost</h2>
               
-              <div className="overflow-x-auto border rounded-lg">
+              <div className="overflow-x-auto border rounded-lg shadow-sm">
                 <table className="w-full border-collapse">
-                  <thead className="bg-gray-100 sticky top-0">
+                  <thead className="bg-gray-100">
                     <tr>
-                      <th className="border p-3 text-left">
-                        <div>Brand</div>
-                        <input type="text" placeholder="Filter brand..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dashboardSearchTerm} onChange={(e) => setDashboardSearchTerm(e.target.value)} />
+                      <th className="border p-4 text-left font-bold text-gray-600 uppercase text-sm tracking-wider">Brand</th>
+                      <th className="border p-4 text-right">
+                        <div className="text-blue-700 font-bold">{month0Label}</div>
+                        <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
                       </th>
-                      <th className="border p-3 text-right">
-                        <div className="text-blue-700">{month0Label} Avg (MMK)</div>
-                        <div className="text-xs text-gray-500 font-normal">Per Carton</div>
+                      <th className="border p-4 text-right">
+                        <div className="text-purple-700 font-bold">{month1Label}</div>
+                        <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
                       </th>
-                      <th className="border p-3 text-right">
-                        <div className="text-purple-700">{month1Label} Avg (MMK)</div>
-                        <div className="text-xs text-gray-500 font-normal">Per Carton</div>
-                      </th>
-                      <th className="border p-3 text-right">
-                        <div className="text-orange-700">{month2Label} Avg (MMK)</div>
-                        <div className="text-xs text-gray-500 font-normal">Per Carton</div>
+                      <th className="border p-4 text-right">
+                        <div className="text-orange-700 font-bold">{month2Label}</div>
+                        <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {isDashboardLoading ? (
                       <tr><td colSpan="4" className="text-center p-8 text-gray-500 font-semibold">Calculating dashboard data... this may take a moment.</td></tr>
-                    ) : filteredDashboardData.length === 0 ? (
+                    ) : !selectedRow ? (
                       <tr><td colSpan="4" className="text-center p-6 text-gray-500 italic">No brand data available for this period.</td></tr>
                     ) : (
-                      filteredDashboardData.map((row, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                          <td className="border p-3 font-bold text-gray-800">{row.brand}</td>
-                          <td className="border p-3 text-right">
-                            <span className="font-semibold text-blue-700">{formatNumber(row['month_0_avg_cost'])}</span>
-                            <div className="text-xs text-gray-400 mt-1">Total Ctns: {formatNumber(row['month_0_total_ctns'])} ctns</div>
-                            <div className="text-xs text-gray-400 mt-1">Total Cost: {formatNumber(row['month_0_total_cost'])} mmk</div>
-                          </td>
-                          <td className="border p-3 text-right">
-                            <span className="font-semibold text-purple-700">{formatNumber(row['month_1_avg_cost'])}</span>
-                            <div className="text-xs text-gray-400 mt-1">Total Ctns: {formatNumber(row['month_1_total_ctns'])} ctns</div>
-                            <div className="text-xs text-gray-400 mt-1">Total Cost: {formatNumber(row['month_1_total_cost'])} mmk</div>
-                          </td>
-                          <td className="border p-3 text-right">
-                            <span className="font-semibold text-orange-700">{formatNumber(row['month_2_avg_cost'])}</span>
-                            <div className="text-xs text-gray-400 mt-1">Total Ctns: {formatNumber(row['month_2_total_ctns'])} ctns</div>
-                            <div className="text-xs text-gray-400 mt-1">Total Cost: {formatNumber(row['month_2_total_cost'])} mmk</div>
-                          </td>
-                        </tr>
-                      ))
+                      <tr className="bg-white hover:bg-gray-50 transition-colors">
+                        <td className="border p-4 font-black text-gray-800 text-xl">{selectedRow.brand}</td>
+                        <td className="border p-4 text-right">
+                          <span className="font-black text-2xl text-blue-700">{formatNumber(selectedRow['month_0_avg_cost'])}</span>
+                          <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedRow['month_0_total_ctns'])}</span></div>
+                          <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedRow['month_0_total_cost'])}</span> mmk</div>
+                        </td>
+                        <td className="border p-4 text-right">
+                          <span className="font-bold text-xl text-purple-700">{formatNumber(selectedRow['month_1_avg_cost'])}</span>
+                          <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedRow['month_1_total_ctns'])}</span></div>
+                          <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedRow['month_1_total_cost'])}</span> mmk</div>
+                        </td>
+                        <td className="border p-4 text-right">
+                          <span className="font-bold text-xl text-orange-700">{formatNumber(selectedRow['month_2_avg_cost'])}</span>
+                          <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedRow['month_2_total_ctns'])}</span></div>
+                          <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedRow['month_2_total_cost'])}</span> mmk</div>
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            {/* --- Selected Single Brand 12-Month Trend Section --- */}
+            <div className="mb-4">
+              <h2 className="text-xl font-bold text-gray-700 mb-4">12-Month Cost Trend Analysis</h2>
+
+              {isDashboardLoading ? (
+                 <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg">Loading trends...</div>
+              ) : !selectedRow ? (
+                 <div className="text-center p-6 text-gray-500 italic border rounded-lg">No trend data available.</div>
+              ) : (
+                 <div className="bg-white border rounded-lg p-6 shadow-sm">
+                    {(() => {
+                        if (!selectedRow.trend || selectedRow.trend.length === 0) {
+                            return <div className="text-center p-8 text-gray-500">No trend data available for {selectedRow.brand}.</div>;
+                        }
+
+                        const maxVal = Math.max(...selectedRow.trend.map(d => d.avg_cost));
+
+                        return (
+                            <div className="w-full">
+                                <div className="flex justify-between items-center mb-8">
+                                    <h3 className="font-bold text-2xl text-blue-800">{selectedRow.brand} Trend</h3>
+                                </div>
+                                
+                                <div className="flex items-end justify-between h-72 w-full gap-2 sm:gap-4 border-b-2 border-gray-200 pb-2 relative px-2">
+                                    {selectedRow.trend.map((tData, tIdx) => {
+                                        const heightPct = maxVal > 0 ? (tData.avg_cost / maxVal) * 100 : 0;
+                                        const isCurrentMonth = tIdx === selectedRow.trend.length - 1;
+                                        
+                                        // Format Month Abbreviation
+                                        let monthAbbr = tData.month;
+                                        try {
+                                            const dateObj = new Date(tData.month + "-01T00:00:00");
+                                            monthAbbr = dateObj.toLocaleString('default', { month: 'short', year: '2-digit' });
+                                        } catch(e) {}
+
+                                        return (
+                                            <div key={tIdx} className="relative flex flex-col items-center group w-full h-full justify-end cursor-pointer">
+                                                {/* Tooltip */}
+                                                <div className="absolute bottom-full mb-3 hidden group-hover:block z-50 bg-gray-800 text-white p-3 rounded-lg shadow-xl whitespace-nowrap min-w-[140px] text-center border border-gray-600">
+                                                    <div className="font-bold text-sm border-b border-gray-600 pb-1 mb-2">{tData.month}</div>
+                                                    <div className="text-blue-300 font-bold mb-1">Avg: {formatNumber(tData.avg_cost)} MMK</div>
+                                                    <div className="text-gray-300 text-xs mt-2">Total Cost: {formatNumber(tData.total_cost)}</div>
+                                                    <div className="text-gray-300 text-xs">Total Ctns: {formatNumber(tData.total_ctns)}</div>
+                                                </div>
+                                                {/* Bar Segment */}
+                                                <div 
+                                                    className={`w-full max-w-[60px] rounded-t-md transition-all duration-300 ${isCurrentMonth ? 'bg-blue-600 shadow-md' : 'bg-blue-300 hover:bg-blue-500 hover:shadow-md'}`}
+                                                    style={{ height: `${Math.max(heightPct, 5)}%`, minHeight: '6px' }}
+                                                ></div>
+                                                {/* X-axis label */}
+                                                <span className="text-xs sm:text-sm font-medium text-gray-500 absolute -bottom-8 w-full text-center truncate">{monthAbbr}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div className="h-10"></div> {/* Spacer for x-axis labels */}
+                            </div>
+                        );
+                    })()}
+                 </div>
+              )}
             </div>
 
           </div>
@@ -1821,12 +1894,10 @@ const PricingApp = () => {
             <div className="flex flex-wrap gap-2">
               {selectedDocNums.length === 0 && (<p className="text-gray-500 text-sm italic">No Doc Nums selected</p>)}
               
-              {/* UPDATED: Graceful fallback for displaying missing Date attributes */}
               {selectedDocNums.map(id => {
                 const docObj = docNums.find(d => String(d.doc_num) === String(id));
                 let displayDate = docObj ? docObj.doc_date : null;
 
-                // Fallback: If not found in fresh live external data (DWBI purged), look up the loaded calculated products state!
                 if (!displayDate && calculatedProducts && calculatedProducts.length > 0) {
                     const matchedProd = calculatedProducts.find(p => String(p.sin_no) === String(id));
                     if (matchedProd && matchedProd.doc_date) {

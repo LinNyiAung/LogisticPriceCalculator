@@ -1989,8 +1989,8 @@ def get_products_by_doc_num(doc_num: str):
 @app.get("/dashboard/brand-allocation-cost")
 def get_brand_allocation_cost_dashboard(target_month: Optional[str] = None, user: dict = Depends(get_current_user)):
     """
-    Returns the Average Allocated Cost per Brand for the selected month and the two preceding months.
-    Formula: Total Allocated Cost of Brand / Total Cartons of Brand in that period.
+    Returns the Average Allocated Cost per Brand for the selected month and the 11 preceding months (12 months total).
+    Includes specific keys for the 3-month table view and a 'trend' array for charting.
     """
     try:
         # 1. Get Rate Carts mapping
@@ -2009,26 +2009,28 @@ def get_brand_allocation_cost_dashboard(target_month: Optional[str] = None, user
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid target_month format. Use YYYY-MM")
 
-        # Selected month (month 0)
-        month0_start = datetime.date(year, month, 1)
-        _, last_day0 = calendar.monthrange(year, month)
-        month0_end = datetime.date(year, month, last_day0)
-        
-        # Month -1
-        month1_date = month0_start - datetime.timedelta(days=1)
-        month1_start = datetime.date(month1_date.year, month1_date.month, 1)
-        
-        # Month -2
-        month2_date = month1_start - datetime.timedelta(days=1)
-        month2_start = datetime.date(month2_date.year, month2_date.month, 1)
-        
-        # Overall query range
-        query_start_date = month2_start.strftime("%Y-%m-%d")
-        query_end_date = month0_end.strftime("%Y-%m-%d")
+        # Generate a list of the last 12 months (Current target month at index 0, oldest at index 11)
+        months_list = []
+        temp_year, temp_month = year, month
+        for _ in range(12):
+            months_list.append(f"{temp_year:04d}-{temp_month:02d}")
+            temp_month -= 1
+            if temp_month == 0:
+                temp_month = 12
+                temp_year -= 1
 
-        month0_label = month0_start.strftime("%Y-%m")
-        month1_label = month1_start.strftime("%Y-%m")
-        month2_label = month2_start.strftime("%Y-%m")
+        # Query Boundaries
+        # End date: Last day of the target month
+        _, last_day = calendar.monthrange(year, month)
+        query_end_date = datetime.date(year, month, last_day).strftime("%Y-%m-%d")
+        
+        # Start date: First day of the 12th month ago
+        oldest_year, oldest_month = map(int, months_list[-1].split('-'))
+        query_start_date = datetime.date(oldest_year, oldest_month, 1).strftime("%Y-%m-%d")
+
+        month0_label = months_list[0]
+        month1_label = months_list[1]
+        month2_label = months_list[2]
 
         # 3. Get highly aggregated DWBI Data using CTE
         conn_dwbi = get_dwbi_connection()
@@ -2093,29 +2095,19 @@ def get_brand_allocation_cost_dashboard(target_month: Optional[str] = None, user
 
             task_month = task_date.strftime("%Y-%m")
 
-            # Calculate Allocated Cost just like the Daily Report logic
+            # Calculate Allocated Cost
             branch_cost = rate_carts.get(branch, 0.0)
             cost_per_ctn = (branch_cost / driver_total_ctns) if driver_total_ctns > 0 else 0.0
             allocated_cost = brand_ctns * cost_per_ctn
 
-            # Initialize brand dict
+            # Initialize brand dict dynamically for all 12 months
             if brand not in brands_data:
-                brands_data[brand] = {
-                    "month_0": {"cost": 0.0, "ctns": 0.0},
-                    "month_1": {"cost": 0.0, "ctns": 0.0},
-                    "month_2": {"cost": 0.0, "ctns": 0.0}
-                }
+                brands_data[brand] = {m: {"cost": 0.0, "ctns": 0.0} for m in months_list}
 
-            # Bucket into timeframes
-            if task_month == month0_label:
-                brands_data[brand]["month_0"]["cost"] += allocated_cost
-                brands_data[brand]["month_0"]["ctns"] += brand_ctns
-            elif task_month == month1_label:
-                brands_data[brand]["month_1"]["cost"] += allocated_cost
-                brands_data[brand]["month_1"]["ctns"] += brand_ctns
-            elif task_month == month2_label:
-                brands_data[brand]["month_2"]["cost"] += allocated_cost
-                brands_data[brand]["month_2"]["ctns"] += brand_ctns
+            # Bucket into exact timeframe
+            if task_month in brands_data[brand]:
+                brands_data[brand][task_month]["cost"] += allocated_cost
+                brands_data[brand][task_month]["ctns"] += brand_ctns
 
         # 5. Format Final Response & Calculate Averages
         dashboard_results = []
@@ -2126,15 +2118,33 @@ def get_brand_allocation_cost_dashboard(target_month: Optional[str] = None, user
                 "month_1_label": month1_label,
                 "month_2_label": month2_label
             }
-            for period in ["month_0", "month_1", "month_2"]:
-                t_cost = data[period]["cost"]
-                t_ctns = data[period]["ctns"]
+            
+            # --- Retro-compatibility for the 3-month table ---
+            for idx in range(3):
+                m_label = months_list[idx]
+                t_cost = data[m_label]["cost"]
+                t_ctns = data[m_label]["ctns"]
                 avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
                 
-                result[f"{period}_avg_cost"] = round(avg_cost, 2)
-                result[f"{period}_total_ctns"] = round(t_ctns, 2)
-                result[f"{period}_total_cost"] = round(t_cost, 2)
+                result[f"month_{idx}_avg_cost"] = round(avg_cost, 2)
+                result[f"month_{idx}_total_ctns"] = round(t_ctns, 2)
+                result[f"month_{idx}_total_cost"] = round(t_cost, 2)
                 
+            # --- New 12-Month Trend Array (Sorted chronologically oldest to newest) ---
+            trend_data = []
+            for m_label in reversed(months_list):
+                t_cost = data[m_label]["cost"]
+                t_ctns = data[m_label]["ctns"]
+                avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
+                
+                trend_data.append({
+                    "month": m_label,
+                    "avg_cost": round(avg_cost, 2),
+                    "total_ctns": round(t_ctns, 2),
+                    "total_cost": round(t_cost, 2)
+                })
+            
+            result["trend"] = trend_data
             dashboard_results.append(result)
 
         # Sort by selected month (Month 0) Total Cartons descending
