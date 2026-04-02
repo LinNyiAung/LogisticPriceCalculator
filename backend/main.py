@@ -1987,322 +1987,318 @@ def get_products_by_doc_num(doc_num: str):
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+# --- Dashboard Helper Functions ---
+
+def _generate_allocation_data(target_month: str):
+    # 1. Get Rate Carts mapping
+    conn_log = get_logistic_connection()
+    cursor_log = conn_log.cursor()
+    cursor_log.execute("SELECT location, cost FROM Rate_Cart")
+    rate_carts = {row[0].strip().upper(): float(row[1]) for row in cursor_log.fetchall()}
+    conn_log.close()
+
+    # 2. Setup date thresholds
+    try:
+        year, month = map(int, target_month.split('-'))
+    except ValueError:
+        raise ValueError("Invalid target_month format. Use YYYY-MM")
+
+    months_list = []
+    temp_year, temp_month = year, month
+    for _ in range(12):
+        months_list.append(f"{temp_year:04d}-{temp_month:02d}")
+        temp_month -= 1
+        if temp_month == 0:
+            temp_month = 12
+            temp_year -= 1
+
+    _, last_day = calendar.monthrange(year, month)
+    query_end_date = datetime.date(year, month, last_day).strftime("%Y-%m-%d")
+
+    oldest_year, oldest_month = map(int, months_list[-1].split('-'))
+    query_start_date = datetime.date(oldest_year, oldest_month, 1).strftime("%Y-%m-%d")
+
+    month0_label = months_list[0]
+    month1_label = months_list[1]
+    month2_label = months_list[2]
+
+    # 3. Get highly aggregated DWBI Data
+    conn_dwbi = get_dwbi_connection()
+    cursor_dwbi = conn_dwbi.cursor()
     
+    query = """
+        WITH DriverTotals AS (
+            SELECT 
+                CONVERT(DATE, [Task Date]) as TaskDate, 
+                Branch, 
+                [Driver Name], 
+                SUM(ctnQty) as TotalDriverCtns
+            FROM VersaFleetDetail_TC
+            WHERE [Task Status] = 'successful' 
+              AND CONVERT(DATE, [Task Date]) >= ? 
+              AND CONVERT(DATE, [Task Date]) <= ?
+            GROUP BY CONVERT(DATE, [Task Date]), Branch, [Driver Name]
+        )
+        SELECT 
+            CONVERT(DATE, t.[Task Date]) as TaskDate,
+            t.Branch,
+            t.[Driver Name],
+            t.Brand,
+            SUM(t.ctnQty) as BrandCtns,
+            d.TotalDriverCtns
+        FROM VersaFleetDetail_TC t
+        JOIN DriverTotals d ON 
+            CONVERT(DATE, t.[Task Date]) = d.TaskDate AND 
+            t.Branch = d.Branch AND 
+            t.[Driver Name] = d.[Driver Name]
+        WHERE t.[Task Status] = 'successful' 
+          AND CONVERT(DATE, t.[Task Date]) >= ? 
+          AND CONVERT(DATE, t.[Task Date]) <= ? 
+          AND t.Brand IS NOT NULL
+        GROUP BY CONVERT(DATE, t.[Task Date]), t.Branch, t.[Driver Name], t.Brand, d.TotalDriverCtns
+    """
     
+    cursor_dwbi.execute(query, (query_start_date, query_end_date, query_start_date, query_end_date))
+    rows = cursor_dwbi.fetchall()
+    conn_dwbi.close()
+
+    # 4. Process and Bucket Data
+    brands_data = {}
+
+    for row in rows:
+        task_date_val = row[0]
+        branch = row[1].strip().upper() if row[1] else "UNKNOWN"
+        brand = row[3].strip() if row[3] else "UNKNOWN"
+        brand_ctns = float(row[4]) if row[4] else 0.0
+        driver_total_ctns = float(row[5]) if row[5] else 0.0
+
+        if not brand or brand_ctns <= 0:
+            continue
+
+        if isinstance(task_date_val, str):
+            task_date = datetime.datetime.strptime(task_date_val[:10], "%Y-%m-%d").date()
+        elif isinstance(task_date_val, datetime.datetime):
+            task_date = task_date_val.date()
+        else:
+            task_date = task_date_val
+
+        task_month = task_date.strftime("%Y-%m")
+
+        branch_cost = rate_carts.get(branch, 0.0)
+        cost_per_ctn = (branch_cost / driver_total_ctns) if driver_total_ctns > 0 else 0.0
+        allocated_cost = brand_ctns * cost_per_ctn
+
+        if brand not in brands_data:
+            brands_data[brand] = {m: {"cost": 0.0, "ctns": 0.0} for m in months_list}
+
+        if task_month in brands_data[brand]:
+            brands_data[brand][task_month]["cost"] += allocated_cost
+            brands_data[brand][task_month]["ctns"] += brand_ctns
+
+    # 5. Format Final Response
+    dashboard_results = []
+    for brand, data in brands_data.items():
+        result = {
+            "brand": brand,
+            "month_0_label": month0_label,
+            "month_1_label": month1_label,
+            "month_2_label": month2_label
+        }
+        
+        for idx in range(3):
+            m_label = months_list[idx]
+            t_cost = data[m_label]["cost"]
+            t_ctns = data[m_label]["ctns"]
+            avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
+            
+            result[f"month_{idx}_avg_cost"] = round(avg_cost, 2)
+            result[f"month_{idx}_total_ctns"] = round(t_ctns, 2)
+            result[f"month_{idx}_total_cost"] = round(t_cost, 2)
+            
+        trend_data = []
+        for m_label in reversed(months_list):
+            t_cost = data[m_label]["cost"]
+            t_ctns = data[m_label]["ctns"]
+            avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
+            
+            trend_data.append({
+                "month": m_label,
+                "avg_cost": round(avg_cost, 2),
+                "total_ctns": round(t_ctns, 2),
+                "total_cost": round(t_cost, 2)
+            })
+        
+        result["trend"] = trend_data
+        dashboard_results.append(result)
+
+    dashboard_results.sort(key=lambda x: x["month_0_total_ctns"], reverse=True)
+    return dashboard_results, month0_label
+
+
+def _generate_calculated_data(target_month: str):
+    # 1. Setup date thresholds
+    try:
+        year, month = map(int, target_month.split('-'))
+    except ValueError:
+        raise ValueError("Invalid target_month format. Use YYYY-MM")
+
+    months_list = []
+    temp_year, temp_month = year, month
+    for _ in range(12):
+        months_list.append(f"{temp_year:04d}-{temp_month:02d}")
+        temp_month -= 1
+        if temp_month == 0:
+            temp_month = 12
+            temp_year -= 1
+
+    valid_months = set(months_list)
+
+    month0_label = months_list[0]
+    month1_label = months_list[1]
+    month2_label = months_list[2]
+
+    # 2. Fetch data from local SQLite
+    conn = get_logistic_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT calculated_products, COALESCE(submitted_at, created_at) 
+        FROM Calculation_History 
+        WHERE status IN ('submitted', 'claimed')
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    # 3. Process and Bucket Data
+    brands_data = {}
+
+    for row in rows:
+        if not row[0]:
+            continue
+        
+        try:
+            products = json.loads(row[0])
+        except Exception:
+            continue
+        
+        fallback_date = row[1][:10] if row[1] else "" 
+        
+        for p in products:
+            brand = p.get("brand", "").strip() or "UNKNOWN"
+            
+            try:
+                ctns = float(p.get("ctns", 0) or 0)
+                cost = float(p.get("total_cost", 0) or 0)
+            except ValueError:
+                continue
+
+            if ctns <= 0:
+                continue
+                
+            doc_date_str = str(p.get("doc_date", ""))
+            if len(doc_date_str) >= 7:
+                task_month = doc_date_str[:7]
+            elif len(fallback_date) >= 7:
+                task_month = fallback_date[:7]
+            else:
+                continue
+
+            if task_month in valid_months:
+                if brand not in brands_data:
+                    brands_data[brand] = {m: {"cost": 0.0, "ctns": 0.0} for m in months_list}
+
+                brands_data[brand][task_month]["cost"] += cost
+                brands_data[brand][task_month]["ctns"] += ctns
+
+    # 4. Format Final Response
+    dashboard_results = []
+    for brand, data in brands_data.items():
+        result = {
+            "brand": brand,
+            "month_0_label": month0_label,
+            "month_1_label": month1_label,
+            "month_2_label": month2_label
+        }
+        
+        for idx in range(3):
+            m_label = months_list[idx]
+            t_cost = data[m_label]["cost"]
+            t_ctns = data[m_label]["ctns"]
+            avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
+            
+            result[f"month_{idx}_avg_cost"] = round(avg_cost, 2)
+            result[f"month_{idx}_total_ctns"] = round(t_ctns, 2)
+            result[f"month_{idx}_total_cost"] = round(t_cost, 2)
+            
+        trend_data = []
+        for m_label in reversed(months_list):
+            t_cost = data[m_label]["cost"]
+            t_ctns = data[m_label]["ctns"]
+            avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
+            
+            trend_data.append({
+                "month": m_label,
+                "avg_cost": round(avg_cost, 2),
+                "total_ctns": round(t_ctns, 2),
+                "total_cost": round(t_cost, 2)
+            })
+        
+        result["trend"] = trend_data
+        dashboard_results.append(result)
+
+    dashboard_results.sort(key=lambda x: x["month_0_total_ctns"], reverse=True)
+    return dashboard_results, month0_label
+
+
 # --- Dashboard Endpoints ---
 
 @app.get("/dashboard/brand-allocation-cost")
 def get_brand_allocation_cost_dashboard(target_month: Optional[str] = None, user: dict = Depends(get_current_user)):
-    """
-    Returns the Average Allocated Cost per Brand for the selected month and the 11 preceding months (12 months total).
-    Includes specific keys for the 3-month table view and a 'trend' array for charting.
-    """
+    """Legacy Endpoint for individual fetching"""
+    if not target_month:
+        target_month = datetime.datetime.now().strftime("%Y-%m")
     try:
-        # 1. Get Rate Carts mapping
-        conn_log = get_logistic_connection()
-        cursor_log = conn_log.cursor()
-        cursor_log.execute("SELECT location, cost FROM Rate_Cart")
-        rate_carts = {row[0].strip().upper(): float(row[1]) for row in cursor_log.fetchall()}
-        conn_log.close()
-
-        # 2. Setup date thresholds
-        if not target_month:
-            target_month = datetime.datetime.now().strftime("%Y-%m")
-        
-        try:
-            year, month = map(int, target_month.split('-'))
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid target_month format. Use YYYY-MM")
-
-        # Generate a list of the last 12 months (Current target month at index 0, oldest at index 11)
-        months_list = []
-        temp_year, temp_month = year, month
-        for _ in range(12):
-            months_list.append(f"{temp_year:04d}-{temp_month:02d}")
-            temp_month -= 1
-            if temp_month == 0:
-                temp_month = 12
-                temp_year -= 1
-
-        # Query Boundaries
-        # End date: Last day of the target month
-        _, last_day = calendar.monthrange(year, month)
-        query_end_date = datetime.date(year, month, last_day).strftime("%Y-%m-%d")
-        
-        # Start date: First day of the 12th month ago
-        oldest_year, oldest_month = map(int, months_list[-1].split('-'))
-        query_start_date = datetime.date(oldest_year, oldest_month, 1).strftime("%Y-%m-%d")
-
-        month0_label = months_list[0]
-        month1_label = months_list[1]
-        month2_label = months_list[2]
-
-        # 3. Get highly aggregated DWBI Data using CTE
-        conn_dwbi = get_dwbi_connection()
-        cursor_dwbi = conn_dwbi.cursor()
-        
-        query = """
-            WITH DriverTotals AS (
-                SELECT 
-                    CONVERT(DATE, [Task Date]) as TaskDate, 
-                    Branch, 
-                    [Driver Name], 
-                    SUM(ctnQty) as TotalDriverCtns
-                FROM VersaFleetDetail_TC
-                WHERE [Task Status] = 'successful' 
-                  AND CONVERT(DATE, [Task Date]) >= ? 
-                  AND CONVERT(DATE, [Task Date]) <= ?
-                GROUP BY CONVERT(DATE, [Task Date]), Branch, [Driver Name]
-            )
-            SELECT 
-                CONVERT(DATE, t.[Task Date]) as TaskDate,
-                t.Branch,
-                t.[Driver Name],
-                t.Brand,
-                SUM(t.ctnQty) as BrandCtns,
-                d.TotalDriverCtns
-            FROM VersaFleetDetail_TC t
-            JOIN DriverTotals d ON 
-                CONVERT(DATE, t.[Task Date]) = d.TaskDate AND 
-                t.Branch = d.Branch AND 
-                t.[Driver Name] = d.[Driver Name]
-            WHERE t.[Task Status] = 'successful' 
-              AND CONVERT(DATE, t.[Task Date]) >= ? 
-              AND CONVERT(DATE, t.[Task Date]) <= ? 
-              AND t.Brand IS NOT NULL
-            GROUP BY CONVERT(DATE, t.[Task Date]), t.Branch, t.[Driver Name], t.Brand, d.TotalDriverCtns
-        """
-        
-        cursor_dwbi.execute(query, (query_start_date, query_end_date, query_start_date, query_end_date))
-        rows = cursor_dwbi.fetchall()
-        conn_dwbi.close()
-
-        # 4. Process and Bucket Data
-        brands_data = {}
-
-        for row in rows:
-            task_date_val = row[0]
-            branch = row[1].strip().upper() if row[1] else "UNKNOWN"
-            brand = row[3].strip() if row[3] else "UNKNOWN"
-            brand_ctns = float(row[4]) if row[4] else 0.0
-            driver_total_ctns = float(row[5]) if row[5] else 0.0
-
-            if not brand or brand_ctns <= 0:
-                continue
-
-            # Ensure date type
-            if isinstance(task_date_val, str):
-                task_date = datetime.datetime.strptime(task_date_val[:10], "%Y-%m-%d").date()
-            elif isinstance(task_date_val, datetime.datetime):
-                task_date = task_date_val.date()
-            else:
-                task_date = task_date_val
-
-            task_month = task_date.strftime("%Y-%m")
-
-            # Calculate Allocated Cost
-            branch_cost = rate_carts.get(branch, 0.0)
-            cost_per_ctn = (branch_cost / driver_total_ctns) if driver_total_ctns > 0 else 0.0
-            allocated_cost = brand_ctns * cost_per_ctn
-
-            # Initialize brand dict dynamically for all 12 months
-            if brand not in brands_data:
-                brands_data[brand] = {m: {"cost": 0.0, "ctns": 0.0} for m in months_list}
-
-            # Bucket into exact timeframe
-            if task_month in brands_data[brand]:
-                brands_data[brand][task_month]["cost"] += allocated_cost
-                brands_data[brand][task_month]["ctns"] += brand_ctns
-
-        # 5. Format Final Response & Calculate Averages
-        dashboard_results = []
-        for brand, data in brands_data.items():
-            result = {
-                "brand": brand,
-                "month_0_label": month0_label,
-                "month_1_label": month1_label,
-                "month_2_label": month2_label
-            }
-            
-            # --- Retro-compatibility for the 3-month table ---
-            for idx in range(3):
-                m_label = months_list[idx]
-                t_cost = data[m_label]["cost"]
-                t_ctns = data[m_label]["ctns"]
-                avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
-                
-                result[f"month_{idx}_avg_cost"] = round(avg_cost, 2)
-                result[f"month_{idx}_total_ctns"] = round(t_ctns, 2)
-                result[f"month_{idx}_total_cost"] = round(t_cost, 2)
-                
-            # --- New 12-Month Trend Array (Sorted chronologically oldest to newest) ---
-            trend_data = []
-            for m_label in reversed(months_list):
-                t_cost = data[m_label]["cost"]
-                t_ctns = data[m_label]["ctns"]
-                avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
-                
-                trend_data.append({
-                    "month": m_label,
-                    "avg_cost": round(avg_cost, 2),
-                    "total_ctns": round(t_ctns, 2),
-                    "total_cost": round(t_cost, 2)
-                })
-            
-            result["trend"] = trend_data
-            dashboard_results.append(result)
-
-        # Sort by selected month (Month 0) Total Cartons descending
-        dashboard_results.sort(key=lambda x: x["month_0_total_ctns"], reverse=True)
-
-        return {
-            "status": "success", 
-            "target_month": month0_label,
-            "data": dashboard_results
-        }
-
+        results, month = _generate_allocation_data(target_month)
+        return {"status": "success", "target_month": month, "data": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating dashboard data: {str(e)}")
     
     
 @app.get("/dashboard/calculated-brand-cost")
 def get_calculated_brand_cost_dashboard(target_month: Optional[str] = None, user: dict = Depends(require_permission("view_dashboard"))):
-    """
-    Returns the Average Calculated Cost per Brand based on submitted/claimed Calculation History.
-    Covers the selected month and the 11 preceding months (12 months total).
-    """
+    """Legacy Endpoint for individual fetching"""
+    if not target_month:
+        target_month = datetime.datetime.now().strftime("%Y-%m")
     try:
-        # 1. Setup date thresholds
-        if not target_month:
-            target_month = datetime.datetime.now().strftime("%Y-%m")
-        
-        try:
-            year, month = map(int, target_month.split('-'))
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid target_month format. Use YYYY-MM")
-
-        # Generate a list of the last 12 months (Current target month at index 0, oldest at index 11)
-        months_list = []
-        temp_year, temp_month = year, month
-        for _ in range(12):
-            months_list.append(f"{temp_year:04d}-{temp_month:02d}")
-            temp_month -= 1
-            if temp_month == 0:
-                temp_month = 12
-                temp_year -= 1
-
-        valid_months = set(months_list)
-
-        # Labels for the 3-month tabular view
-        month0_label = months_list[0]
-        month1_label = months_list[1]
-        month2_label = months_list[2]
-
-        # 2. Fetch data from local SQLite Calculation_History
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        
-        # Fetch products from calculations that are submitted or claimed by logistics
-        cursor.execute("""
-            SELECT calculated_products, COALESCE(submitted_at, created_at) 
-            FROM Calculation_History 
-            WHERE status IN ('submitted', 'claimed')
-        """)
-        rows = cursor.fetchall()
-        conn.close()
-
-        # 3. Process and Bucket Data
-        brands_data = {}
-
-        for row in rows:
-            if not row[0]:
-                continue
-            
-            try:
-                products = json.loads(row[0])
-            except Exception:
-                continue
-            
-            # Fallback to the calculation submission/creation date if the item's doc_date is missing
-            fallback_date = row[1][:10] if row[1] else "" 
-            
-            for p in products:
-                brand = p.get("brand", "").strip() or "UNKNOWN"
-                
-                try:
-                    ctns = float(p.get("ctns", 0) or 0)
-                    cost = float(p.get("total_cost", 0) or 0)
-                except ValueError:
-                    continue
-
-                if ctns <= 0:
-                    continue
-                    
-                doc_date_str = str(p.get("doc_date", ""))
-                if len(doc_date_str) >= 7:
-                    task_month = doc_date_str[:7]
-                elif len(fallback_date) >= 7:
-                    task_month = fallback_date[:7]
-                else:
-                    continue
-
-                # Bucket into exact timeframe
-                if task_month in valid_months:
-                    if brand not in brands_data:
-                        brands_data[brand] = {m: {"cost": 0.0, "ctns": 0.0} for m in months_list}
-
-                    brands_data[brand][task_month]["cost"] += cost
-                    brands_data[brand][task_month]["ctns"] += ctns
-
-        # 4. Format Final Response & Calculate Averages
-        dashboard_results = []
-        for brand, data in brands_data.items():
-            result = {
-                "brand": brand,
-                "month_0_label": month0_label,
-                "month_1_label": month1_label,
-                "month_2_label": month2_label
-            }
-            
-            # --- Retro-compatibility for the 3-month table ---
-            for idx in range(3):
-                m_label = months_list[idx]
-                t_cost = data[m_label]["cost"]
-                t_ctns = data[m_label]["ctns"]
-                avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
-                
-                result[f"month_{idx}_avg_cost"] = round(avg_cost, 2)
-                result[f"month_{idx}_total_ctns"] = round(t_ctns, 2)
-                result[f"month_{idx}_total_cost"] = round(t_cost, 2)
-                
-            # --- New 12-Month Trend Array (Sorted chronologically oldest to newest) ---
-            trend_data = []
-            for m_label in reversed(months_list):
-                t_cost = data[m_label]["cost"]
-                t_ctns = data[m_label]["ctns"]
-                avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
-                
-                trend_data.append({
-                    "month": m_label,
-                    "avg_cost": round(avg_cost, 2),
-                    "total_ctns": round(t_ctns, 2),
-                    "total_cost": round(t_cost, 2)
-                })
-            
-            result["trend"] = trend_data
-            dashboard_results.append(result)
-
-        # Sort by selected month (Month 0) Total Cartons descending
-        dashboard_results.sort(key=lambda x: x["month_0_total_ctns"], reverse=True)
-
-        return {
-            "status": "success", 
-            "target_month": month0_label,
-            "data": dashboard_results
-        }
-
+        results, month = _generate_calculated_data(target_month)
+        return {"status": "success", "target_month": month, "data": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating calculated dashboard data: {str(e)}")
+
+
+@app.get("/dashboard/combined")
+def get_combined_dashboard(target_month: Optional[str] = None, user: dict = Depends(require_permission("view_dashboard"))):
+    """
+    NEW ENDPOINT: Returns both allocation data and calculated data in one call
+    to render everything consecutively in a unified frontend view.
+    """
+    if not target_month:
+        target_month = datetime.datetime.now().strftime("%Y-%m")
+        
+    try:
+        alloc_data, month = _generate_allocation_data(target_month)
+        calc_data, _ = _generate_calculated_data(target_month)
+        
+        return {
+            "status": "success",
+            "target_month": month,
+            "allocation_data": alloc_data,
+            "calculated_data": calc_data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating combined dashboard data: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn
