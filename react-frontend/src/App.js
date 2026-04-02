@@ -1112,8 +1112,24 @@ const PricingApp = () => {
   if (currentPage === 'dashboard' && permissions.includes('view_dashboard')) {
     
     // Theme configurations
-    const allocTheme = { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', selectText: 'text-blue-900', bar: 'bg-blue' };
-    const calcTheme = { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-800', selectText: 'text-green-900', bar: 'bg-green' };
+    // Tailwind CSS cannot dynamically generate class names like `${allocTheme.bar}-300` because it scans for literal string names during compilation.
+    // By passing the complete, unbroken string (e.g., 'bg-blue-300 hover:bg-blue-500') inside the object, we guarantee Tailwind picks them up.
+    const allocTheme = { 
+        bg: 'bg-blue-50', 
+        border: 'border-blue-200', 
+        text: 'text-blue-800', 
+        selectText: 'text-blue-900', 
+        barCurrent: 'bg-blue-600 shadow-md', 
+        barOther: 'bg-blue-300 hover:bg-blue-500 hover:shadow-md' 
+    };
+    const calcTheme = { 
+        bg: 'bg-green-50', 
+        border: 'border-green-200', 
+        text: 'text-green-800', 
+        selectText: 'text-green-900', 
+        barCurrent: 'bg-green-600 shadow-md', 
+        barOther: 'bg-green-300 hover:bg-green-500 hover:shadow-md' 
+    };
 
     // Get current labels safely from whichever dataset has data
     const month0Label = (allocationData.length > 0 ? allocationData[0].month_0_label : (calculatedData.length > 0 ? calculatedData[0].month_0_label : 'Selected Month'));
@@ -1160,7 +1176,7 @@ const PricingApp = () => {
                 <div>
                     {!isDashboardLoading && allocationData.length > 0 && (
                         <div className={`flex flex-col gap-1 ${allocTheme.bg} p-3 rounded-lg border ${allocTheme.border}`}>
-                            <label className={`text-sm font-semibold ${allocTheme.text}`}>Daily Report Brand:</label>
+                            <label className={`text-sm font-semibold ${allocTheme.text}`}>Brand (Rate Cart):</label>
                             <select
                                 value={selectedAllocBrand}
                                 onChange={(e) => setSelectedAllocBrand(e.target.value)}
@@ -1177,7 +1193,7 @@ const PricingApp = () => {
                 <div>
                     {!isDashboardLoading && calculatedData.length > 0 && (
                         <div className={`flex flex-col gap-1 ${calcTheme.bg} p-3 rounded-lg border ${calcTheme.border}`}>
-                            <label className={`text-sm font-semibold ${calcTheme.text}`}>Calculated Cost Brand:</label>
+                            <label className={`text-sm font-semibold ${calcTheme.text}`}>Brand (Third Party):</label>
                             <select
                                 value={selectedCalcBrand}
                                 onChange={(e) => setSelectedCalcBrand(e.target.value)}
@@ -1296,126 +1312,130 @@ const PricingApp = () => {
               </div>
             </div>
 
-            {/* --- SECTION 3: Allocation 12-Month Trend --- */}
-            <div className="mb-10">
-              <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Allocation: 12-Month Trend Analysis (Rate Cart)</h2>
-              {isDashboardLoading ? (
-                 <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg">Loading trends...</div>
-              ) : !selectedAllocRow ? (
-                 <div className="text-center p-6 text-gray-500 italic border rounded-lg">No trend data available.</div>
-              ) : (
-                 <div className="bg-white border rounded-lg p-6 shadow-sm">
-                    {(() => {
-                        if (!selectedAllocRow.trend || selectedAllocRow.trend.length === 0) {
-                            return <div className="text-center p-8 text-gray-500">No trend data available for {selectedAllocRow.brand}.</div>;
-                        }
+            {/* --- TREND ANALYSIS SECTION (Side-by-Side) --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
+              
+              {/* --- SECTION 3: Allocation 12-Month Trend --- */}
+              <div>
+                <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Allocation: 12-Month Trend Analysis (Rate Cart)</h2>
+                {isDashboardLoading ? (
+                   <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center">Loading trends...</div>
+                ) : !selectedAllocRow ? (
+                   <div className="text-center p-6 text-gray-500 italic border rounded-lg flex items-center justify-center">No trend data available.</div>
+                ) : (
+                   <div className="bg-white border rounded-lg p-6 shadow-sm">
+                      {(() => {
+                          if (!selectedAllocRow.trend || selectedAllocRow.trend.length === 0) {
+                              return <div className="text-center p-8 text-gray-500">No trend data available for {selectedAllocRow.brand}.</div>;
+                          }
 
-                        const maxVal = Math.max(...selectedAllocRow.trend.map(d => d.avg_cost));
+                          const maxVal = Math.max(...selectedAllocRow.trend.map(d => d.avg_cost));
 
-                        return (
-                            <div className="w-full">
-                                <div className="flex justify-between items-center mb-8">
-                                    <h3 className={`font-bold text-2xl ${allocTheme.text}`}>{selectedAllocRow.brand} Trend</h3>
-                                </div>
-                                
-                                <div className="flex items-end justify-between h-72 w-full gap-2 sm:gap-4 border-b-2 border-gray-200 pb-2 relative px-2">
-                                    {selectedAllocRow.trend.map((tData, tIdx) => {
-                                        const heightPct = maxVal > 0 ? (tData.avg_cost / maxVal) * 100 : 0;
-                                        const isCurrentMonth = tIdx === selectedAllocRow.trend.length - 1;
-                                        
-                                        let monthAbbr = tData.month;
-                                        try {
-                                            const dateObj = new Date(tData.month + "-01T00:00:00");
-                                            monthAbbr = dateObj.toLocaleString('default', { month: 'short', year: '2-digit' });
-                                        } catch(e) {}
+                          return (
+                              <div className="w-full">
+                                  <div className="flex justify-between items-center mb-8">
+                                      <h3 className={`font-bold text-2xl ${allocTheme.text}`}>{selectedAllocRow.brand} Trend</h3>
+                                  </div>
+                                  
+                                  <div className="flex items-end justify-between h-72 w-full gap-2 sm:gap-4 border-b-2 border-gray-200 pb-2 relative px-2">
+                                      {selectedAllocRow.trend.map((tData, tIdx) => {
+                                          const heightPct = maxVal > 0 ? (tData.avg_cost / maxVal) * 100 : 0;
+                                          const isCurrentMonth = tIdx === selectedAllocRow.trend.length - 1;
+                                          
+                                          let monthAbbr = tData.month;
+                                          try {
+                                              const dateObj = new Date(tData.month + "-01T00:00:00");
+                                              monthAbbr = dateObj.toLocaleString('default', { month: 'short', year: '2-digit' });
+                                          } catch(e) {}
 
-                                        return (
-                                            <div key={tIdx} className="relative flex flex-col items-center group w-full h-full justify-end cursor-pointer">
-                                                {/* Tooltip */}
-                                                <div className="absolute bottom-full mb-3 hidden group-hover:block z-50 bg-gray-800 text-white p-3 rounded-lg shadow-xl whitespace-nowrap min-w-[140px] text-center border border-gray-600">
-                                                    <div className="font-bold text-sm border-b border-gray-600 pb-1 mb-2">{tData.month}</div>
-                                                    <div className="text-blue-300 font-bold mb-1">Avg: {formatNumber(tData.avg_cost)} MMK</div>
-                                                    <div className="text-gray-300 text-xs mt-2">Total Cost: {formatNumber(tData.total_cost)}</div>
-                                                    <div className="text-gray-300 text-xs">Total Ctns: {formatNumber(tData.total_ctns)}</div>
-                                                </div>
-                                                {/* Bar Segment */}
-                                                <div 
-                                                    className={`w-full max-w-[60px] rounded-t-md transition-all duration-300 ${isCurrentMonth ? `${allocTheme.bar}-600 shadow-md` : `${allocTheme.bar}-300 hover:${allocTheme.bar}-500 hover:shadow-md`}`}
-                                                    style={{ height: `${Math.max(heightPct, 5)}%`, minHeight: '6px' }}
-                                                ></div>
-                                                {/* X-axis label */}
-                                                <span className="text-xs sm:text-sm font-medium text-gray-500 absolute -bottom-8 w-full text-center truncate">{monthAbbr}</span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                                <div className="h-10"></div> {/* Spacer for x-axis labels */}
-                            </div>
-                        );
-                    })()}
-                 </div>
-              )}
-            </div>
+                                          return (
+                                              <div key={tIdx} className="relative flex flex-col items-center group w-full h-full justify-end cursor-pointer">
+                                                  {/* Tooltip */}
+                                                  <div className="absolute bottom-full mb-3 hidden group-hover:block z-50 bg-gray-800 text-white p-3 rounded-lg shadow-xl whitespace-nowrap min-w-[140px] text-center border border-gray-600">
+                                                      <div className="font-bold text-sm border-b border-gray-600 pb-1 mb-2">{tData.month}</div>
+                                                      <div className="text-blue-300 font-bold mb-1">Avg: {formatNumber(tData.avg_cost)} MMK</div>
+                                                      <div className="text-gray-300 text-xs mt-2">Total Cost: {formatNumber(tData.total_cost)}</div>
+                                                      <div className="text-gray-300 text-xs">Total Ctns: {formatNumber(tData.total_ctns)}</div>
+                                                  </div>
+                                                  {/* Bar Segment */}
+                                                  <div 
+                                                      className={`w-full max-w-[60px] rounded-t-md transition-all duration-300 ${isCurrentMonth ? allocTheme.barCurrent : allocTheme.barOther}`}
+                                                      style={{ height: `${Math.max(heightPct, 5)}%`, minHeight: '6px' }}
+                                                  ></div>
+                                                  {/* X-axis label */}
+                                                  <span className="text-xs sm:text-sm font-medium text-gray-500 absolute -bottom-8 w-full text-center truncate">{monthAbbr}</span>
+                                              </div>
+                                          );
+                                      })}
+                                  </div>
+                                  <div className="h-10"></div> {/* Spacer for x-axis labels */}
+                              </div>
+                          );
+                      })()}
+                   </div>
+                )}
+              </div>
 
-            {/* --- SECTION 4: Calculated 12-Month Trend --- */}
-            <div className="mb-4">
-              <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Allocation: 12-Month Trend Analysis (Third Party)</h2>
-              {isDashboardLoading ? (
-                 <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg">Loading trends...</div>
-              ) : !selectedCalcRow ? (
-                 <div className="text-center p-6 text-gray-500 italic border rounded-lg">No trend data available.</div>
-              ) : (
-                 <div className="bg-white border rounded-lg p-6 shadow-sm">
-                    {(() => {
-                        if (!selectedCalcRow.trend || selectedCalcRow.trend.length === 0) {
-                            return <div className="text-center p-8 text-gray-500">No trend data available for {selectedCalcRow.brand}.</div>;
-                        }
+              {/* --- SECTION 4: Calculated 12-Month Trend --- */}
+              <div>
+                <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Allocation: 12-Month Trend Analysis (Third Party)</h2>
+                {isDashboardLoading ? (
+                   <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center">Loading trends...</div>
+                ) : !selectedCalcRow ? (
+                   <div className="text-center p-6 text-gray-500 italic border rounded-lg flex items-center justify-center">No trend data available.</div>
+                ) : (
+                   <div className="bg-white border rounded-lg p-6 shadow-sm">
+                      {(() => {
+                          if (!selectedCalcRow.trend || selectedCalcRow.trend.length === 0) {
+                              return <div className="text-center p-8 text-gray-500">No trend data available for {selectedCalcRow.brand}.</div>;
+                          }
 
-                        const maxVal = Math.max(...selectedCalcRow.trend.map(d => d.avg_cost));
+                          const maxVal = Math.max(...selectedCalcRow.trend.map(d => d.avg_cost));
 
-                        return (
-                            <div className="w-full">
-                                <div className="flex justify-between items-center mb-8">
-                                    <h3 className={`font-bold text-2xl ${calcTheme.text}`}>{selectedCalcRow.brand} Trend</h3>
-                                </div>
-                                
-                                <div className="flex items-end justify-between h-72 w-full gap-2 sm:gap-4 border-b-2 border-gray-200 pb-2 relative px-2">
-                                    {selectedCalcRow.trend.map((tData, tIdx) => {
-                                        const heightPct = maxVal > 0 ? (tData.avg_cost / maxVal) * 100 : 0;
-                                        const isCurrentMonth = tIdx === selectedCalcRow.trend.length - 1;
-                                        
-                                        let monthAbbr = tData.month;
-                                        try {
-                                            const dateObj = new Date(tData.month + "-01T00:00:00");
-                                            monthAbbr = dateObj.toLocaleString('default', { month: 'short', year: '2-digit' });
-                                        } catch(e) {}
+                          return (
+                              <div className="w-full">
+                                  <div className="flex justify-between items-center mb-8">
+                                      <h3 className={`font-bold text-2xl ${calcTheme.text}`}>{selectedCalcRow.brand} Trend</h3>
+                                  </div>
+                                  
+                                  <div className="flex items-end justify-between h-72 w-full gap-2 sm:gap-4 border-b-2 border-gray-200 pb-2 relative px-2">
+                                      {selectedCalcRow.trend.map((tData, tIdx) => {
+                                          const heightPct = maxVal > 0 ? (tData.avg_cost / maxVal) * 100 : 0;
+                                          const isCurrentMonth = tIdx === selectedCalcRow.trend.length - 1;
+                                          
+                                          let monthAbbr = tData.month;
+                                          try {
+                                              const dateObj = new Date(tData.month + "-01T00:00:00");
+                                              monthAbbr = dateObj.toLocaleString('default', { month: 'short', year: '2-digit' });
+                                          } catch(e) {}
 
-                                        return (
-                                            <div key={tIdx} className="relative flex flex-col items-center group w-full h-full justify-end cursor-pointer">
-                                                {/* Tooltip */}
-                                                <div className="absolute bottom-full mb-3 hidden group-hover:block z-50 bg-gray-800 text-white p-3 rounded-lg shadow-xl whitespace-nowrap min-w-[140px] text-center border border-gray-600">
-                                                    <div className="font-bold text-sm border-b border-gray-600 pb-1 mb-2">{tData.month}</div>
-                                                    <div className="text-green-300 font-bold mb-1">Avg: {formatNumber(tData.avg_cost)} MMK</div>
-                                                    <div className="text-gray-300 text-xs mt-2">Total Cost: {formatNumber(tData.total_cost)}</div>
-                                                    <div className="text-gray-300 text-xs">Total Ctns: {formatNumber(tData.total_ctns)}</div>
-                                                </div>
-                                                {/* Bar Segment */}
-                                                <div 
-                                                    className={`w-full max-w-[60px] rounded-t-md transition-all duration-300 ${isCurrentMonth ? `${calcTheme.bar}-600 shadow-md` : `${calcTheme.bar}-300 hover:${calcTheme.bar}-500 hover:shadow-md`}`}
-                                                    style={{ height: `${Math.max(heightPct, 5)}%`, minHeight: '6px' }}
-                                                ></div>
-                                                {/* X-axis label */}
-                                                <span className="text-xs sm:text-sm font-medium text-gray-500 absolute -bottom-8 w-full text-center truncate">{monthAbbr}</span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                                <div className="h-10"></div> {/* Spacer for x-axis labels */}
-                            </div>
-                        );
-                    })()}
-                 </div>
-              )}
+                                          return (
+                                              <div key={tIdx} className="relative flex flex-col items-center group w-full h-full justify-end cursor-pointer">
+                                                  {/* Tooltip */}
+                                                  <div className="absolute bottom-full mb-3 hidden group-hover:block z-50 bg-gray-800 text-white p-3 rounded-lg shadow-xl whitespace-nowrap min-w-[140px] text-center border border-gray-600">
+                                                      <div className="font-bold text-sm border-b border-gray-600 pb-1 mb-2">{tData.month}</div>
+                                                      <div className="text-green-300 font-bold mb-1">Avg: {formatNumber(tData.avg_cost)} MMK</div>
+                                                      <div className="text-gray-300 text-xs mt-2">Total Cost: {formatNumber(tData.total_cost)}</div>
+                                                      <div className="text-gray-300 text-xs">Total Ctns: {formatNumber(tData.total_ctns)}</div>
+                                                  </div>
+                                                  {/* Bar Segment */}
+                                                  <div 
+                                                      className={`w-full max-w-[60px] rounded-t-md transition-all duration-300 ${isCurrentMonth ? calcTheme.barCurrent : calcTheme.barOther}`}
+                                                      style={{ height: `${Math.max(heightPct, 5)}%`, minHeight: '6px' }}
+                                                  ></div>
+                                                  {/* X-axis label */}
+                                                  <span className="text-xs sm:text-sm font-medium text-gray-500 absolute -bottom-8 w-full text-center truncate">{monthAbbr}</span>
+                                              </div>
+                                          );
+                                      })}
+                                  </div>
+                                  <div className="h-10"></div> {/* Spacer for x-axis labels */}
+                              </div>
+                          );
+                      })()}
+                   </div>
+                )}
+              </div>
             </div>
 
           </div>
