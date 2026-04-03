@@ -657,22 +657,62 @@ def determine_calculation_type_sql(gate_id):
         logger.error(f"Error determining calc type: {str(e)}")
         return "unknown"
 
+def get_rounded_ctns(val):
+    """
+    Safely parses carton values. 
+    If the value is > 0 but rounds down to 0 (e.g., 0.25, 0.33), 
+    it forces the value to be at least 1.
+    """
+    if not val:
+        return 0
+    try:
+        f_val = float(val)
+        if f_val <= 0:
+            return 0
+        return max(1, round(f_val))
+    except (ValueError, TypeError):
+        return 0
+
+
 def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, manual_total_cost=None, additional_charges=0.0):
     add_charges = float(additional_charges) if additional_charges is not None else 0.0
+
+    # Parse combined doc_nums to separate PG and PDG requests seamlessly
+    pg_nums = [str(d).replace("PG - ", "").replace("PG-", "") for d in doc_nums if not str(d).startswith("PDG")]
+    pdg_nums = [str(d).replace("PDG - ", "").replace("PDG-", "") for d in doc_nums if str(d).startswith("PDG")]
+
+    pick_rows = []
 
     try:
         conn_dwbi = get_dwbi_connection()
         cursor_dwbi = conn_dwbi.cursor()
-        placeholders = ','.join('?' * len(doc_nums))
-        query = f"""
-            SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(BatchQtyByCtn), MAX(Brand)
-            FROM PG_Transfer_Details 
-            WHERE DocNum IN ({placeholders}) 
-            GROUP BY DocNum, ItemCode
-            ORDER BY DocNum, ItemCode
-        """
-        cursor_dwbi.execute(query, doc_nums)
-        pick_rows = cursor_dwbi.fetchall()
+
+        # PG Details Fetch
+        if pg_nums:
+            placeholders = ','.join('?' * len(pg_nums))
+            query_pg = f"""
+                SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(BatchQtyByCtn), MAX(Brand), 'PG'
+                FROM PG_Transfer_Details 
+                WHERE DocNum IN ({placeholders}) 
+                GROUP BY DocNum, ItemCode
+                ORDER BY DocNum, ItemCode
+            """
+            cursor_dwbi.execute(query_pg, pg_nums)
+            pick_rows.extend(cursor_dwbi.fetchall())
+
+        # PDG Details Fetch
+        if pdg_nums:
+            placeholders = ','.join('?' * len(pdg_nums))
+            query_pdg = f"""
+                SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(QtyCtn), MAX(Brand), 'PDG'
+                FROM PDG_Transfer_Details 
+                WHERE DocNum IN ({placeholders}) 
+                GROUP BY DocNum, ItemCode
+                ORDER BY DocNum, ItemCode
+            """
+            cursor_dwbi.execute(query_pdg, pdg_nums)
+            pick_rows.extend(cursor_dwbi.fetchall())
+
         conn_dwbi.close()
     except Exception as e:
         raise Exception(f"Error fetching transfer details: {str(e)}")
@@ -745,7 +785,6 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
         ton_cost_total = 0.0
         
         for row in pick_rows:
-            # Safely stringify the DocDate directly here to ensure format consistency
             doc_date_val = row[4]
             if isinstance(doc_date_val, datetime.datetime):
                 doc_date_str = doc_date_val.strftime("%Y-%m-%d")
@@ -765,10 +804,10 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
                 "uom": row[2] if row[2] else "",
                 "weight": float(row[3]) if row[3] else 0.0,
                 "doc_date": doc_date_str,         
-                "sin_no": str(row[5]) if row[5] else "",           
+                "sin_no": f"{row[9]} - {str(row[5])}" if row[5] else "",           
                 "principal": principal_val,
                 "brand": brand_val,
-                "ctns": round(float(row[7])) if row[7] else 0,
+                "ctns": get_rounded_ctns(row[7]),
                 "b_code": bc_info.get("Code", ""),
                 "b_name": bc_info.get("Name", ""),
                 "b_dept": bc_info.get("Dept", ""),
@@ -820,7 +859,6 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
 
     elif calc_type == "direct_pricing":
         for row in pick_rows:
-            # Safely stringify the DocDate directly here
             doc_date_val = row[4]
             if isinstance(doc_date_val, datetime.datetime):
                 doc_date_str = doc_date_val.strftime("%Y-%m-%d")
@@ -833,7 +871,7 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
             pricing_info = item_pricing.get(item_code, {})
             
             weight = float(row[3]) if row[3] else 0.0
-            ctns = round(float(row[7])) if row[7] else 0
+            ctns = get_rounded_ctns(row[7])
             principal_val = row[6] or ""
             brand_val = row[8] or ""
             bc_info = branch_code_map.get(principal_val.strip().lower(), {})
@@ -848,7 +886,7 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
             calculated_products.append({
                 "code": item_code, "name": row[1] if row[1] else "", "ctns": ctns,
                 "uom": row[2] if row[2] else "", "weight": weight, "doc_date": doc_date_str,       
-                "sin_no": str(row[5]) if row[5] else "", "principal": principal_val, "brand": brand_val,
+                "sin_no": f"{row[9]} - {str(row[5])}" if row[5] else "", "principal": principal_val, "brand": brand_val,
                 "b_code": bc_info.get("Code", ""), "b_name": bc_info.get("Name", ""), 
                 "b_dept": bc_info.get("Dept", ""), "b_principal": bc_info.get("Principal", ""), 
                 "b_desc": bc_info.get("Description", ""), "s_dept": sd_info.get("Dept", ""), 
@@ -975,7 +1013,6 @@ def get_rate_carts_for_date(target_date: str) -> dict:
     current_costs = {row[0].strip().upper(): float(row[1]) for row in cursor.fetchall()}
     
     # 2. Fetch logs that occurred strictly AFTER the target_date
-    # Standard query formatting target_date as EOD to get state *before* any changes following it
     query_threshold = target_date + " 23:59:59"
     cursor.execute("""
         SELECT location, change_date, old_value 
@@ -1533,10 +1570,14 @@ def download_history_excel(record_id: int):
 
             concat_desc = f"{b_desc.strip()} - {ctns_formatted} ctns @{price_formatted} kyats"
 
+            # Strip out "PG - " and "PDG - " strictly for Excel download format
+            raw_sin_no = str(item.get('sin_no', ''))
+            clean_sin_no = raw_sin_no.replace('PDG - ', '').replace('PDG-', '').replace('PG - ', '').replace('PG-', '').strip()
+
             ws.cell(row=row_num, column=1, value=idx).border = border
             ws.cell(row=row_num, column=2, value=claim_date_str).border = border
             ws.cell(row=row_num, column=3, value=doc_date_str).border = border
-            ws.cell(row=row_num, column=4, value=item.get('sin_no', '')).border = border
+            ws.cell(row=row_num, column=4, value=clean_sin_no).border = border
             ws.cell(row=row_num, column=5, value=record['to_loc']).border = border
             ws.cell(row=row_num, column=6, value=item.get('b_code', '')).border = border
             ws.cell(row=row_num, column=7, value=item.get('b_name', '')).border = border
@@ -2042,33 +2083,61 @@ def get_doc_nums():
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT DocNum, MAX(DocDate) FROM PG_Transfer_Details WHERE DocNum IS NOT NULL GROUP BY DocNum ORDER BY DocNum DESC")
+        query = """
+            SELECT source, DocNum, DocDate FROM (
+                SELECT 'PG' as source, DocNum, MAX(DocDate) as DocDate FROM PG_Transfer_Details WHERE DocNum IS NOT NULL GROUP BY DocNum
+                UNION ALL
+                SELECT 'PDG' as source, DocNum, MAX(DocDate) as DocDate FROM PDG_Transfer_Details WHERE DocNum IS NOT NULL GROUP BY DocNum
+            ) t
+            ORDER BY DocDate DESC, DocNum DESC
+        """
+        cursor.execute(query)
         rows = cursor.fetchall()
         doc_nums = []
         for row in rows:
-            doc_date_val = row[1]
+            doc_date_val = row[2]
             if isinstance(doc_date_val, datetime.datetime): doc_date_str = doc_date_val.strftime("%Y-%m-%d")
             elif isinstance(doc_date_val, str) and len(doc_date_val) >= 10: doc_date_str = doc_date_val[:10]
             else: doc_date_str = str(doc_date_val) if doc_date_val else ""
-            doc_nums.append({"doc_num": row[0], "doc_date": doc_date_str})
+            
+            # Formats the doc num to automatically match the frontend string template formatting ("PG - 123456")
+            doc_nums.append({"doc_num": f"{row[0]} - {row[1]}", "doc_date": doc_date_str})
         conn.close()
         return {"doc_nums": doc_nums}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
 
 @app.get("/products-by-doc-nums")
 def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums")):
     try:
         if not doc_nums: return {"products": [], "total_weight": 0}
+        
+        # Safely extract actual DocNums corresponding to respective Sources
+        pg_nums = [str(d).replace("PG - ", "").replace("PG-", "") for d in doc_nums if not str(d).startswith("PDG")]
+        pdg_nums = [str(d).replace("PDG - ", "").replace("PDG-", "") for d in doc_nums if str(d).startswith("PDG")]
+        
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        placeholders = ','.join('?' * len(doc_nums))
-        cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand) FROM PG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", doc_nums)
-        rows = cursor.fetchall()
         products, total_weight = [], 0.0
-        for row in rows:
-            weight = float(row[3]) if row[3] else 0.0
-            total_weight += weight
-            products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": round(float(row[5])) if len(row) > 5 and row[5] is not None else 0, "brand": row[6] or ""})
+        
+        if pg_nums:
+            placeholders = ','.join('?' * len(pg_nums))
+            cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand), 'PG' FROM PG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode", pg_nums)
+            rows = cursor.fetchall()
+            for row in rows:
+                weight = float(row[3]) if row[3] else 0.0
+                total_weight += weight
+                products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "sin_no": f"{row[7]} - {row[4]}"})
+                
+        if pdg_nums:
+            placeholders = ','.join('?' * len(pdg_nums))
+            cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), DocNum, SUM(QtyCtn), MAX(Brand), 'PDG' FROM PDG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode", pdg_nums)
+            rows = cursor.fetchall()
+            for row in rows:
+                weight = float(row[3]) if row[3] else 0.0
+                total_weight += weight
+                products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "sin_no": f"{row[7]} - {row[4]}"})
+        
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
@@ -2076,18 +2145,28 @@ def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums"))
 @app.get("/products/{doc_num}")
 def get_products_by_doc_num(doc_num: str):
     try:
+        is_pdg = doc_num.startswith("PDG")
+        actual_num = doc_num.replace("PDG - ", "").replace("PDG-", "").replace("PG - ", "").replace("PG-", "")
+
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand) FROM PG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (doc_num,))
+
+        if is_pdg:
+            cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), DocNum, SUM(QtyCtn), MAX(Brand) FROM PDG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
+        else:
+            cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand) FROM PG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
+            
         rows = cursor.fetchall()
         if not rows:
             conn.close()
             raise HTTPException(status_code=404, detail="No products found")
+            
         products, total_weight = [], 0.0
         for row in rows:
             weight = float(row[3]) if row[3] else 0.0
             total_weight += weight
-            products.append({"item_code": row[0] or "", "description": row[1] or "", "uom": row[2] or "", "item_weight": weight, "ctns": round(float(row[5])) if len(row) > 5 and row[5] is not None else 0, "brand": row[6] or ""})
+            products.append({"item_code": row[0] or "", "description": row[1] or "", "uom": row[2] or "", "item_weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or ""})
+            
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

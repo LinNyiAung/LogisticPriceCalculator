@@ -766,7 +766,7 @@ const PricingApp = () => {
                         setCalculatedTotalCost(calcData.total_cost);
                         setEstimatedTotalCost(calcData.estimated_total_cost);
                         loadedFromPG = true;
-                        showNotification(`Loaded and verified with live PG_Transfer_Details (ID: ${fullRecord.id}).`, 'success');
+                        showNotification(`Loaded and verified with live DB Details (ID: ${fullRecord.id}).`, 'success');
                     }
                 }
             }
@@ -783,7 +783,7 @@ const PricingApp = () => {
                 setCalculatedTotalCost(fullRecord.final_total_cost);
                 showNotification(`Data cleared from external DB. Loaded saved snapshot from local DB (ID: ${fullRecord.id}).`, 'info');
             } else {
-                showNotification('Data purged from PG and no local saved products found. Cannot load calculation details.', 'error');
+                showNotification('Data purged from system and no local saved products found. Cannot load calculation details.', 'error');
             }
         }
       } else {
@@ -1113,8 +1113,6 @@ const PricingApp = () => {
   if (currentPage === 'dashboard' && permissions.includes('view_dashboard')) {
     
     // Theme configurations
-    // Tailwind CSS cannot dynamically generate class names like `${allocTheme.bar}-300` because it scans for literal string names during compilation.
-    // By passing the complete, unbroken string (e.g., 'bg-blue-300 hover:bg-blue-500') inside the object, we guarantee Tailwind picks them up.
     const allocTheme = { 
         bg: 'bg-blue-50', 
         border: 'border-blue-200', 
@@ -1132,12 +1130,10 @@ const PricingApp = () => {
         barOther: 'bg-green-300 hover:bg-green-500 hover:shadow-md' 
     };
 
-    // Get current labels safely from whichever dataset has data
     const month0Label = (allocationData.length > 0 ? allocationData[0].month_0_label : (calculatedData.length > 0 ? calculatedData[0].month_0_label : 'Selected Month'));
     const month1Label = (allocationData.length > 0 ? allocationData[0].month_1_label : (calculatedData.length > 0 ? calculatedData[0].month_1_label : '1 Month Ago'));
     const month2Label = (allocationData.length > 0 ? allocationData[0].month_2_label : (calculatedData.length > 0 ? calculatedData[0].month_2_label : '2 Months Ago'));
 
-    // Selected Rows
     const selectedAllocRow = allocationData.find(r => r.brand === selectedAllocBrand) || allocationData[0];
     const selectedCalcRow = calculatedData.find(r => r.brand === selectedCalcBrand) || calculatedData[0];
 
@@ -2054,7 +2050,7 @@ const PricingApp = () => {
             <h2 className="text-xl font-bold mb-4">Select Doc Nums (Transfer IDs) <span className="text-red-500">*</span></h2>
             <div className="relative mb-4">
               <div className="relative">
-                <input type="text" placeholder="Search and add a Doc Num (e.g. 22#####)..." value={docNumSearchTerm} onChange={(e) => { setDocNumSearchTerm(e.target.value); setShowDocNumDropdown(true); }} onFocus={() => setShowDocNumDropdown(true)} onBlur={() => setTimeout(() => setShowDocNumDropdown(false), 200)} className="w-full p-3 pl-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                <input type="text" placeholder="Search and add a Doc Num (e.g. PG - 22##### or PDG - 12####)..." value={docNumSearchTerm} onChange={(e) => { setDocNumSearchTerm(e.target.value); setShowDocNumDropdown(true); }} onFocus={() => setShowDocNumDropdown(true)} onBlur={() => setTimeout(() => setShowDocNumDropdown(false), 200)} className="w-full p-3 pl-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                 <div className="absolute left-3 top-3 text-gray-400"><Search size={20} /></div>
               </div>
               {showDocNumDropdown && (
@@ -2076,7 +2072,11 @@ const PricingApp = () => {
                 let displayDate = docObj ? docObj.doc_date : null;
 
                 if (!displayDate && calculatedProducts && calculatedProducts.length > 0) {
-                    const matchedProd = calculatedProducts.find(p => String(p.sin_no) === String(id));
+                    const matchedProd = calculatedProducts.find(p => {
+                        const baseSinNo = String(p.sin_no).split(' - ')[1] || String(p.sin_no); 
+                        const baseId = String(id).split(' - ')[1] || String(id);
+                        return baseSinNo.trim() === baseId.trim();
+                    });
                     if (matchedProd && matchedProd.doc_date) {
                         const dateStr = String(matchedProd.doc_date);
                         displayDate = dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr;
