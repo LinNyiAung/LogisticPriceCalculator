@@ -6,7 +6,6 @@ import datetime
 import calendar
 import time
 import random
-import threading
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -290,15 +289,12 @@ def startup_db():
         conn.close()
         logger.info("Logistic DB initialized successfully")
         
-        # --- Start Scheduler and Backfill Thread ---
+        # --- Start Scheduler ---
         scheduler = BackgroundScheduler()
         # Schedule daily job at 23:55 (11:55 PM) to compute end-of-day reports
         scheduler.add_job(daily_job_generator, 'cron', hour=23, minute=55)
         scheduler.start()
         logger.info("Daily end-of-day report scheduler started.")
-
-        # Start backfilling thread (so it doesn't block FastAPI startup)
-        threading.Thread(target=run_backfill, daemon=True).start()
 
     except Exception as e:
         logger.error(f"Error initializing database: {str(e)}")
@@ -1141,48 +1137,6 @@ def generate_and_save_daily_report(target_date: str):
     except Exception as e:
         logger.error(f"Failed to generate and save daily report for {target_date}: {str(e)}")
         return None
-
-def run_backfill():
-    """Background task logic that iterates over historical dates and saves missing records"""
-    logger.info("Starting Daily Report backfill process...")
-    try:
-        # Get unique valid DWBI transaction dates
-        conn_dwbi = get_dwbi_connection()
-        cursor_dwbi = conn_dwbi.cursor()
-        cursor_dwbi.execute("""
-            SELECT DISTINCT CONVERT(DATE, [Task Date]) 
-            FROM VersaFleetDetail_TC 
-            WHERE [Task Status] = 'successful'
-        """)
-        dwbi_dates = [row[0].strftime("%Y-%m-%d") for row in cursor_dwbi.fetchall() if row[0]]
-        conn_dwbi.close()
-        
-        # Get what we've already saved locally
-        conn_log = get_logistic_connection()
-        cursor_log = conn_log.cursor()
-        cursor_log.execute("SELECT target_date FROM Daily_Report_History")
-        saved_dates = {row[0] for row in cursor_log.fetchall()}
-        conn_log.close()
-        
-        missing_dates = sorted(list(set(dwbi_dates) - saved_dates))
-
-        # --- EXCLUDE TODAY'S DATE FROM THE BACKFILL ---
-        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
-        if today_str in missing_dates:
-            missing_dates.remove(today_str)
-            logger.info(f"Excluded today ({today_str}) from the backfill loop. The end-of-day scheduler will handle it.")
-        
-        if not missing_dates:
-            logger.info("No missing historical daily reports. Backfill complete.")
-            return
-
-        for dt in missing_dates:
-            logger.info(f"Backfilling data for {dt}...")
-            generate_and_save_daily_report(dt)
-            
-        logger.info("Daily Report Backfill completed successfully.")
-    except Exception as e:
-        logger.error(f"Error during Daily Report backfill: {e}")
 
 def daily_job_generator():
     """Triggered by APScheduler at the end of each day"""
