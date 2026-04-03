@@ -6,6 +6,8 @@ import datetime
 import calendar
 import time
 import random
+import threading
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -18,6 +20,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from jose import JWTError, jwt
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # --- Auth Configuration ---
 SECRET_KEY = "CHANGE_THIS_TO_A_SUPER_SECRET_KEY"  # IMPORTANT: Change this!
@@ -27,42 +30,8 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 43200 # 30 days expiration
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-app = FastAPI()
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# --- Database Connections ---
-
-def get_dwbi_connection():
-    """Create and return a SQL Server connection to DWBI (Read-Only Source)"""
-    conn_str = (
-        'DRIVER={ODBC Driver 17 for SQL Server};'
-        'SERVER=phm\\reportingsvr;'
-        'DATABASE=DWBI;'
-        'Trusted_Connection=yes;'
-    )
-    return pyodbc.connect(conn_str)
-
-def get_logistic_connection():
-    """Create and return a SQLite connection to logistic.db (Read/Write Source)"""
-    db_path = os.path.join(os.path.dirname(__file__), 'logistic.db')
-    conn = sqlite3.connect(db_path)
-    return conn
-
 # --- Initialization ---
 
-@app.on_event("startup")
 def startup_db():
     """Ensure logistic.db has the required tables and updated roles"""
     try:
@@ -125,6 +94,16 @@ def startup_db():
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [location] TEXT UNIQUE,
                 [cost] REAL
+            )
+        """)
+        
+        # Daily Report History Table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Daily_Report_History (
+                [target_date] TEXT PRIMARY KEY,
+                [item_report_json] TEXT,
+                [township_report_json] TEXT,
+                [created_at] TEXT
             )
         """)
 
@@ -310,8 +289,57 @@ def startup_db():
         conn.commit()
         conn.close()
         logger.info("Logistic DB initialized successfully")
+        
+        # --- Start Scheduler and Backfill Thread ---
+        scheduler = BackgroundScheduler()
+        # Schedule daily job at 23:55 (11:55 PM) to compute end-of-day reports
+        scheduler.add_job(daily_job_generator, 'cron', hour=23, minute=55)
+        scheduler.start()
+        logger.info("Daily end-of-day report scheduler started.")
+
+        # Start backfilling thread (so it doesn't block FastAPI startup)
+        threading.Thread(target=run_backfill, daemon=True).start()
+
     except Exception as e:
         logger.error(f"Error initializing database: {str(e)}")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    startup_db()
+    yield
+
+app = FastAPI(lifespan=lifespan)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# --- Database Connections ---
+
+def get_dwbi_connection():
+    """Create and return a SQL Server connection to DWBI (Read-Only Source)"""
+    conn_str = (
+        'DRIVER={ODBC Driver 17 for SQL Server};'
+        'SERVER=phm\\reportingsvr;'
+        'DATABASE=DWBI;'
+        'Trusted_Connection=yes;'
+    )
+    return pyodbc.connect(conn_str)
+
+def get_logistic_connection():
+    """Create and return a SQLite connection to logistic.db (Read/Write Source)"""
+    db_path = os.path.join(os.path.dirname(__file__), 'logistic.db')
+    conn = sqlite3.connect(db_path)
+    return conn
 
 # --- Pydantic Models ---
 
@@ -935,20 +963,51 @@ def get_rate_cart_logs(location: str, user: dict = Depends(get_current_user)):
         return logs
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching rate cart logs: {str(e)}")
 
-# --- Daily Rate Cart Report Endpoints ---
+
+# --- Daily Report Logic & Automation ---
+
+def get_rate_carts_for_date(target_date: str) -> dict:
+    """
+    Determines the rate cart cost for all locations exactly as it was on the `target_date`.
+    It reads the current Rate_Cart table and traces backward using Rate_Cart_Change_Log.
+    """
+    conn = get_logistic_connection()
+    cursor = conn.cursor()
+    
+    # 1. Fetch current costs
+    cursor.execute("SELECT location, cost FROM Rate_Cart")
+    current_costs = {row[0].strip().upper(): float(row[1]) for row in cursor.fetchall()}
+    
+    # 2. Fetch logs that occurred strictly AFTER the target_date
+    # Standard query formatting target_date as EOD to get state *before* any changes following it
+    query_threshold = target_date + " 23:59:59"
+    cursor.execute("""
+        SELECT location, change_date, old_value 
+        FROM Rate_Cart_Change_Log 
+        WHERE change_date > ? 
+        ORDER BY change_date DESC
+    """, (query_threshold,))
+    logs = cursor.fetchall()
+    conn.close()
+
+    # 3. Replay changes backward to reconstruct history
+    historical_costs = current_costs.copy()
+    for row in logs:
+        loc = row[0].strip().upper()
+        old_val_str = row[2]
+        old_val = float(old_val_str) if old_val_str else 0.0
+        historical_costs[loc] = old_val
+
+    return historical_costs
+
 
 def _get_daily_report_data(target_date: str):
-    # 1. Get Rate Carts mapping
-    conn_log = get_logistic_connection()
-    cursor_log = conn_log.cursor()
-    cursor_log.execute("SELECT location, cost FROM Rate_Cart")
-    rate_carts = {row[0].strip().upper(): float(row[1]) for row in cursor_log.fetchall()}
-    conn_log.close()
+    # 1. Get Rate Carts mapping strictly for the target date
+    rate_carts = get_rate_carts_for_date(target_date)
 
     # 2. Get DWBI Data
     conn_dwbi = get_dwbi_connection()
     cursor_dwbi = conn_dwbi.cursor()
-    # Updated query to include SUM(SalesAmount) as the 11th selected item
     query = """
         SELECT Branch, ItemCode, MAX(ItemName), MAX(Principal), MAX(Brand), [Driver Name], SUM(ctnQty), CustomerCode, MAX(ContactPerson), Township, SUM(SalesAmount)
         FROM VersaFleetDetail_TC
@@ -962,7 +1021,7 @@ def _get_daily_report_data(target_date: str):
     # 3. Process Data
     granular_data = []
     driver_totals = {}
-    driver_customers = {} # Track unique customers per driver
+    driver_customers = {} 
 
     for row in rows:
         branch = row[0].strip().upper() if row[0] else "UNKNOWN"
@@ -974,13 +1033,11 @@ def _get_daily_report_data(target_date: str):
         ctns = float(row[6]) if row[6] else 0.0
         customer_code = row[7].strip() if row[7] else "UNKNOWN"
         
-        # --- NEW LOGIC: Clean the Contact Person string ---
         contact_person_raw = row[8].strip() if row[8] else ""
         if " - " in contact_person_raw:
             contact_person = contact_person_raw.split(" - ", 1)[-1].strip()
         else:
             contact_person = contact_person_raw
-        # -------------------------------------------------
         
         township = row[9].strip() if row[9] else "UNKNOWN"
         sales_amount = float(row[10]) if row[10] else 0.0
@@ -1010,7 +1067,6 @@ def _get_daily_report_data(target_date: str):
         cost_per_ctn = (b_cost / d_total) if d_total > 0 else 0.0
         allocated_cost = g["ctns"] * cost_per_ctn
 
-        # Calculate Drop Point data
         d_total_customers = len(driver_customers.get((b, d), set()))
         cost_per_drop_point = (b_cost / d_total_customers) if d_total_customers > 0 else 0.0
 
@@ -1031,18 +1087,11 @@ def _get_daily_report_data(target_date: str):
         t_key = (g["branch"], g["township"], g["customer_code"], g["driver_name"])
         if t_key not in township_report_dict:
             township_report_dict[t_key] = {
-                "branch": b,
-                "driver_name": g["driver_name"],
-                "township": g["township"], 
-                "customer_code": g["customer_code"],
-                "contact_person": g["contact_person"], 
-                "ctns": 0.0, 
-                "driver_total_ctns": d_total,
-                "branch_cost": b_cost,
-                "cost_per_carton": cost_per_ctn,
-                "allocated_cost": 0.0,
-                "total_drop_points": d_total_customers,
-                "cost_per_drop_point": cost_per_drop_point,
+                "branch": b, "driver_name": g["driver_name"], "township": g["township"], 
+                "customer_code": g["customer_code"], "contact_person": g["contact_person"], 
+                "ctns": 0.0, "driver_total_ctns": d_total, "branch_cost": b_cost,
+                "cost_per_carton": cost_per_ctn, "allocated_cost": 0.0,
+                "total_drop_points": d_total_customers, "cost_per_drop_point": cost_per_drop_point,
                 "sales_amount": 0.0
             }
         township_report_dict[t_key]["ctns"] += g["ctns"]
@@ -1060,15 +1109,116 @@ def _get_daily_report_data(target_date: str):
         "township_report": township_report_list
     }
 
+def generate_and_save_daily_report(target_date: str):
+    """Calculates and securely writes the daily report back into SQLite"""
+    try:
+        data = _get_daily_report_data(target_date)
+        if not data["item_report"] and not data["township_report"]:
+            return  # Skip saving empty dates
+
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Upsert operation
+        cursor.execute("""
+            INSERT INTO Daily_Report_History (target_date, item_report_json, township_report_json, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(target_date) DO UPDATE SET
+                item_report_json = excluded.item_report_json,
+                township_report_json = excluded.township_report_json,
+                created_at = excluded.created_at
+        """, (
+            target_date, 
+            json.dumps(data["item_report"]), 
+            json.dumps(data["township_report"]),
+            now_str
+        ))
+        conn.commit()
+        conn.close()
+        logger.info(f"Successfully generated and saved report for {target_date}")
+        return data
+    except Exception as e:
+        logger.error(f"Failed to generate and save daily report for {target_date}: {str(e)}")
+        return None
+
+def run_backfill():
+    """Background task logic that iterates over historical dates and saves missing records"""
+    logger.info("Starting Daily Report backfill process...")
+    try:
+        # Get unique valid DWBI transaction dates
+        conn_dwbi = get_dwbi_connection()
+        cursor_dwbi = conn_dwbi.cursor()
+        cursor_dwbi.execute("""
+            SELECT DISTINCT CONVERT(DATE, [Task Date]) 
+            FROM VersaFleetDetail_TC 
+            WHERE [Task Status] = 'successful'
+        """)
+        dwbi_dates = [row[0].strftime("%Y-%m-%d") for row in cursor_dwbi.fetchall() if row[0]]
+        conn_dwbi.close()
+        
+        # Get what we've already saved locally
+        conn_log = get_logistic_connection()
+        cursor_log = conn_log.cursor()
+        cursor_log.execute("SELECT target_date FROM Daily_Report_History")
+        saved_dates = {row[0] for row in cursor_log.fetchall()}
+        conn_log.close()
+        
+        missing_dates = sorted(list(set(dwbi_dates) - saved_dates))
+
+        # --- EXCLUDE TODAY'S DATE FROM THE BACKFILL ---
+        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        if today_str in missing_dates:
+            missing_dates.remove(today_str)
+            logger.info(f"Excluded today ({today_str}) from the backfill loop. The end-of-day scheduler will handle it.")
+        
+        if not missing_dates:
+            logger.info("No missing historical daily reports. Backfill complete.")
+            return
+
+        for dt in missing_dates:
+            logger.info(f"Backfilling data for {dt}...")
+            generate_and_save_daily_report(dt)
+            
+        logger.info("Daily Report Backfill completed successfully.")
+    except Exception as e:
+        logger.error(f"Error during Daily Report backfill: {e}")
+
+def daily_job_generator():
+    """Triggered by APScheduler at the end of each day"""
+    target_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    logger.info(f"Running automated EOD report generation for {target_date}")
+    generate_and_save_daily_report(target_date)
+
 @app.get("/account/daily-rate-cut-report")
 def get_daily_rate_cart_report(target_date: Optional[str] = None, user: dict = Depends(require_permission("view_daily_report"))):
     if not target_date:
         target_date = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        
     try:
+        # Fast path: Serve directly from Daily_Report_History DB
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT item_report_json, township_report_json FROM Daily_Report_History WHERE target_date = ?", (target_date,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if row:
+            return {
+                "target_date": target_date, 
+                "report": json.loads(row[0]), 
+                "township_report": json.loads(row[1])
+            }
+            
+        # Slow path: Compute on the fly if not generated yet
         data = _get_daily_report_data(target_date)
-        return {"target_date": target_date, "report": data["item_report"], "township_report": data["township_report"]}
+        return {
+            "target_date": target_date, 
+            "report": data["item_report"], 
+            "township_report": data["township_report"]
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating daily report: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing daily report: {str(e)}")
 
 # --- Reference Management Endpoints ---
 
@@ -1991,14 +2141,9 @@ def get_products_by_doc_num(doc_num: str):
 # --- Dashboard Helper Functions ---
 
 def _generate_allocation_data(target_month: str):
-    # 1. Get Rate Carts mapping
-    conn_log = get_logistic_connection()
-    cursor_log = conn_log.cursor()
-    cursor_log.execute("SELECT location, cost FROM Rate_Cart")
-    rate_carts = {row[0].strip().upper(): float(row[1]) for row in cursor_log.fetchall()}
-    conn_log.close()
-
-    # 2. Setup date thresholds
+    """
+    Reads from local SQLite Daily_Report_History
+    """
     try:
         year, month = map(int, target_month.split('-'))
     except ValueError:
@@ -2013,90 +2158,61 @@ def _generate_allocation_data(target_month: str):
             temp_month = 12
             temp_year -= 1
 
-    _, last_day = calendar.monthrange(year, month)
-    query_end_date = datetime.date(year, month, last_day).strftime("%Y-%m-%d")
-
-    oldest_year, oldest_month = map(int, months_list[-1].split('-'))
-    query_start_date = datetime.date(oldest_year, oldest_month, 1).strftime("%Y-%m-%d")
+    valid_months = set(months_list)
 
     month0_label = months_list[0]
     month1_label = months_list[1]
     month2_label = months_list[2]
 
-    # 3. Get highly aggregated DWBI Data
-    conn_dwbi = get_dwbi_connection()
-    cursor_dwbi = conn_dwbi.cursor()
-    
-    query = """
-        WITH DriverTotals AS (
-            SELECT 
-                CONVERT(DATE, [Task Date]) as TaskDate, 
-                Branch, 
-                [Driver Name], 
-                SUM(ctnQty) as TotalDriverCtns
-            FROM VersaFleetDetail_TC
-            WHERE [Task Status] = 'successful' 
-              AND CONVERT(DATE, [Task Date]) >= ? 
-              AND CONVERT(DATE, [Task Date]) <= ?
-            GROUP BY CONVERT(DATE, [Task Date]), Branch, [Driver Name]
-        )
-        SELECT 
-            CONVERT(DATE, t.[Task Date]) as TaskDate,
-            t.Branch,
-            t.[Driver Name],
-            t.Brand,
-            SUM(t.ctnQty) as BrandCtns,
-            d.TotalDriverCtns
-        FROM VersaFleetDetail_TC t
-        JOIN DriverTotals d ON 
-            CONVERT(DATE, t.[Task Date]) = d.TaskDate AND 
-            t.Branch = d.Branch AND 
-            t.[Driver Name] = d.[Driver Name]
-        WHERE t.[Task Status] = 'successful' 
-          AND CONVERT(DATE, t.[Task Date]) >= ? 
-          AND CONVERT(DATE, t.[Task Date]) <= ? 
-          AND t.Brand IS NOT NULL
-        GROUP BY CONVERT(DATE, t.[Task Date]), t.Branch, t.[Driver Name], t.Brand, d.TotalDriverCtns
-    """
-    
-    cursor_dwbi.execute(query, (query_start_date, query_end_date, query_start_date, query_end_date))
-    rows = cursor_dwbi.fetchall()
-    conn_dwbi.close()
+    start_date = f"{months_list[-1]}-01"
+    _, last_day = calendar.monthrange(year, month)
+    end_date = f"{year:04d}-{month:02d}-{last_day:02d}"
 
-    # 4. Process and Bucket Data
+    # Connect to the local SQLite DB where daily reports are saved
+    conn = get_logistic_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT target_date, item_report_json 
+        FROM Daily_Report_History 
+        WHERE target_date >= ? AND target_date <= ?
+    """, (start_date, end_date))
+    rows = cursor.fetchall()
+    conn.close()
+
     brands_data = {}
 
     for row in rows:
-        task_date_val = row[0]
-        branch = row[1].strip().upper() if row[1] else "UNKNOWN"
-        brand = row[3].strip() if row[3] else "UNKNOWN"
-        brand_ctns = float(row[4]) if row[4] else 0.0
-        driver_total_ctns = float(row[5]) if row[5] else 0.0
-
-        if not brand or brand_ctns <= 0:
+        target_date_str = row[0]
+        # Target date format is YYYY-MM-DD
+        task_month = target_date_str[:7]
+        
+        if task_month not in valid_months:
             continue
 
-        if isinstance(task_date_val, str):
-            task_date = datetime.datetime.strptime(task_date_val[:10], "%Y-%m-%d").date()
-        elif isinstance(task_date_val, datetime.datetime):
-            task_date = task_date_val.date()
-        else:
-            task_date = task_date_val
+        try:
+            report_items = json.loads(row[1])
+        except Exception:
+            continue
+            
+        for item in report_items:
+            brand = item.get("brand", "").strip() or "UNKNOWN"
+            
+            try:
+                ctns = float(item.get("ctns", 0) or 0)
+                allocated_cost = float(item.get("allocated_cost", 0) or 0)
+            except ValueError:
+                continue
 
-        task_month = task_date.strftime("%Y-%m")
+            if ctns <= 0:
+                continue
+                
+            if brand not in brands_data:
+                brands_data[brand] = {m: {"cost": 0.0, "ctns": 0.0} for m in months_list}
 
-        branch_cost = rate_carts.get(branch, 0.0)
-        cost_per_ctn = (branch_cost / driver_total_ctns) if driver_total_ctns > 0 else 0.0
-        allocated_cost = brand_ctns * cost_per_ctn
-
-        if brand not in brands_data:
-            brands_data[brand] = {m: {"cost": 0.0, "ctns": 0.0} for m in months_list}
-
-        if task_month in brands_data[brand]:
             brands_data[brand][task_month]["cost"] += allocated_cost
-            brands_data[brand][task_month]["ctns"] += brand_ctns
+            brands_data[brand][task_month]["ctns"] += ctns
 
-    # 5. Format Final Response
+    # Format Final Response
     dashboard_results = []
     for brand, data in brands_data.items():
         result = {
@@ -2137,7 +2253,7 @@ def _generate_allocation_data(target_month: str):
 
 
 def _generate_calculated_data(target_month: str):
-    # 1. Setup date thresholds
+    # Setup date thresholds
     try:
         year, month = map(int, target_month.split('-'))
     except ValueError:
@@ -2158,7 +2274,7 @@ def _generate_calculated_data(target_month: str):
     month1_label = months_list[1]
     month2_label = months_list[2]
 
-    # 2. Fetch data from local SQLite
+    # Fetch data from local SQLite
     conn = get_logistic_connection()
     cursor = conn.cursor()
     
@@ -2170,7 +2286,6 @@ def _generate_calculated_data(target_month: str):
     rows = cursor.fetchall()
     conn.close()
 
-    # 3. Process and Bucket Data
     brands_data = {}
 
     for row in rows:
@@ -2211,7 +2326,7 @@ def _generate_calculated_data(target_month: str):
                 brands_data[brand][task_month]["cost"] += cost
                 brands_data[brand][task_month]["ctns"] += ctns
 
-    # 4. Format Final Response
+    # Format Final Response
     dashboard_results = []
     for brand, data in brands_data.items():
         result = {
@@ -2255,7 +2370,6 @@ def _generate_calculated_data(target_month: str):
 
 @app.get("/dashboard/brand-allocation-cost")
 def get_brand_allocation_cost_dashboard(target_month: Optional[str] = None, user: dict = Depends(get_current_user)):
-    """Legacy Endpoint for individual fetching"""
     if not target_month:
         target_month = datetime.datetime.now().strftime("%Y-%m")
     try:
@@ -2267,7 +2381,6 @@ def get_brand_allocation_cost_dashboard(target_month: Optional[str] = None, user
     
 @app.get("/dashboard/calculated-brand-cost")
 def get_calculated_brand_cost_dashboard(target_month: Optional[str] = None, user: dict = Depends(require_permission("view_dashboard"))):
-    """Legacy Endpoint for individual fetching"""
     if not target_month:
         target_month = datetime.datetime.now().strftime("%Y-%m")
     try:
@@ -2279,10 +2392,6 @@ def get_calculated_brand_cost_dashboard(target_month: Optional[str] = None, user
 
 @app.get("/dashboard/combined")
 def get_combined_dashboard(target_month: Optional[str] = None, user: dict = Depends(require_permission("view_dashboard"))):
-    """
-    NEW ENDPOINT: Returns both allocation data and calculated data in one call
-    to render everything consecutively in a unified frontend view.
-    """
     if not target_month:
         target_month = datetime.datetime.now().strftime("%Y-%m")
         
