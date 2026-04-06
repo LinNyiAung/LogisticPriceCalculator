@@ -1729,7 +1729,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         for i in range(0, len(unique_codes_list), batch_size):
             batch = unique_codes_list[i:i + batch_size]
             placeholders = ','.join('?' * len(batch))
-            cursor_dwbi.execute(f"SELECT ItemCode, ItemName, ItemGroupName, BrandName FROM _ItemAllinone WHERE ItemCode IN ({placeholders})", batch)
+            cursor_dwbi.execute(f"SELECT ItemCode, ItemName, ItmsGrpNam, U_BrandName FROM Itemmasterallpp WHERE ItemCode IN ({placeholders})", batch)
             rows = cursor_dwbi.fetchall()
             for r in rows:
                 dwbi_data[str(r[0]).strip()] = {"name": str(r[1]).strip() if r[1] else "", "principal": str(r[2]).strip() if r[2] else "", "brand": str(r[3]).strip() if r[3] else ""}
@@ -2016,7 +2016,7 @@ def search_dwbi_items(q: str = Query(..., min_length=2)):
         conn = get_dwbi_connection()
         cursor = conn.cursor()
         search_term = f"%{q}%"
-        cursor.execute("SELECT TOP 50 ItemCode, ItemName, ItemGroupName, BrandName FROM _ItemAllinone WHERE ItemCode LIKE ? OR ItemName LIKE ?", (search_term, search_term))
+        cursor.execute("SELECT TOP 50 ItemCode, ItemName, ItmsGrpNam, U_BrandName FROM Itemmasterallpp WHERE ItemCode LIKE ? OR ItemName LIKE ?", (search_term, search_term))
         rows = cursor.fetchall()
         items = [{"item_code": r[0], "item_name": r[1], "principal": r[2], "brand": r[3]} for r in rows]
         conn.close()
@@ -2028,7 +2028,7 @@ def validate_dwbi_item(code: str = Query(...)):
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT ItemCode, ItemName, ItemGroupName, BrandName FROM _ItemAllinone WHERE ItemCode = ?", (code,))
+        cursor.execute("SELECT ItemCode, ItemName, ItmsGrpNam, U_BrandName FROM Itemmasterallpp WHERE ItemCode = ?", (code,))
         row = cursor.fetchone()
         conn.close()
         
