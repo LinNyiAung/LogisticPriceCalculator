@@ -2129,6 +2129,7 @@ const PricingApp = () => {
                   <table className="w-full border-collapse border">
                     <thead className="bg-gray-100">
                       <tr>
+                        <th className="border p-2 text-left">BU</th>
                         <th className="border p-2 text-left">Item Code</th>
                         <th className="border p-2 text-left">Description</th>
                         <th className="border p-2 text-left">Cartons</th>
@@ -2142,6 +2143,7 @@ const PricingApp = () => {
                     <tbody>
                       {tableData.map((product, index) => (
                         <tr key={index}>
+                          <td className="border p-2 font-semibold text-gray-700">{product.bu || '-'}</td>
                           <td className="border p-2">{product.code}</td>
                           <td className="border p-2">{product.name}</td>
                           <td className="border p-2">{product.ctns}</td>

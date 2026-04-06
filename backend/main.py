@@ -808,6 +808,7 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
                 "principal": principal_val,
                 "brand": brand_val,
                 "ctns": get_rounded_ctns(row[7]),
+                "bu": row[9],
                 "b_code": bc_info.get("Code", ""),
                 "b_name": bc_info.get("Name", ""),
                 "b_dept": bc_info.get("Dept", ""),
@@ -887,7 +888,7 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
                 "code": item_code, "name": row[1] if row[1] else "", "ctns": ctns,
                 "uom": row[2] if row[2] else "", "weight": weight, "doc_date": doc_date_str,       
                 "sin_no": f"{row[9]} - {str(row[5])}" if row[5] else "", "principal": principal_val, "brand": brand_val,
-                "b_code": bc_info.get("Code", ""), "b_name": bc_info.get("Name", ""), 
+                "bu": row[9], "b_code": bc_info.get("Code", ""), "b_name": bc_info.get("Name", ""), 
                 "b_dept": bc_info.get("Dept", ""), "b_principal": bc_info.get("Principal", ""), 
                 "b_desc": bc_info.get("Description", ""), "s_dept": sd_info.get("Dept", ""), 
                 "s_principal": sd_info.get("Principal", ""), "calculation_type": "direct", 
@@ -1528,10 +1529,11 @@ def download_history_excel(record_id: int):
         ws = wb.active
         ws.title = "Cost Details"
 
+        # "BU" is added as the 10th column, right after "Brand"
         headers = [
             "No", "Claim Date", "Delivery Date", "SIN No", "Area", "Code", "Name", "Principal", "Brand", "Item Code", "Item", "Ctns", 
             "Price", "Total Amount", "Weight", "UOM", "Gate", "Channel", "Month", "Year", "Description for Account", 
-            "Description with cnts and price", "Branch", "B-Dept", "B-Principal", "S-Dept", "S-Principal", "Calculation ID"
+            "Description with cnts and price", "Branch", "B-Dept", "B-Principal", "S-Dept", "S-Principal", "BU", "Calculation ID"
         ]
         
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
@@ -1611,7 +1613,8 @@ def download_history_excel(record_id: int):
             ws.cell(row=row_num, column=25, value=item.get('b_principal', '')).border = border
             ws.cell(row=row_num, column=26, value=item.get('s_dept', '')).border = border
             ws.cell(row=row_num, column=27, value=item.get('s_principal', '')).border = border
-            ws.cell(row=row_num, column=28, value=record['id']).border = border
+            ws.cell(row=row_num, column=28, value=item.get('bu', '')).border = border 
+            ws.cell(row=row_num, column=29, value=record['id']).border = border
 
         for col in ws.columns:
             max_length = 0
@@ -2127,7 +2130,7 @@ def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums"))
             for row in rows:
                 weight = float(row[3]) if row[3] else 0.0
                 total_weight += weight
-                products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "sin_no": f"{row[7]} - {row[4]}"})
+                products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7], "sin_no": f"{row[7]} - {row[4]}"})
                 
         if pdg_nums:
             placeholders = ','.join('?' * len(pdg_nums))
@@ -2136,7 +2139,7 @@ def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums"))
             for row in rows:
                 weight = float(row[3]) if row[3] else 0.0
                 total_weight += weight
-                products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "sin_no": f"{row[7]} - {row[4]}"})
+                products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7], "sin_no": f"{row[7]} - {row[4]}"})
         
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
@@ -2152,9 +2155,9 @@ def get_products_by_doc_num(doc_num: str):
         cursor = conn.cursor()
 
         if is_pdg:
-            cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), DocNum, SUM(QtyCtn), MAX(Brand) FROM PDG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
+            cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), DocNum, SUM(QtyCtn), MAX(Brand), 'PDG' FROM PDG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
         else:
-            cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand) FROM PG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
+            cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand), 'PG' FROM PG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
             
         rows = cursor.fetchall()
         if not rows:
@@ -2165,7 +2168,7 @@ def get_products_by_doc_num(doc_num: str):
         for row in rows:
             weight = float(row[3]) if row[3] else 0.0
             total_weight += weight
-            products.append({"item_code": row[0] or "", "description": row[1] or "", "uom": row[2] or "", "item_weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or ""})
+            products.append({"item_code": row[0] or "", "description": row[1] or "", "uom": row[2] or "", "item_weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7]})
             
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
