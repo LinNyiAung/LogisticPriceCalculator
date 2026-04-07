@@ -144,9 +144,16 @@ def startup_db():
             )
         """)
 
-        # --- Reference Tables (Locations, UOMs, Channels) ---
+        # --- Reference Tables (Locations, UOMs, Channels, Rate Cart Locations) ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Locations (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [name] TEXT UNIQUE
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Rate_Cart_Locations (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [name] TEXT UNIQUE
             )
@@ -273,36 +280,29 @@ def startup_db():
             cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", ('admin', admin_pw, 'admin'))
 
         # Seed references
+        default_locs = [
+            ('Yangon',), ('Mandalay',), ('Naypyitaw',), ('Magaway',), 
+            ('Taunggyi',), ('Taunggu',), ('Pathein',), ('Mawlamyine',),
+            ('Taungtwingyi',), ('Meikhtila',), ('Dawei',), ('Myingyan',),
+            ('Yae',), ('Chauk',), ('Aunglan',), ('Danuphyu',),
+            ('Ngathaingchaung',), ('Yamethin',), ('Phyue',), ('Kyauktagar',),
+            ('Nyaunglaypin',), ('Nyaungoo',), ('Kyaukpadaung',), ('Myeik',),
+            ('Twantay',)
+        ]
+
+        default_locsrc = [
+            ('YGN',), ('MDY',), ('BGO',), ('MGW',), 
+            ('TGI',), ('TGU',), ('PTN',), ('MLM',),
+            ('NPT',)
+        ]
+
         cursor.execute("SELECT COUNT(*) FROM Locations")
         if cursor.fetchone()[0] == 0:
-            default_locs = [
-    ('Yangon',), 
-    ('Mandalay',), 
-    ('Naypyitaw',), 
-    ('Magaway',), 
-    ('Taunggyi',), 
-    ('Taunggu',), 
-    ('Pathein',), 
-    ('Mawlamyine',),
-    ('Taungtwingyi',),
-    ('Meikhtila',),
-    ('Dawei',),
-    ('Myingyan',),
-    ('Yae',),
-    ('Chauk',),
-    ('Aunglan',),
-    ('Danuphyu',),
-    ('Ngathaingchaung',),
-    ('Yamethin',),
-    ('Phyue',),
-    ('Kyauktagar',),
-    ('Nyaunglaypin',),
-    ('Nyaungoo',),
-    ('Kyaukpadaung',),
-    ('Myeik',),
-    ('Twantay',)
-]
             cursor.executemany("INSERT INTO Locations (name) VALUES (?)", default_locs)
+
+        cursor.execute("SELECT COUNT(*) FROM Rate_Cart_Locations")
+        if cursor.fetchone()[0] == 0:
+            cursor.executemany("INSERT INTO Rate_Cart_Locations (name) VALUES (?)", default_locsrc)
 
         cursor.execute("SELECT COUNT(*) FROM UOMs")
         if cursor.fetchone()[0] == 0:
@@ -1286,6 +1286,51 @@ def delete_ref_location(name: str, user: dict = Depends(require_permission("dele
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+@app.get("/references/rate-cart-locations")
+def get_ref_rate_cart_locations():
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM Rate_Cart_Locations ORDER BY name")
+        rows = cursor.fetchall()
+        conn.close()
+        return [row[0] for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.post("/references/rate-cart-locations")
+def add_ref_rate_cart_location(item: ReferenceItem, user: dict = Depends(require_permission("add_reference"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("INSERT INTO Rate_Cart_Locations (name) VALUES (?)", (item.name,))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.close()
+            raise HTTPException(status_code=400, detail="Rate Cart Location already exists")
+        conn.close()
+        return {"message": "Added successfully"}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.delete("/references/rate-cart-locations/{name}")
+def delete_ref_rate_cart_location(name: str, user: dict = Depends(require_permission("delete_reference"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM Rate_Cart_Locations WHERE name = ?", (name,))
+        if cursor.rowcount == 0:
+             conn.close()
+             raise HTTPException(status_code=404, detail="Not found")
+        conn.commit()
+        conn.close()
+        return {"message": "Deleted successfully"}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
 
 @app.get("/references/uoms")
 def get_ref_uoms():

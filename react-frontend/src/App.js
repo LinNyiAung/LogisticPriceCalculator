@@ -193,6 +193,7 @@ const PricingApp = () => {
 
   // Reference Management State
   const [refLocations, setRefLocations] = useState([]);
+  const [refRateCartLocations, setRefRateCartLocations] = useState([]); // <-- NEW STATE
   const [refUOMs, setRefUOMs] = useState([]);
   const [refChannels, setRefChannels] = useState([]); 
   const [selectedChannel, setSelectedChannel] = useState(''); 
@@ -358,8 +359,13 @@ const PricingApp = () => {
       try {
           const locResp = await authFetch(`${API_URL}/references/locations`);
           if (locResp.ok) setRefLocations(await locResp.json());
+          
+          const rcLocResp = await authFetch(`${API_URL}/references/rate-cart-locations`);
+          if (rcLocResp.ok) setRefRateCartLocations(await rcLocResp.json()); // <-- ADDED
+
           const uomResp = await authFetch(`${API_URL}/references/uoms`);
           if (uomResp.ok) setRefUOMs(await uomResp.json());
+
           const chanResp = await authFetch(`${API_URL}/references/channels`);
           if (chanResp.ok) setRefChannels(await chanResp.json());
       } catch (error) { showNotification('Error loading reference data', 'error'); }
@@ -916,7 +922,6 @@ const PricingApp = () => {
     };
 
     const selectItem = (selectedItem) => {
-        // ADDED BU AUTO-FILL MAPPING HERE
         setFormData({ 
             ...formData, 
             item_code: selectedItem.item_code, 
@@ -935,7 +940,6 @@ const PricingApp = () => {
             const response = await authFetch(`${API_URL}/dwbi/items/validate?code=${encodeURIComponent(searchTerm)}`);
             if (response.ok) {
                 const result = await response.json();
-                // ADDED BU AUTO-FILL MAPPING HERE
                 if (result.valid) onSave({ 
                     ...formData, 
                     item_code: result.item.item_code, 
@@ -1051,7 +1055,8 @@ const PricingApp = () => {
                             disabled={!!rateCart}
                         >
                             <option value="">-- Select Location --</option>
-                            {refLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}
+                            {/* CHANGED TO USE refRateCartLocations HERE */}
+                            {refRateCartLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}
                         </select>
                     </div>
                     <div>
@@ -1830,14 +1835,90 @@ const PricingApp = () => {
   if (currentPage === 'references' && permissions.includes('view_references')) {
       return (
         <div className="min-h-screen bg-gray-50 p-6">
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-[1400px] mx-auto">
                 {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
                 {renderNavigation()}
                 <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Reference Data</h1>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white rounded-lg shadow-md p-6"><h2 className="text-xl font-bold mb-4 text-blue-700">Locations (From/To)</h2>{permissions.includes('add_reference') && <div className="flex gap-2 mb-4"><input type="text" placeholder="New Location..." className="border p-2 rounded flex-1" id="new-loc" /><button onClick={() => { addReference('locations', document.getElementById('new-loc').value); document.getElementById('new-loc').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div>}<div className="border rounded max-h-96 overflow-y-auto">{refLocations.map((loc, i) => (<div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50"><span>{loc}</span>{permissions.includes('delete_reference') && <button onClick={() => deleteReference('locations', loc)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}</div>))}</div></div>
-                    <div className="bg-white rounded-lg shadow-md p-6"><h2 className="text-xl font-bold mb-4 text-purple-700">Units of Measure</h2>{permissions.includes('add_reference') && <div className="flex gap-2 mb-4"><input type="text" placeholder="New UOM..." className="border p-2 rounded flex-1" id="new-uom" /><button onClick={() => { addReference('uoms', document.getElementById('new-uom').value); document.getElementById('new-uom').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div>}<div className="border rounded max-h-96 overflow-y-auto">{refUOMs.map((u, i) => (<div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50"><span>{u}</span>{permissions.includes('delete_reference') && <button onClick={() => deleteReference('uoms', u)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}</div>))}</div></div>
-                    <div className="bg-white rounded-lg shadow-md p-6"><h2 className="text-xl font-bold mb-4 text-orange-700">Channels</h2>{permissions.includes('add_reference') && <div className="flex gap-2 mb-4"><input type="text" placeholder="New Channel..." className="border p-2 rounded flex-1" id="new-chan" /><button onClick={() => { addReference('channels', document.getElementById('new-chan').value); document.getElementById('new-chan').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button></div>}<div className="border rounded max-h-96 overflow-y-auto">{refChannels.map((c, i) => (<div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50"><span>{c}</span>{permissions.includes('delete_reference') && <button onClick={() => deleteReference('channels', c)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}</div>))}</div></div>
+                
+                {/* --- CHANGED TO 4 COLUMNS --- */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                    
+                    {/* Gates Locations */}
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h2 className="text-xl font-bold mb-4 text-blue-700">Gate Locations</h2>
+                        {permissions.includes('add_reference') && (
+                            <div className="flex gap-2 mb-4">
+                                <input type="text" placeholder="New Location..." className="border p-2 rounded flex-1" id="new-loc" />
+                                <button onClick={() => { addReference('locations', document.getElementById('new-loc').value); document.getElementById('new-loc').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button>
+                            </div>
+                        )}
+                        <div className="border rounded max-h-96 overflow-y-auto">
+                            {refLocations.map((loc, i) => (
+                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
+                                    <span>{loc}</span>
+                                    {permissions.includes('delete_reference') && <button onClick={() => deleteReference('locations', loc)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* NEW: Rate Cart Locations */}
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h2 className="text-xl font-bold mb-4 text-emerald-700">Rate Cart Locations</h2>
+                        {permissions.includes('add_reference') && (
+                            <div className="flex gap-2 mb-4">
+                                <input type="text" placeholder="New Location..." className="border p-2 rounded flex-1" id="new-rc-loc" />
+                                <button onClick={() => { addReference('rate-cart-locations', document.getElementById('new-rc-loc').value); document.getElementById('new-rc-loc').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button>
+                            </div>
+                        )}
+                        <div className="border rounded max-h-96 overflow-y-auto">
+                            {refRateCartLocations.map((loc, i) => (
+                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
+                                    <span>{loc}</span>
+                                    {permissions.includes('delete_reference') && <button onClick={() => deleteReference('rate-cart-locations', loc)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Units of Measure */}
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h2 className="text-xl font-bold mb-4 text-purple-700">Units of Measure</h2>
+                        {permissions.includes('add_reference') && (
+                            <div className="flex gap-2 mb-4">
+                                <input type="text" placeholder="New UOM..." className="border p-2 rounded flex-1" id="new-uom" />
+                                <button onClick={() => { addReference('uoms', document.getElementById('new-uom').value); document.getElementById('new-uom').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button>
+                            </div>
+                        )}
+                        <div className="border rounded max-h-96 overflow-y-auto">
+                            {refUOMs.map((u, i) => (
+                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
+                                    <span>{u}</span>
+                                    {permissions.includes('delete_reference') && <button onClick={() => deleteReference('uoms', u)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Channels */}
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h2 className="text-xl font-bold mb-4 text-orange-700">Channels</h2>
+                        {permissions.includes('add_reference') && (
+                            <div className="flex gap-2 mb-4">
+                                <input type="text" placeholder="New Channel..." className="border p-2 rounded flex-1" id="new-chan" />
+                                <button onClick={() => { addReference('channels', document.getElementById('new-chan').value); document.getElementById('new-chan').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button>
+                            </div>
+                        )}
+                        <div className="border rounded max-h-96 overflow-y-auto">
+                            {refChannels.map((c, i) => (
+                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
+                                    <span>{c}</span>
+                                    {permissions.includes('delete_reference') && <button onClick={() => deleteReference('channels', c)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
