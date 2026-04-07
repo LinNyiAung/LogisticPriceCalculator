@@ -142,7 +142,7 @@ const PricingApp = () => {
   const [selectedGateForPricing, setSelectedGateForPricing] = useState('');
   const [itemPricingData, setItemPricingData] = useState([]);
   
-  const [itemFilters, setItemFilters] = useState({ item_code: '', item_name: '', principal: '', brand: '', transportation_cost: '' });
+  const [itemFilters, setItemFilters] = useState({ bu: '', item_code: '', item_name: '', principal: '', brand: '', transportation_cost: '' });
 
   const [editingGate, setEditingGate] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
@@ -327,7 +327,7 @@ const PricingApp = () => {
   const loadItemPricing = async (gateId) => {
     if (!gateId) return;
     try {
-      setItemFilters({ item_code: '', item_name: '', principal: '', brand: '', transportation_cost: '' });
+      setItemFilters({ bu: '', item_code: '', item_name: '', principal: '', brand: '', transportation_cost: '' });
       const response = await authFetch(`${API_URL}/account/item-pricing/${gateId}`);
       if (response.ok) { const data = await response.json(); setItemPricingData(data.items); }
     } catch (error) { showNotification(`Error loading items: ${error.message}`, 'error'); }
@@ -899,7 +899,7 @@ const PricingApp = () => {
   };
 
   const ItemModal = ({ item, onSave, onClose }) => {
-    const [formData, setFormData] = useState(item || { item_code: '', item_name: '', principal: '', brand: '', transportation_cost: '' });
+    const [formData, setFormData] = useState(item || { bu: '', item_code: '', item_name: '', principal: '', brand: '', transportation_cost: '' });
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
     const [isValidating, setIsValidating] = useState(false);
@@ -916,7 +916,15 @@ const PricingApp = () => {
     };
 
     const selectItem = (selectedItem) => {
-        setFormData({ ...formData, item_code: selectedItem.item_code, item_name: selectedItem.item_name, principal: selectedItem.principal || '', brand: selectedItem.brand || '' });
+        // ADDED BU AUTO-FILL MAPPING HERE
+        setFormData({ 
+            ...formData, 
+            item_code: selectedItem.item_code, 
+            item_name: selectedItem.item_name, 
+            principal: selectedItem.principal || '', 
+            brand: selectedItem.brand || '', 
+            bu: selectedItem.bu || '' 
+        });
         setSearchTerm(selectedItem.item_code); setSearchResults([]); 
     };
 
@@ -927,7 +935,15 @@ const PricingApp = () => {
             const response = await authFetch(`${API_URL}/dwbi/items/validate?code=${encodeURIComponent(searchTerm)}`);
             if (response.ok) {
                 const result = await response.json();
-                if (result.valid) onSave({ ...formData, item_code: result.item.item_code, item_name: result.item.item_name, principal: result.item.principal, brand: result.item.brand });
+                // ADDED BU AUTO-FILL MAPPING HERE
+                if (result.valid) onSave({ 
+                    ...formData, 
+                    item_code: result.item.item_code, 
+                    item_name: result.item.item_name, 
+                    principal: result.item.principal, 
+                    brand: result.item.brand, 
+                    bu: result.item.bu || formData.bu 
+                });
                 else showNotification("Invalid Item Code.", "error");
             } else showNotification("Validation check failed.", "error");
         } catch (error) { showNotification("Network error", "error"); } finally { setIsValidating(false); }
@@ -943,6 +959,7 @@ const PricingApp = () => {
               <div className="relative"><input type="text" value={searchTerm} onChange={(e) => handleSearch(e.target.value)} className="w-full p-2 border rounded pr-8" placeholder="Type code or name..." /><div className="absolute right-2 top-2 text-gray-400"><Search size={18} /></div></div>
               {searchResults.length > 0 && (<div className="absolute z-10 w-full bg-white border rounded shadow-lg max-h-48 overflow-y-auto mt-1">{searchResults.map((res, idx) => (<div key={idx} onClick={() => selectItem(res)} className="p-2 hover:bg-blue-50 cursor-pointer border-b last:border-0 text-sm"><div className="font-bold text-gray-800">{res.item_code}</div><div className="text-gray-600 truncate">{res.item_name}</div></div>))}</div>)}
             </div>
+            <div><label className="block text-sm font-semibold mb-1">BU</label><input type="text" value={formData.bu ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
             <div><label className="block text-sm font-semibold mb-1">Item Name</label><input type="text" value={formData.item_name ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
             <div><label className="block text-sm font-semibold mb-1">Principal</label><input type="text" value={formData.principal ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
             <div><label className="block text-sm font-semibold mb-1">Brand</label><input type="text" value={formData.brand ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
@@ -1935,12 +1952,13 @@ const PricingApp = () => {
 
   if (currentPage === 'items' && permissions.includes('view_items')) {
     const filteredItems = itemPricingData.filter(item => {
+      const matchBu = (item.bu || '').toLowerCase().includes(itemFilters.bu.toLowerCase());
       const matchCode = (item.item_code || '').toLowerCase().includes(itemFilters.item_code.toLowerCase());
       const matchName = (item.item_name || '').toLowerCase().includes(itemFilters.item_name.toLowerCase());
       const matchPrincipal = (item.principal || '').toLowerCase().includes(itemFilters.principal.toLowerCase());
       const matchBrand = (item.brand || '').toLowerCase().includes(itemFilters.brand.toLowerCase());
       const matchCost = (String(item.transportation_cost) || '').toLowerCase().includes(itemFilters.transportation_cost.toLowerCase());
-      return matchCode && matchName && matchPrincipal && matchBrand && matchCost;
+      return matchBu && matchCode && matchName && matchPrincipal && matchBrand && matchCost;
     });
 
     const displayedItems = filteredItems.slice(0, visibleCounts.items);
@@ -1977,6 +1995,7 @@ const PricingApp = () => {
                   <table className="w-full border-collapse border text-sm">
                     <thead className="bg-gray-100">
                       <tr>
+                        <th className="border p-2 text-left"><div>BU</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.bu} onChange={(e) => setItemFilters({...itemFilters, bu: e.target.value})} /></th>
                         <th className="border p-2 text-left"><div>Item Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_code} onChange={(e) => setItemFilters({...itemFilters, item_code: e.target.value})} /></th>
                         <th className="border p-2 text-left"><div>Item Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_name} onChange={(e) => setItemFilters({...itemFilters, item_name: e.target.value})} /></th>
                         <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.principal} onChange={(e) => setItemFilters({...itemFilters, principal: e.target.value})} /></th>
@@ -1988,7 +2007,7 @@ const PricingApp = () => {
                     <tbody>
                       {displayedItems.map((item, index) => (
                         <tr key={index}>
-                          <td className="border p-2">{item.item_code}</td><td className="border p-2">{item.item_name}</td><td className="border p-2">{item.principal}</td><td className="border p-2">{item.brand}</td><td className="border p-2">{formatNumber(item.transportation_cost)}</td>
+                          <td className="border p-2">{item.bu}</td><td className="border p-2">{item.item_code}</td><td className="border p-2">{item.item_name}</td><td className="border p-2">{item.principal}</td><td className="border p-2">{item.brand}</td><td className="border p-2">{formatNumber(item.transportation_cost)}</td>
                           <td className="border p-2">
                             <div className="flex gap-2">
                                   <button onClick={() => fetchItemLogs(item)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
@@ -1998,7 +2017,7 @@ const PricingApp = () => {
                           </td>
                         </tr>
                       ))}
-                      {displayedItems.length === 0 && (<tr><td colSpan="6" className="text-center p-4 text-gray-500 italic">No items found matching your filters.</td></tr>)}
+                      {displayedItems.length === 0 && (<tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No items found matching your filters.</td></tr>)}
                     </tbody>
                   </table>
                 </div>

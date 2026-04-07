@@ -1,8 +1,37 @@
 Gate Name,From,To,File Name,UOM,Unit,Cost
-Kyan Taing Aung,YGN,MDY,Item Master MDY.csv,Kg,1000,180000
-Yadana Phyo,YGN,TGI,Item Master TGI.csv,Kg,1000,400000
-Sein Myittar,YGN,TGU,Item Master TGU.csv,,,
-U Thaung & Sons,YGN,MGW,Item Master MGW.csv,Kg,1000,210000
-Aung Zay Paing,YGN,PTN,Item Master PTN.csv,,,
-Kyan Taing Aung,YGN,NPT,Item Master NPT.csv,Kg,1000,140000
-Yaung Sin Ni,YGN,MLM,Item Master MLM.csv,,,
+Kyan Taing Aung,Yangon,Mandalay,Item Master MDY.csv,Kg,1000,180000
+Yadana Phyo,Yangon,Taunggyi,Item Master TGI.csv,Kg,1000,400000
+Sein Myittar,Yangon,Taunggu,Item Master TGU.csv,,,
+U Thaung & Sons,Yangon,Magaway,Item Master MGW.csv,Kg,1000,210000
+Aung Zay Paing,Yangon,Pathein,Item Master PTN.csv,,,
+Kyan Taing Aung,Yangon,Naypyitaw,Item Master NPT.csv,Kg,1000,140000
+Yaung Sin Ni,Yangon,Mawlamyine,Item Master MLM.csv,,,
+San Shar,Yangon,Taungtwingyi,Item Master TTG.csv,Kg,1000,180000
+Bandula,Yangon,Meikhtila,Item Master MHL.csv,Kg,1000,210000
+Yadana Oo,Yangon,Dawei,Item Master Dawei.csv,Kg,1000,420000
+Aung Myanmar,Yangon,Myingyan,Item Master MG.csv,Kg,1000,360000
+Yan Paing,Yangon,Yae,Item Master YAE.csv,,,
+Phyo,Yangon,Chauk,Item Master CH.csv,,,
+Shu Taing Yin,Yangon,Aunglan,Item Master AL.csv,Kg,1000,210000
+No Name,Yangon,Danuphyu,Item Master DNP.csv,,,
+No Name,Yangon,Ngathaingchaung,Item Master NTC.csv,,,
+San Naing Lin,Yangon,Yamethin,Item Master YMT.csv,,,
+Phyu Man Phyo,Yangon,Phyue,Item Master PHYUE.csv,,,
+Phyu Man Phyo,Yangon,Kyauktagar,Item Master KTG.csv,,,
+Kyaw,Yangon,Nyaunglaypin,Item Master NLP.csv,,,
+New Light,Yangon,Nyaungoo,Item Master NO.csv,,,
+Khit Lite,Yangon,Kyaukpadaung,Item Master KPD.csv,,,
+Hein Htet,Yangon,Myeik,Item Master MYK.csv,Kg,1000,1020000
+No Name,Yangon,Twantay,Item Master TT.csv,,,
+Hnin Hnin Wai,Yangon,Hmawbi,Item Master HB.csv,,,
+Hnin Hnin Wai,Yangon,Taikkyi,Item Master TK.csv,,,
+Shwe Lat Pan,Yangon,Letpadan,Item Master LPD.csv,,,
+Chin Thae Min,Yangon,Pyay,Item Master PYAY.csv,,,
+Nay Kyar Pan,Yangon,Thanphyuzayat,Item Master TPZY.csv,Kg,1000,300000
+Moe Myint Kyal,Yangon,Kyeikhto,Item Master KH.csv,,,
+Moe Myint Kyal,Yangon,Thahton,Item Master TH.csv,,,
+No Name,Yangon,Myaungmya,Item Master MM.csv,,,
+Thein Than Aung,Yangon,Gyopinkauk,Item Master GPK.csv,,,
+No Name,Yangon,Hinthada,Item Master HTD.csv,,,
+Shwe Ti Yadana,Yangon,Paungtae,Item Master PT.csv,,,
+Baydar Hlaing,Yangon,Hpaan,Item Master HA.csv,,,

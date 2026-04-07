@@ -1,428 +1,678 @@
-Item Code,Item Name,Principal,Brand,Transportation Cost
-6301111001,Shaloot Noodle Coconut 55g (1x30pcs),The Taste Origins,Shaloot,
-6301111002,Shaloot Noodle Tom Yum 55g (1x30pcs),The Taste Origins,Shaloot,
-6301111003,Shaloot Noodle Chicken Sichat 52g (1x30pcs),The Taste Origins,Shaloot,
-0201112028,Ensure Gold (Wheat) 380g (1x24Pcs),Abbott,Ensure,
-0201112029,Ensure Gold StrengthPro (Vanilla) 380g (1x24Pcs),Abbott,Ensure,
-0201112030,Ensure Gold StrengthPro (Vanilla) 800g (1x12pcs),Abbott,Ensure,
-0203112012,Glucerna Powder (Vanilla) 400g (1x24Pcs),Abbott,Glucerna,
-1221101010,Active GSM TP 2000,MPT,Top-up,
-6201111001,Ayeyarwaddy Peanut Oil 0.25Viss (1x12),Nutripure,Ayeyarwaddy,
-6201111002,Ayeyarwaddy Peanut Oil 0.5Viss (1x12),Nutripure,Ayeyarwaddy,
-6201111003,Ayeyarwaddy Peanut Oil 1Viss (1x10),Nutripure,Ayeyarwaddy,
-6201111004,Ayeyarwaddy Peanut Oil 2Viss (1x6),Nutripure,Ayeyarwaddy,
-6201111005,Ayeyarwaddy Peanut Oil 3Viss (1x4),Nutripure,Ayeyarwaddy,
-5600000002,Omi Korean Yam Chips Prawn Tomato 35g - MT Pack (1x12pack),Omi Snack,Omi,3000
-5600000003,Omi Korean Yam Chips Honey Butter Tomato 35g - MT Pack (1x12pack),Omi Snack,Omi,3000
-5601111002,Omi Korean Yam Chips Prawn Tomato 35g (1x10pcsx12pack),Omi Snack,Omi,3000
-5601111003,Omi Korean Yam Chips Honey Butter Tomato 35g (1x10pcsx12pack),Omi Snack,Omi,3000
-6101111001,Premium Bonito Dashi 150g (1x60Pcs),Xiamen,Premium Dashi,
-6101111002,Premium Bonito Dashi 1Kg (1x12Pcs),Xiamen,Premium Dashi,
-6101111003,Premium Kombu Dashi 150g (1x60Pcs),Xiamen,Premium Dashi,
-6101111004,Premium Kombu Dashi 1Kg (1x12Pcs),Xiamen,Premium Dashi,
-3401111010,Maymyo Fresh Classic 20's 500g (1x30Pack),MayMyo Fresh Coffee,Maymyo Fresh,
-3401111006,Maymyo Fresh Brown 20's 500g (1x30Pack),MayMyo Fresh Coffee,Maymyo Fresh,
-3401111007,Maymyo Fresh Brown 5's 120g (1x120Pack),MayMyo Fresh Coffee,Maymyo Fresh,
-3401111008,Maymyo Fresh Classic 5's 120g (1x120Pack),MayMyo Fresh Coffee,Maymyo Fresh,
-3401111009,Maymyo Fresh Classic Plus 10's 260g (1x40Pack),MayMyo Fresh Coffee,Maymyo Fresh,
-4501111008,Excel Care Dish Washing Liquid Lemon 2Liter (1x6 pcs),Glamdust,Excel Care,
-3200000009,May Yee Mon Chicken Congee 25g (1x20 packs) MT pack,Ya Thar Taw Win,May Yee Mon,
-6001111003,Mr. Shine Liq Detergent Fresh Blossom 35ml (1x24pcsx10packs),Myat HtarNi,Mr. Shine,
-0201112027,Ensure Non-HMB Vanilla 380gm (1x24Pcs),Abbott,Ensure,
-5001121001,May Kha Lar Mango Toffee 125g (1x6pcsx32packs),CMP Fruits Garden,May Kha Lar,
-5001121002,May Kha Lar Lemon Toffee 125g (1x6pcsx32packs),CMP Fruits Garden,May Kha Lar,
-5001121003,May Kha Lar Plum with Ginger Toffee 125g (1x6pcsx32packs),CMP Fruits Garden,May Kha Lar,
-5001121004,May Kha Lar Tamarind Toffee 125g (1x6pcsx32packs),CMP Fruits Garden,May Kha Lar,
-5001121005,May Kha Lar Mixed Fruit Toffee 125g (1x6pcsx32packs),CMP Fruits Garden,May Kha Lar,
-3200000008,May Yee Mon Chicken Congee 25g - MT Pack (1x10x20packs),Ya Thar Taw Win,May Yee Mon,
-4000000005,Moshi Potato Chips BBQ Spicy 65g (1x6packs) - MT Pack,Honesty,Moshi,3000
-4000000006,Moshi Potato Chips BBQ Original 65g (1x6packs) - MT Pack,Honesty,Moshi,3000
-4000000007,Moshi Potato Chips BBQ Prawn 65g (1x6packs) - MT Pack,Honesty,Moshi,3000
-4501111007,Excel Care Dish Washing Liquid Lemon 2Liter with Toilet Cleaner 575ml (1x4pcs),Glamdust,Excel Care,
-4501111006,Excel Care Dish Washing Liquid Lemon 2Liter with Toilet Cleaner 575ml (1x5pcs),Glamdust,Excel Care,
-6001111002,Mr. Shine Liq Detergent Fresh Blossom 35ml (1x24pcsx20packs),Myat HtarNi,Mr. Shine,
-3202211002,May Yee Mon Chicken Congee 25g (1x10x20packs),Ya Thar Taw Win,May Yee Mon,
-0300000073,Brand's Berry Essence Concentrate 1.5oz (FOC) (1x1pcs),Suntory Beverage,BBE,
-0300000074,Brand's Prune Essence Concentrate 1.5oz (FOC) (1x1Pcs),Suntory Beverage,BPE,
-4000000003,Moshi Potato Chips Original 38g - MT Pack (1x12packs),Honesty,Moshi,3000
-4000000004,Moshi Potato Chips Spicy 38g - MT Pack (1x12packs),Honesty,Moshi,3000
-3202211001,May Yee Mon Chicken Congee 25g (1x10x15packs),Ya Thar Taw Win,May Yee Mon,
-4201111009,Phwer Htwe Pickeld Tea Leaves Classic 36g (1x10x30),Constellation,Phwer Htwe,
-4501122002,Excel Care Tile & Marble Shampoo 1000ml (1x15),Glamdust,Excel Care,
-4501122003,Excel Care Lime Scale Remover 5000ml (1x4pcs),Glamdust,Excel Care,
-4501151003,Excel Care Oven Cleaner 5000ml (1x4pcs),Glamdust,Excel Care,
-5001111031,May Kha Lar Preserved Mango Wet Spicy 80g (1x35),CMP Fruits Garden,May Kha Lar,
-5001111032,May Kha Lar Preserved Dried Plum Seedless Spicy 85g (1x35),CMP Fruits Garden,May Kha Lar,
-5001111033,May Kha Lar Preserved Special Steamed Plum 70g (1x35),CMP Fruits Garden,May Kha Lar,
-5001111034,May Kha Lar Preserved Plum Seedless Spicy Wet 100g (1x35),CMP Fruits Garden,May Kha Lar,
-5001111035,May Kha Lar Preserved Plum Seedless Sweet Wet 100g (1x35),CMP Fruits Garden,May Kha Lar,
-5001111036,May Kha Lar Preserved Special Marian Spicy 35g (1x35),CMP Fruits Garden,May Kha Lar,
-5001111037,May Kha Lar Preserved Golden Papaya 50g (1x35),CMP Fruits Garden,May Kha Lar,
-5001111038,May Kha Lar Preserved Damson Original 110g (1x20),CMP Fruits Garden,May Kha Lar,
-5001111039,May Kha Lar Preserved Mixed Fruits 60g (1x35),CMP Fruits Garden,May Kha Lar,
-4501131009,Excel Care Acidic Toilet Cleaner Colorless 1000ml (3x5pcs) on pack,Glamdust,Excel Care,
-4501131010,Excel Care Acidic Toilet Cleaner Magic Clean 1000ml (3x5pcs) on pack,Glamdust,Excel Care,
-4501122001,Excel Care Tile & Marble Shampoo 5000ml (1x4),Glamdust,Excel Care,
-3102111005,O'MaMa Mango Yogurt Cake Rusk 65g (1x72),O'Ma Ma,O'MaMa,
-4800000007,Pai Prawn Cracker 17g - MT Pack (1x12packs),Htoo Kaung Myat,Pai Snack,3000
-4801111005,Pai Prawn Cracker 17g (1x10pcsx12packs),Htoo Kaung Myat,Pai Snack,3000
-4501121003,Excel Care Disinfected Surface Cleaner Lavender 5000ml (1x4pcs),Glamdust,Excel Care,
-4501121004,Excel Care Disinfected Surface Cleaner Pine 5000ml (1x4pcs),Glamdust,Excel Care,
-4501141002,Excel Care Floor Cleaner Green Apple 5000ml (1x4pcs),Glamdust,Excel Care,
-4501131007,Excel Care Acidic Toilet Cleaner Colorless 5000ml (1x4pcs),Glamdust,Excel Care,
-4501131008,Excel Care Acidic Toilet Cleaner Magic Clean 5000ml (1x4pcs),Glamdust,Excel Care,
-5100000001,Zann Sunflower Seeds Salty 90g On Pack (1x5x23pcs),Royal Fantastic,Zann,
-5100000002,Zann Sunflower Seeds Salty 60g on pack (1x5x40Pcs),Royal Fantastic,Zann,
-5001111022,May Kha Lar Preserved Plum Seedless Sweet Wet 100g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
-5001111023,May Kha Lar Preserved Plum Seedless Spicy Wet 100g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
-5001111024,May Kha Lar Preserved Special Steamed Plum 70g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
-5001111025,May Kha Lar Preserved Dried Plum Seedless Spicy 85g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
-5001111026,May Kha Lar Preserved Mango Spicy Wet 80g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
-5001111027,May Kha Lar Preserved Golden Papaya 50g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
-5001111028,May Kha Lar Preserved Special Marian Spicy 35g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
-5001111029,May Kha Lar Preserved Mixed Fruits 60g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
-5001111020,May Kha Lar Preserved Mixed Fruits 60g (1x5x35),CMP Fruits Garden,May Kha Lar,
-5001111021,May Kha Lar Preserved Golden Papaya 50g (1x5x35),CMP Fruits Garden,May Kha Lar,
-5001111013,May Kha Lar Preserved Plum Seedless Sweet Wet 100g (1x5x35),CMP Fruits Garden,May Kha Lar,
-5001111014,May Kha Lar Preserved Plum Seedless Spicy Wet 100g (1x5x35),CMP Fruits Garden,May Kha Lar,
-5001111015,May Kha Lar Preserved Mango Spicy Wet 80g (1x5x35),CMP Fruits Garden,May Kha Lar,
-5001111016,May Kha Lar Preserved Dried Plum Seedless Spicy 85g (1x5x35),CMP Fruits Garden,May Kha Lar,
-5001111017,May Kha Lar Preserved Special Steamed Plum 70g (1x5x35),CMP Fruits Garden,May Kha Lar,
-5001111018,May Kha Lar Preserved Special Marian Spicy 35g (1x5x35),CMP Fruits Garden,May Kha Lar,
-4800000005,Pai Cheese Ball 10g - MT Pack (1x10x20 packs),Htoo Kaung Myat,Pai Snack,3000
-4800000006,Pai Cheese Ring 10g - MT Pack (1x10x20 packs),Htoo Kaung Myat,Pai Snack,3000
-4800000003,Pai Cheese Ring 35g - MT Pack (1x10pcsx12packs),Htoo Kaung Myat,Pai Snack,3000
-4800000004,Pai Cheese Ball 35g - MT Pack (1x10pcsx12packs),Htoo Kaung Myat,Pai Snack,3000
-5600000001,Omi Korean Yam Chips BBQ 30g - MT Pack (1x10pcsx12pack),Omi Snack,Omi,3000
-3200000004,May Yee Mon Fish Sauce 50g-MT Pack (1x20packs),Ya Thar Taw Win,May Yee Mon,
-3200000005,May Yee Mon Marine Fish Paste 50g-MT Pack (1x20Packs),Ya Thar Taw Win,May Yee Mon,
-3200000006,May Yee Mon Rakhine Fish Paste 50g- MT Pack (1x20packs),Ya Thar Taw Win,May Yee Mon,
-3200000007,May Yee Mon Tamarind Fish Paste 50g-MT Pack(1x20Packs),Ya Thar Taw Win,May Yee Mon,
-4501131005,Excel Care Lime Scale Remover 1000ml (1x15pcs),Glamdust,Excel Care,
-4501131006,Excel Care Lime Scale Remover 575ml (1x20pcs),Glamdust,Excel Care,
-4501151001,Excel Care Oven Cleaner 1000ml (1x15pcs),Glamdust,Excel Care,
-4501151002,Excel Care Oven Cleaner 575ml (1x20 pcs),Glamdust,Excel Care,
-4501161001,Excel Care Glass Cleaner 500ml (1x24pcs),Glamdust,Excel Care,
-5801111009,Wai Phyo Black Eyed Fried Bean (1x20x20pack),Wai Phyoe Food,Wai Phyoe,
-4201111007,Phwer Htwe Pickled Tea Spicy 30g (1x30 Streamer),Constellation,Phwer Htwe,
-5700000001,Ah Phwar Lay Paprika Powder 32g FOC,New A1 Family,Ah Phwar Lay,
-5701111004,Ah Phwar Lay Chilli Flake 32g (1x20x18pack) with hanger,New A1 Family,Ah Phwar Lay,
-5701111005,Ah Phwar Lay Paprika Powder 32g (1x20x18pack) with hanger,New A1 Family,Ah Phwar Lay,
-5701111006,Ah Phwar Lay Roasted Chilli Powder 32g (1x20x18pack) with hanger,New A1 Family,Ah Phwar Lay,
-5801111001,Wai Phyoe Fried Lab Lab Bean 80g (1x10x20pack),Wai Phyoe Food,Wai Phyoe,
-5801111002,Wai Phyoe Assorted Fried Bean 80g (1x10x20pack),Wai Phyoe Food,Wai Phyoe,
-5801111003,Wai Phyoe Fried Lab Lab Bean Special 80g (1x10x20pack),Wai Phyoe Food,Wai Phyoe,
-5801111004,Wai Phyoe Fried Lab Lab Bean 160g (1x10x10pack),Wai Phyoe Food,Wai Phyoe,
-5801111005,Wai Phyoe Assorted Fried Bean 160g (1x10x10pack),Wai Phyoe Food,Wai Phyoe,
-5801111006,Wai Phyoe Fried Lab Lab Bean Special 160g (1x10x10pack),Wai Phyoe Food,Wai Phyoe,
-5801111007,Wai Phyoe Assorted Fried Bean 400g (1x100pack),Wai Phyoe Food,Wai Phyoe,
-5801111008,Wai Phyoe Assorted Fried Bean Special 400g (1x100pack),Wai Phyoe Food,Wai Phyoe,
-5701111001,Ah Phwar Lay Chilli Flake 32g (1x20x18pack),New A1 Family,Ah Phwar Lay,
-5701111002,Ah Phwar Lay Paprika Powder 32g (1x20x18pack),New A1 Family,Ah Phwar Lay,
-5701111003,Ah Phwar Lay Roasted Chilli Powder 32g (1x20x18pack),New A1 Family,Ah Phwar Lay,
-3202111004,May Yee Mon Tamarind Fish Paste (1x5x20 packs),Ya Thar Taw Win,May Yee Mon,
-4201111006,Phwer Htwe Pickled Tea with Fish Paste (1x30streamers),Constellation,Phwer Htwe,
-4901112001,Danuphyu Daw Saw Yee Fish Paste Sauce 473g Pack (1 x 10 packs),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
-4801111003,Pai Cheese Ring 35g (1x10pcsx12packs),Htoo Kaung Myat,Pai Snack,3000
-4801111004,Pai Cheese Ball 35g (1x10pcsx12packs),Htoo Kaung Myat,Pai Snack,3000
-4501131004,Excel Care Acidic Toilet Cleaner Colorless 575ml (1x24pcs),Glamdust,Excel Care,
-5001111012,May Kha Lar Preserved Fruits Special Steamed Plum Spicy 35g (1x5x50),CMP Fruits Garden,May Kha Lar,
-5001111010,May Kha Lar Preserved Fruits Dried Plum Seedless Spicy 45g (1x5x50),CMP Fruits Garden,May Kha Lar,
-5001111011,May Kha Lar Preserved Fruits Golden Papaya Spicy 35g (1x5x50),CMP Fruits Garden,May Kha Lar,
-4501131001,Excel Care Acidic Toilet Cleaner Colorless 1000ml (1x15pcs),Glamdust,Excel Care,
-4501131002,Excel Care Acidic Toilet Cleaner Magic Clean 1000ml (1x15pcs),Glamdust,Excel Care,
-4501131003,Excel Care Acidic Toilet Cleaner Magic Clean 575ml (1x24pcs),Glamdust,Excel Care,
-4501121001,Excel Care Disinfected Surface Cleaner Pine 1100ml (1x10pcs),Glamdust,Excel Care,
-4501121002,Excel Care Disinfected Surface Cleaner Levender 1100ml (1x10pcs),Glamdust,Excel Care,
-4501141001,Excel Care Floor Cleaner Green Apple 1100ml (1x10pcs),Glamdust,Excel Care,
-4201111005,Phwer Htwe Pickled Tea with Fried Bean Spicy 90g (1x5packsx16),Constellation,Phwer Htwe,
-5601111001,Omi Korean Yam Chips BBQ 30g (1x10pcsx12pack),Omi Snack,Omi,3000
-5501111001,Sweety Curry Powder 60g (1x10x15pack),Diamond And Sweety,Sweety,
-5501112001,Sweety Curry Powder 10g (1x10x60 streamer),Diamond And Sweety,Sweety,
-5501112002,Sweety Curry Powder 10g (1x20x30 pack) with hanger,Diamond And Sweety,Sweety,
-5501113001,Sweety Curry Powder 100g (1x12x4 pack),Diamond And Sweety,Sweety,
-5101111003,Zann Sunflower Seeds Salty 60g (1x200pcs),Royal Fantastic,Zann,
-5101111004,Zann Sunflower Seeds Salty 90g (1x115pcs),Royal Fantastic,Zann,
-3200000001,May Yee Mon Rakhine Fish Paste 50g -MT Pack (1x5x20packs),Ya Thar Taw Win,May Yee Mon,
-3200000002,May Yee Mon Marine Fish Paste 50g-MT Pack (1x5x20packs),Ya Thar Taw Win,May Yee Mon,
-3200000003,May Yee Mon Fish Sauce 50g-MT Pack (1x5x20packs),Ya Thar Taw Win,May Yee Mon,
-5301111007,Aurora Preserved YawThaMa Salad (1x5x140),Aurora,Aurora Preserved Fruits,
-5301111008,Aurora Preserved Plum Sweet Wet (1x5x140),Aurora,Aurora Preserved Fruits,
-5301111009,Aurora Preserved Mango Slice Sweet Wet (1x5x140),Aurora,Aurora Preserved Fruits,
-5301111010,Aurora Preserved Mango Sweet Wet (1x5x140),Aurora,Aurora Preserved Fruits,
-4601112002,Vita Health MV Ener-G (3x10capx72x216pcs),Vita Health,Vita Health,
-4601311006,Vita Health Garlic Oil (3x10capx158x474pcs),Vita Health,Vita Health,
-4601311007,Vita Health Flaxseed Oil (3x10capx158x474pcs),Vita Health,Vita Health,
-4601311008,Vita Health Fish Oil (3x10capx158x474pcs),Vita Health,Vita Health,
-4601311009,Vita Health Almond Oil (3x10capx158x474pcs),Vita Health,Vita Health,
-4601311010,Vita Health Co-Enzyme Q10 (10x10capx100x1000pcs),Vita Health,Vita Health,
-4900000001,Danuphyu Daw Saw Yee Balachaung 500g TDG On-Pack ( 1 x 10 packs),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
-4900000002,Danuphyu Daw Saw Yee Pounded Fish Paste 500g TDG On-Pack (1x9 packs),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
-4800000001,Pai Cheese Ring 10g - MT Pack (10pcsx20packs),Htoo Kaung Myat,Pai Snack,3000
-4800000002,Pai Cheese Ball 10g - MT Pack (10pcsx20packs),Htoo Kaung Myat,Pai Snack,3000
-5001111006,May Kha Lar Preserved Marian Spicy 40g (1x5x50pack),CMP Fruits Garden,May Kha Lar,
-5001111007,May Kha Lar Preserved Mango Slices Spicy 40g (1x5x50pack),CMP Fruits Garden,May Kha Lar,
-5001111008,May Kha Lar Preserved Plum Seedless Sweet 65g (1x5x50pack),CMP Fruits Garden,May Kha Lar,
-5001111009,May Kha Lar Preserved Plum Seedless Spicy 65g (1x5x50pack),CMP Fruits Garden,May Kha Lar,
-4201111004,Phwer Htwe Pickled Tea Spicy 35g 5s on pack (5x60packs),Constellation,Phwer Htwe,
-4201111003,Phwer Htwe Pickled Tea Spicy 35g (1x10packsx30),Constellation,Phwer Htwe,
-5401111001,Coffee Cherry 3 in 1 instant brew coffee 20g 10pcs (1x25bags),Great Ever Top One,Coffee Cherry,
-5401111002,Coffee Cherry 3 in 1 instant brew coffee 20g 20pcs (1x35bags),Great Ever Top One,Coffee Cherry,
-5101111001,Zann Sunflower Seeds Salty 60g (1x150pcs),Royal Fantastic,Zann,
-5101111002,Zann Sunflower Seeds Salty 110g (1x90pcs),Royal Fantastic,Zann,
-5301111001,Aurora Preserved Damson Red (1x5x120),Aurora,Aurora Preserved Fruits,
-5301111002,Aurora Preserved Peach Sweet (1x5x120),Aurora,Aurora Preserved Fruits,
-5301111003,Aurora Preserved Lemon Sweet (1x5x120),Aurora,Aurora Preserved Fruits,
-5301111004,Aurora Preserved Damson Salad (1x5x140),Aurora,Aurora Preserved Fruits,
-5301111005,Aurora Preserved Damson Hot&Spicy Wet (1x5x140),Aurora,Aurora Preserved Fruits,
-5301111006,Aurora Preserved Mixed Fruits Wet (1x5x140),Aurora,Aurora Preserved Fruits,
-3502111002,P1 Choco Milk Popcorn 30g (1x60),Trine,P1,
-5001111001,May Kha Lar Preserved 5 in 1 Sweet 45g (1x5x50pack),CMP Fruits Garden,May Kha Lar,
-5001111002,May Kha Lar Preserved Marian Spicy 40g (1x5x70pack),CMP Fruits Garden,May Kha Lar,
-5001111003,May Kha Lar Preserved Mango Slices Spicy 40g (1x5x70pack),CMP Fruits Garden,May Kha Lar,
-5001111004,May Kha Lar Preserved Plum Seedless Sweet 65g (1x5x40pack),CMP Fruits Garden,May Kha Lar,
-5001111005,May Kha Lar Preserved Plum Seedless Spicy 65g (1x5x40pack),CMP Fruits Garden,May Kha Lar,
-0203112010,Glucerna Powder (Vanilla) 380g (1x24Pcs),Abbott,Glucerna,
-0203112011,Glucerna Powder (Vanilla) 800g (1x12Pcs),Abbott,Glucerna,
-0201112025,Ensure Gold Vanilla 380gm (1x24Pcs),Abbott,Ensure,
-0201112026,Ensure Gold Vanilla 800gm (1x12Pcs),Abbott,Ensure,
-4901111001,Danuphyu Daw Saw Yee Balachaung Streamer - 25g 10's ( 1x 20 streamers),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
-4901111002,Danuphyu Daw Saw Yee Pounded Fish Paste Streamer- 25g 10's ( 1x 20 streamers),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
-4901112003,Danuphyu Daw Saw Yee Balachaung 500g Pack ( 1 x 10 packs),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
-4901112004,Danuphyu Daw Saw Yee Pounded Fish Paste 500g Pack (1 x10 packs),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
-3102211014,O'Ma Ma Coconut Bun 55g (1x1pcs),O'Ma Ma,O'MaMa,
-3102211015,O'Ma Ma Chili Chicken Floss 55g (1x1pcs),O'Ma Ma,O'MaMa,
-4801111001,Pai Cheese Ring 10g (10pcsx20packs),Htoo Kaung Myat,Pai Snack,3000
-4801111002,Pai Cheese Ball 10g (10pcsx20packs),Htoo Kaung Myat,Pai Snack,3000
-4500000001,Excel Care Dish Washing Liquid Lime 480ml FOC,Glamdust,Excel Care,
-4500000002,Excel Care Dish Washing Liquid Lemon 480ml FOC,Glamdust,Excel Care,
-4500000003,Excel Care Dish Washing Liquid Lemon 1Liter FOC,Glamdust,Excel Care,
-3202121001,May Yee Mon pickled tea and fried bean Spicy&Sour 50g (1x5x20),Ya Thar Taw Win,May Yee Mon,
-3202121002,May Yee Mon pickled tea and fried bean Original 50g (1x5x20),Ya Thar Taw Win,May Yee Mon,
-3102211011,O'MAMA Strawberry Cream Bun 55G (1x1pcs),O'Ma Ma,O'MaMa,
-3102211012,O'MAMA Chocolate Bun 55G (1x1pcs),O'Ma Ma,O'MaMa,
-3102211013,O'MaMa Danish Blueberry 55g (1x1pcs),O'Ma Ma,O'MaMa,
-4700000001,Sam Par Oo Purify Drinking Water 1LT (FOC),Vitaspring,Sam Par Oo,
-4700000002,Sam Par Oo Purify Drinking Water 550ML (FOC),Vitaspring,Sam Par Oo,
-4700000003,Sam Par Oo Purify Drinking Water 300ML (FOC),Vitaspring,Sam Par Oo,
-4700000004,Mingalarpar Purify Drinking Water 1LT (FOC),Vitaspring,Mingalarpar,
-4701111001,Sam Par Oo Purify Drinking Water 6p 1LT,Vitaspring,Sam Par Oo,
-4701111002,Sam Par Oo Purify Drinking Water 12p 550ML,Vitaspring,Sam Par Oo,
-4701111003,Sam Par Oo Purify Drinking Water 12p 300ML,Vitaspring,Sam Par Oo,
-4702111001,Mingalarpar Purify Drinking Water 6p 1LT,Vitaspring,Mingalarpar,
-4300000001,Nagar Pyan 3in1 Tea mix 30's 200g(1x32) - FOC,Nagar Pyan,Nagar Pyan,
-4601311002,Vita Health Flaxseed Oil (3x10capx158),Vita Health,Vita Health,
-4601311003,Vita Health Fish Oil (3x10capx158),Vita Health,Vita Health,
-4601311004,Vita Health Almond Oil (3x10capx158),Vita Health,Vita Health,
-4601311005,Vita Health Co-Enzyme Q10 (10x10capx100),Vita Health,Vita Health,
-4501111002,Excel Care Dish Washing Liquid Lemon 480ml  (1x24),Glamdust,Excel Care,
-4501111003,Excel Care Dish Washing Liquid Lemon 5liter  (1x4),Glamdust,Excel Care,
-4501111004,Excel Care Dish Washing Liquid Lemon 2Liter (1x8),Glamdust,Excel Care,
-4501111005,Excel Care Dish Washing Liquid Lemon 1Liter (1x12),Glamdust,Excel Care,
-4601111001,Vita Health OraZinc 100 Tab (1x220),Vita Health,Vita Health,
-4601112001,Vita Health MV Ener-G (3x10capx72),Vita Health,Vita Health,
-4601212001,Vita Health MV Ener-G Kids Syrup 200ml (1x25),Vita Health,Vita Health,
-4601311001,Vita Health Garlic Oil (3x10capx158),Vita Health,Vita Health,
-4501111001,Excel Care Dish Washing Liquid Lime 480ml (1x24),Glamdust,Excel Care,
-4401111001,Pyar Dee Butter Cake Rusk 35g (1x60),Pyar Dee,Pyar Dee,
-4301111001,Nagar Pyan 3in1 Tea mix 30's 200g(1x32),Nagar Pyan,Nagar Pyan,
-4301111002,Nagar Pyan 3in1 Tea mix 10's 200g(1x30),Nagar Pyan,Nagar Pyan,
-4001111004,Moshi Potato Chips Original 38g (1x10x12pcs),Honesty,Moshi,3000
-4001111005,Moshi Potato Chips Spicy 38g (1x10x12pcs),Honesty,Moshi,3000
-3701111003,Kyu Kyu Hmwe Fish Sauce Salty 900ml (1x12),Kyu Kyu Hmwe,Kyu Kyu Hmwe,
-4000000001,Moshi Potato Chips BBQ Spicy 65g 3's (1x20pack),Honesty,Moshi,3000
-4000000002,Moshi Potato Chips BBQ Prawn 65g 3's (1x20pack),Honesty,Moshi,3000
-3102211005,O'MaMa Cheese Pudding Bun with Filling 55g (1x1pcs),O'Ma Ma,O'MaMa,
-3102211006,O'MaMa Danish Strawberry 55g (1x1pcs),O'Ma Ma,O'MaMa,
-3102211009,O'MaMa Milk Toast Slice Bread 315g (1x1pcs),O'Ma Ma,O'MaMa,
-3102211010,O'MaMa Sandwich Bread 200g (1x1pcs),O'Ma Ma,O'MaMa,
-0203112008,Glucerna Powder (Vanilla) 400g (1x24Pcs),Abbott,Glucerna,
-0203112009,Glucerna Powder (Vanilla) 850g (1x12Pcs),Abbott,Glucerna,
-3102111004,O'MaMa Mixed Fruit Cake Rusk 65g (1x72),O'Ma Ma,O'MaMa,
-0200000180,Ensure Gold (Vanilla) Gift Pack (400g x 2 pcs),Abbott,Ensure,
-0200000178,Pediasure 3+ Vanilla 850g with Mini Peptides Can Top Sticker (1x12pcs),Abbott,Pediasure,
-0300000071,BBN 1.5oz Bundle Pack (1x12x4),Suntory Beverage,BBN,
-0201112024,Ensure Non-HMB Vanilla 400gm (1x24Pcs),Abbott,Ensure,
-3102211001,O'MaMa Cheese Custard Solo pack 55g (1x1pcs),O'Ma Ma,O'MaMa,
-3102211002,O'MaMa Cheese Mayo Solo pack 55g (1x1pcs),O'Ma Ma,O'MaMa,
-3401121002,Maymyo Fresh Nature Blend Coffee 100g (1x100Pack),MayMyo Fresh Coffee,Maymyo Fresh,
-3401121003,Maymyo Fresh Nature Blend Coffee 200g (1x60Pack),MayMyo Fresh Coffee,Maymyo Fresh,
-3401211001,Maymyo Burmese Milk Tea 10's (1x30Pack),MayMyo Fresh Coffee,Maymyo Fresh,
-0208111017,Similac Follow On PRODI-G and 5HMOs 850g (1x12pcs),Abbott,Similac,
-0208121015,Similac Infant PRODI-G and 5 HMOs 400g(1x24 pcs),Abbott,Similac,
-0208121016,Similac Infant PRODI-G and 5 HMOs 850g(1x12pcs),Abbott,Similac,
-0206123004,Pediasure 3+ Vanilla 850g  with Mini Peptides (1x12pcs),Abbott,Pediasure,
-0206123006,Pediasure 3+ Vanilla 48.6g sachet   with Mini Peptides (1x100pcs),Abbott,Pediasure,
-0206123007,Pediasure 3+ Strawberry  48.6g sachet   with Mini Peptides (1x100pcs),Abbott,Pediasure,
-0206123001,Pediasure 1+ Vanilla 400g  with Mini Peptides (1x24pcs),Abbott,Pediasure,
-0206123003,Pediasure 3+ Vanilla 400g  with Mini Peptides (1x24pcs),Abbott,Pediasure,
-4101111001,Sardines in Tomato Sauce 155g (1x100),Yummee,Yummee,
-3202111001,May Yee Mon Rakhine Fish Paste 50g (1x5x20packs),Ya Thar Taw Win,May Yee Mon,
-3202111002,May Yee Mon Marine Fish Paste 50g (1x5x20packs),Ya Thar Taw Win,May Yee Mon,
-3202111003,May Yee Mon Fish Sauce 50g (1x5x20packs),Ya Thar Taw Win,May Yee Mon,
-4001111003,Moshi Potato Chips BBQ Prawn 65g (1x60pcs),Honesty,Moshi,3000
-4001111001,Moshi Potato Chips BBQ Spicy 65g (1x60pcs),Honesty,Moshi,3000
-4001111002,Moshi Potato Chips BBQ Original 65g (1x60pcs),Honesty,Moshi,3000
-3801111001,Wasuka Crepes Choco Banana Flavored 50g(1x60),Win Food,Wasuka,
-3801111003,Wasuka Crepes Orange Flavored 50g(1x60),Win Food,Wasuka,
-3701111001,Kyu Kyu Hmwe Fish Sauce 850ml (1x12),Kyu Kyu Hmwe,Kyu Kyu Hmwe,
-1222401006,Sim Card WCDMA (Blank SIM-Promotion Card),MPT,Sim,
-0211111001,Nepro Low Protein 400g (1 x 24pcs),Abbott,Nepro,
-0211111002,Nepro High Protein 400g (1 x 24pcs),Abbott,Nepro,
-3501111001,Mobicorn Premium Popcorn Crunchy Caramel 75g (1x100),Trine,Mobicorn,
-3501111002,Mobicorn Premium Popcorn Choco Crunch 75g (1x100),Trine,Mobicorn,
-3501111003,Mobicorn Premium Popcorn cheesy Kraze 75g (1x100),Trine,Mobicorn,
-3501111004,Mobicorn Premium Popcorn Nutty Delight 75g (1x100),Trine,Mobicorn,
-3502111001,P1 Cheesy Pearl Popcorn 30g (1x60),Trine,P1,
-3102111001,O'MaMa Butter Cake Rusk 150g (1x40),O'Ma Ma,O'MaMa,
-3102111002,O'MaMa Cheese Cake Rusk 150g (1x40),O'Ma Ma,O'MaMa,
-3102111003,O'MaMa Chocolate Cake Rusk 150g (1x40),O'Ma Ma,O'MaMa,
-2802311001,Nature's Way Adult Complete Multivitamin  200 Tablets (1x12pcs),Pharma Care,Nature's Way,
-2802321001,Nature's Way Adult Fish Oil 1000mg 200 Soft Capsules (1x12pcs),Pharma Care,Nature's Way,
-3401111001,Maymyo Fresh Classic 20's 500g (1x50Pack),MayMyo Fresh Coffee,Maymyo Fresh,
-3401111002,Maymyo Fresh Classic 5's 120g (1x200Pack),MayMyo Fresh Coffee,Maymyo Fresh,
-3401111003,Maymyo Fresh Classic Plus 10's 260g (1x60Pack),MayMyo Fresh Coffee,Maymyo Fresh,
-3401111004,Maymyo Fresh Brown 20's 500g (1x50Pack),MayMyo Fresh Coffee,Maymyo Fresh,
-3401111005,Maymyo Fresh Brown 5's 120g (1x200Pack),MayMyo Fresh Coffee,Maymyo Fresh,
-3305111001,Quaker Instant Oatmeal  400g (1x24),Pepsico,QUAKER OAT,
-3305111002,Quaker Instant Oatmeal  800g (1x12),Pepsico,QUAKER OAT,
-3305111004,Quaker Quick Cook Oatmeal  800g (1x12),Pepsico,QUAKER OAT,
-3305112001,Quaker Instant Oatmeal 1kg (1x12),Pepsico,QUAKER OAT,
-3001111002,Clorox Liquid Bleach Original 1L (1x12Pcs),Clorox,Clorox,
-0200000139,Similac Total Comfort Stage 3 (ML) 820gm with Can top Sticker (1x12pcs),Abbott,Similac,
-0301181001,Brand's Berry Essence Concentrate (1X72),Suntory Beverage,BBE,
-0301181002,Brand's Prune Essence Concentrate (1X72),Suntory Beverage,BPE,
-2301111007,Gullon Sugar Free Cookie Choco Chip 125g (1x12),Gullon,Gullon,
-2301112001,Gullon Sugar Free Wafer Vanilla 3'S 180g (1x12),Gullon,Gullon,
-0301122011,BEC Junior Chocolate 1.5oz (1x72Pcs),Suntory Beverage,BEC,
-0100000213,Oral B Shiny Clean 35 Soft BCd On Pack (1x6Pcs),P&G,Oral-B,
-0701104019,NONG SHIM Shin Kimchi Ramyun Noodle 120g (1x40),Nong Shim,NONG SHIM,
-2301111001,Gullon Sugar Free Fibre Biscuits 170g (1x16),Gullon,Gullon,
-2301111002,Gullon Sugar Free Digestive Biscuits (Cookies) 400g (1x15),Gullon,Gullon,
-2301111003,Gullon Digestive Classics Biscuits 400g (1x20),Gullon,Gullon,
-2301111004,Gullon Cuor Di Cereale Chocolate Biscuits 280g (1x16),Gullon,Gullon,
-0300000057,Brand’s Prune 1.5oz Price Off Promotion (1x6pcs),Suntory Beverage,BPE,
-0300000058,Brand’s Berry 1.5oz Price Off Promotion (1x6pcs),Suntory Beverage,BBE,
-0301112009,BNSF Collagen 1.5oz (1x48),Suntory Beverage,BBN,
-2201111001,Dr Care Disinfectant Liquid 750ml (1x12),Dr.Care,Dr Care,
-0106122013,Head & Shoulders-12ml (Menthol)(1x42Dz),P&G,Head&Shoulder,
-0701104018,NONG SHIM Shin Red Super Spicy Noodle 120g (1x20),Nong Shim,NONG SHIM,
-0106122011,Head & Shoulders-12ml (Silky Smooth) (1x36Dz),P&G,Head&Shoulder,
-0201112017,Ensure Gold Strawberry 400gm (1x24Pcs),Abbott,Ensure,
-0201112018,Ensure Gold Strawberry 850gm (1x12Pcs),Abbott,Ensure,
-1900000001,Equal Classic 50`S 50g with 10`S FOC (Promo Pack) (1x12),Merisant,Equal,
-1900000002,Equal Classic 100`S 100g with 20`S FOC (Promo Pack) (1x36),Merisant,Equal,
-1222401005,Sim Card WCDMA (Beautiful Number SIM Card),MPT,Sim,
-0200000113,Ensure Gold Wheat 400gm with Can Top Sticker (1x24Pcs),Abbott,Ensure,
-0200000114,Ensure Gold Wheat 850gm with Can Top Sticker (1x12Pcs),Abbott,Ensure,
-0101121009,Ambi Pur Aerosol Blue Ocean 300ml (1x6Pcs),P&G,Ambi Pur,
-0101121012,Ambi Pur Aerosol Lavender Breeze 300ml (1x6Pcs),P&G,Ambi Pur,
-0101122004,Ambi Pur GEL Fresh Relaxing Lavender 180g (1x12Pcs),P&G,Ambi Pur,
-0101122005,Ambi Pur GEL Fresh Refreshing Lemon 180g (1x12Pcs),P&G,Ambi Pur,
-0110122005,Pantene 10ml-(Hair Fall Control)(1x40Dz),P&G,Pantene,
-0113111003,Whisper Heavy Flow -16's(1x12Pcs),P&G,Whispers,
-0113112007,Whisper Regular Flow Wing -20's(1x12Pcs),P&G,Whispers,
-0200000037,Similac Gain IQ PRODI-G and 5HMOs 400gm with Can Top Sticker (1x24Pcs),Abbott,Similac,
-0200000040,Glucerna Powder with 4xInositol (Vanilla) 850g with Can Top Sticker (1x12Pcs),Abbott,Glucerna,
-0200000087,Similac Gain IQ PRODI-G and 5HMOs 850gm with Can Top Sticker (1x12Pcs),Abbott,Similac,
-0200000090,Similac Mum Eye-Q(IQ) Vanilla 400g with Can Top Sticker (1x24Pcs),Abbott,Similac,
-0201112013,Ensure Gold Vanilla 400gm (1x24Pcs),Abbott,Ensure,
-0201112015,Ensure Gold (Wheat) 400gm (1x24Pcs),Abbott,Ensure,
-0201112016,Ensure Gold (Wheat) 850gm (1x12Pcs),Abbott,Ensure,
-0201113005,Ensure Gold Vanilla Sachet 60.6gm (1x100Pcs),Abbott,Ensure,
-0203112005,Glucerna Powder Triple Care (Vanilla) 400gm (Thai Label) (1x24Pcs),Abbott,Glucerna,
-0208131004,Similac Mum Eye-Q(IQ) Strawberry Yoghurt 400g (1x24Pcs),Abbott,Similac,
-0208141003,Similac Neosure HMO 850gm (1x12Pcs),Abbott,Similac,
-0208211001,Similac Baby Changing Mat - Black Fabric(1x50Pcs),Abbott,FOC,
-0208211002,Similac Baby Changing Mat - Green Fabric(1x50Pcs),Abbott,FOC,
-0207112001,Prosure Orange  380gm (1x24),Abbott,Prosure,
-0105111001,Gillette MACH 3 Cart 4's Blade(1x72pcs),P&G,Gillette,
-0105111011,Gillette MACH 3 Cart 2's Blade(1x72pcs),P&G,Gillette,
-0105111012,Gillette Fusion Cart 2s(1x40Pcs),P&G,Gillette,
-0105112001,Gillette Blue II Plus dis  2 sent(1 x240Pcs),P&G,Gillette,
-0105112002,Gillette Blue II Plus dis  5 sent(1 x144Pcs),P&G,Gillette,
-0105112004,Gillette Super Thin 2 dis 24 Fxd Blade(1x288pcs),P&G,Gillette,
-0105113001,Gillette Super Click Razor(1x144pcs),P&G,Gillette,
-0105113002,Gillette Super Thin Blade 5+1(1x1000Pcs),P&G,Gillette,
-0105114002,Gillette MACH 3  Turbo 1 Up(1x30pcs),P&G,Gillette,
-0105114004,Gillette Vector Plus 1 Up (1x144Pcs),P&G,Gillette,
-0105114007,Gillette Fusion Manual Razor(1x16Pcs),P&G,Gillette,
-0107112019,Olay Total Effects UV Normal Cream SPF-15  50g (1X6),P&G,Olay,
-0107112031,Olay Natural White Light Night Shine 50g (1X24),P&G,Olay,
-0107112034,Olay Natural White Light 50g (1X24),P&G,Olay,
-0106121056,Head & Shoulder-300ml (Silky Smooth)(1x12Pcs),P&G,Head&Shoulder,
-0106121058,Head & Shoulder-300ml (Menthol)(1x12Pcs),P&G,Head&Shoulder,
-0107114003,Olay Regenerist Serum  50ml (1X6),P&G,Olay,
-0107114006,Olay Regenerist Micro-Sculpting Serum 50ml(1x6Pcs),P&G,Olay,
-0107114009,Olay Total Effects Serum 50ml (1x6),P&G,Olay,
-0108120043,Oral B Multi Brush set(1x24Pcs),P&G,Oral-B,
-0108211001,Oral B All Rounder MICROTHIN CLN 40XS AS(1x96Pcs),P&G,Oral-B,
-0108211003,Oral B Classic 40 Soft TB(1x96Pcs),P&G,Oral-B,
-0108211007,Oral B Complete Easy Clean 40 Medium BCd(1x96Pcs),P&G,Oral-B,
-0108211012,Oral B Cross ProHlth Clinic Soft BCd(1x96Pcs),P&G,Oral-B,
-0108211013,Oral B Cross ProHlth Clinic Soft 3 BCd(1x96Pcs),P&G,Oral-B,
-0108211014,Oral B Cross Action ProHlth 7 Soft BCd(1x96Pcs),P&G,Oral-B,
-0108211015,Oral B Cross Action ProHlth 7 Soft 3 BCd(1x96Pcs),P&G,Oral-B,
-0108211016,Oral B Interdental Kit BCd(1x24Pcs),P&G,Oral-B,
-0108211017,Oral B Stage 8 Yrs+ Soft BCd(1x96Pcs),P&G,Oral-B,
-0108211019,Oral B Stage 2-4 Yrs Mickey/Minnie Soft BCd(1x96Pcs),P&G,Oral-B,
-0108211020,Oral B Stage 4-24 Mth Disney Baby Soft BCd(1x96Pcs),P&G,Oral-B,
-0108211021,Oral B Shiny Clean 35 Soft BCd(1x96Pcs),P&G,Oral-B,
-0108211022,Oral B Ultra Thin Black Tea Soft BCd(1x96Pcs),P&G,Oral-B,
-0108211023,Oral B Ultra Thin Black Tea Soft 3 BCd(1x96Pcs),P&G,Oral-B,
-0108211024,Oral B Ultra Thin Pro Deep Clean Soft BCd(1x96Pcs),P&G,Oral-B,
-0108211025,Oral B Ultra Thin Pro Deep Clean Soft 3 BCd(1x96Pcs),P&G,Oral-B,
-0108211026,Oral B Ultra Thin Green Tea Soft BCd(1x96Pcs),P&G,Oral-B,
-0108211027,Oral B Ultra Thin Green Tea Soft 3 BCd(1x96Pcs),P&G,Oral-B,
-0108311001,Oral B Power Refill Precision Clean 2s(1x24Pcs),P&G,Oral-B,
-0108311002,Oral B Power Pro 500 Power Handle(1x6Pcs),P&G,Oral-B,
-0108311004,Oral B Power Refill Cross Action 2s(1x24Pcs),P&G,Oral-B,
-0301122003,BEC1.5oz(1x72),Suntory Beverage,BEC,
-0301122005,BEC2.5oz(1x72),Suntory Beverage,BEC,
-0301112003,BBN1.5oz(1x48),Suntory Beverage,BBN,
-0301112004,BNSF 1.5 oz (1x48Pcs),Suntory Beverage,BBN,
-0301112005,BBN2.5oz(1x48),Suntory Beverage,BBN,
-0301112006,BNSF 2.5 oz (1x48Pcs),Suntory Beverage,BBN,
-0502111003,Nescafe Gold Blend 200g (8x200g),Nestrade,Nescafe Gold,
-0701104007,NONG SHIM Shin Ramyun Hot  Spicy Noodle 120g (1x40),Nong Shim,NONG SHIM,
-0701104010,NONG SHIM Neoguri Seafood Spicy Noodle 120g (1x20),Nong Shim,NONG SHIM,
-0701104013,NONG SHIM Chapaghetti Noodle 140g (1x40),Nong Shim,NONG SHIM,
-0701104014,NONG SHIM Chapaghetti Spicy Noodle 137g (1x40),Nong Shim,NONG SHIM,
-1221102001,Active GSM E-Top Up,MPT,Top-up,
-1222401001,Active WCDMA SimCard,MPT,Sim,
-1222401002,Sim Card WCDMA (Blank SIM),MPT,Sim,
-1222401004,Sim Card WCDMA (Blank SIM-Lost and Damage Card),MPT,Sim,
-1211101001,Empty GSM TP 5000,MPT,Top-up,
-1211101002,Empty GSM TP 10000,MPT,Top-up,
-1211101003,Empty GSM TP 1000,MPT,Top-up,
-1211101004,Empty GSM TP 3000,MPT,Top-up,
-1211201001,Empty CDMA-800 TP 5000,MPT,Top-up,
-1211201002,Empty CDMA-800 TP 10000,MPT,Top-up,
-1211301001,Empty CDMA-450 TP 5000,MPT,Top-up,
-1211301002,Empty CDMA-450 TP 10000,MPT,Top-up,
-1221101001,Active GSM TP 5000,MPT,Top-up,
-1221101002,Active GSM TP 10000,MPT,Top-up,
-1221101004,Active GSM TP 3000,MPT,Top-up,
-1221101006,Active GSM TP 1000 (QR),MPT,Top-up,
-1103213009,Oreo Sandwich Cookies Chocolate Cream-119.6gm (1x24Pcs),MDLZ,Oreo,
-1103213014,Oreo Sandwich Cookies Vanilla Cream-27.6gm (1x9x12Packs),MDLZ,Oreo,
-1103213017,Oreo Sandwich Cookies Chocolate Cream-26.25gm (12x12Packs),MDLZ,Oreo,
-1103213018,Oreo Sandwich Cookies Vanilla Cream-26.25gm (12x12Packs),MDLZ,Oreo,
-0801111011,Philips Tornado Cool daylight 24W E27 220-240V(1x12Pcs),Philips,Philips,
-0801111012,Philips Tornado Warm White 24W E27 220-240V Energy Saver(1x12Pcs),Philips,Philips,
-0801111026,Philips Tornado Cool daylight 24W B22 220-240V(1x12Pcs),Philips,Philips,
-0801112002,Philips Brightboost Super 80 Tubelight TL-D 36W/865(1x25Pcs),Philips,Philips,
-0801112004,Philips Lifemax Tubelight TL-D 36W/54-765(1x25Pcs),Philips,Philips,
-0801112007,Philips Brightboost Super 80 Tubelight TL-D 36W/840(1x25Pcs),Philips,Philips,
-0801114001,Philips Essential Cool Daylight TCH086 TL5-28W/865(1x24pcs),Philips,Philips,
-1901111001,Equal Classic 15`S 15g (1x36),Merisant,Equal,
-1901111002,Equal Classic 25`S 25g (1x36),Merisant,Equal,
-1901111003,Equal Classic 50`S 50g (1x12),Merisant,Equal,
-1901111004,Equal Classic 100`S 100g (1x36),Merisant,Equal,
-1901311001,Equal Gold 50`S 40G(1x12),Merisant,Equal,
-1901311002,Equal Gold 150g (Sugarly) (1x12),Merisant,Equal,
-1901411002,Equal Stevia 40`S 80g (1x6),Merisant,Equal,
-1901411003,Equal Stevia 100`S 200g (1x12),Merisant,Equal,
-2001111001,1 Stop E Money,1 Stop,Top-up,
-2101111002,Healthy Chef Soybean 1L (1x12),TVO,Healthy Chef,
-2101111005,Healthy Chef Sunflower 1L (1x12),TVO,Healthy Chef,
+﻿BU,Item Code,Item Name,Principal,Brand,Transportation Cost
+PG,6301111001,Shaloot Noodle Coconut 55g (1x30pcs),The Taste Origins,Shaloot,
+PG,6301111002,Shaloot Noodle Tom Yum 55g (1x30pcs),The Taste Origins,Shaloot,
+PG,6301111003,Shaloot Noodle Chicken Sichat 52g (1x30pcs),The Taste Origins,Shaloot,
+PG,0201112028,Ensure Gold (Wheat) 380g (1x24Pcs),Abbott,Ensure,
+PG,0201112029,Ensure Gold StrengthPro (Vanilla) 380g (1x24Pcs),Abbott,Ensure,
+PG,0201112030,Ensure Gold StrengthPro (Vanilla) 800g (1x12pcs),Abbott,Ensure,
+PG,0203112012,Glucerna Powder (Vanilla) 400g (1x24Pcs),Abbott,Glucerna,
+PG,1221101010,Active GSM TP 2000,MPT,Top-up,
+PG,6201111001,Ayeyarwaddy Peanut Oil 0.25Viss (1x12),Nutripure,Ayeyarwaddy,
+PG,6201111002,Ayeyarwaddy Peanut Oil 0.5Viss (1x12),Nutripure,Ayeyarwaddy,
+PG,6201111003,Ayeyarwaddy Peanut Oil 1Viss (1x10),Nutripure,Ayeyarwaddy,
+PG,6201111004,Ayeyarwaddy Peanut Oil 2Viss (1x6),Nutripure,Ayeyarwaddy,
+PG,6201111005,Ayeyarwaddy Peanut Oil 3Viss (1x4),Nutripure,Ayeyarwaddy,
+PG,5600000002,Omi Korean Yam Chips Prawn Tomato 35g - MT Pack (1x12pack),Omi Snack,Omi,3000
+PG,5600000003,Omi Korean Yam Chips Honey Butter Tomato 35g - MT Pack (1x12pack),Omi Snack,Omi,3000
+PG,5601111002,Omi Korean Yam Chips Prawn Tomato 35g (1x10pcsx12pack),Omi Snack,Omi,3000
+PG,5601111003,Omi Korean Yam Chips Honey Butter Tomato 35g (1x10pcsx12pack),Omi Snack,Omi,3000
+PG,6101111001,Premium Bonito Dashi 150g (1x60Pcs),Xiamen,Premium Dashi,
+PG,6101111002,Premium Bonito Dashi 1Kg (1x12Pcs),Xiamen,Premium Dashi,
+PG,6101111003,Premium Kombu Dashi 150g (1x60Pcs),Xiamen,Premium Dashi,
+PG,6101111004,Premium Kombu Dashi 1Kg (1x12Pcs),Xiamen,Premium Dashi,
+PG,3401111010,Maymyo Fresh Classic 20's 500g (1x30Pack),MayMyo Fresh Coffee,Maymyo Fresh,
+PG,3401111006,Maymyo Fresh Brown 20's 500g (1x30Pack),MayMyo Fresh Coffee,Maymyo Fresh,
+PG,3401111007,Maymyo Fresh Brown 5's 120g (1x120Pack),MayMyo Fresh Coffee,Maymyo Fresh,
+PG,3401111008,Maymyo Fresh Classic 5's 120g (1x120Pack),MayMyo Fresh Coffee,Maymyo Fresh,
+PG,3401111009,Maymyo Fresh Classic Plus 10's 260g (1x40Pack),MayMyo Fresh Coffee,Maymyo Fresh,
+PG,4501111008,Excel Care Dish Washing Liquid Lemon 2Liter (1x6 pcs),Glamdust,Excel Care,
+PG,3200000009,May Yee Mon Chicken Congee 25g (1x20 packs) MT pack,Ya Thar Taw Win,May Yee Mon,
+PG,6001111003,Mr. Shine Liq Detergent Fresh Blossom 35ml (1x24pcsx10packs),Myat HtarNi,Mr. Shine,
+PG,0201112027,Ensure Non-HMB Vanilla 380gm (1x24Pcs),Abbott,Ensure,
+PG,5001121001,May Kha Lar Mango Toffee 125g (1x6pcsx32packs),CMP Fruits Garden,May Kha Lar,
+PG,5001121002,May Kha Lar Lemon Toffee 125g (1x6pcsx32packs),CMP Fruits Garden,May Kha Lar,
+PG,5001121003,May Kha Lar Plum with Ginger Toffee 125g (1x6pcsx32packs),CMP Fruits Garden,May Kha Lar,
+PG,5001121004,May Kha Lar Tamarind Toffee 125g (1x6pcsx32packs),CMP Fruits Garden,May Kha Lar,
+PG,5001121005,May Kha Lar Mixed Fruit Toffee 125g (1x6pcsx32packs),CMP Fruits Garden,May Kha Lar,
+PG,3200000008,May Yee Mon Chicken Congee 25g - MT Pack (1x10x20packs),Ya Thar Taw Win,May Yee Mon,
+PG,4000000005,Moshi Potato Chips BBQ Spicy 65g (1x6packs) - MT Pack,Honesty,Moshi,3000
+PG,4000000006,Moshi Potato Chips BBQ Original 65g (1x6packs) - MT Pack,Honesty,Moshi,3000
+PG,4000000007,Moshi Potato Chips BBQ Prawn 65g (1x6packs) - MT Pack,Honesty,Moshi,3000
+PG,4501111007,Excel Care Dish Washing Liquid Lemon 2Liter with Toilet Cleaner 575ml (1x4pcs),Glamdust,Excel Care,
+PG,4501111006,Excel Care Dish Washing Liquid Lemon 2Liter with Toilet Cleaner 575ml (1x5pcs),Glamdust,Excel Care,
+PG,6001111002,Mr. Shine Liq Detergent Fresh Blossom 35ml (1x24pcsx20packs),Myat HtarNi,Mr. Shine,
+PG,3202211002,May Yee Mon Chicken Congee 25g (1x10x20packs),Ya Thar Taw Win,May Yee Mon,
+PG,0300000073,Brand's Berry Essence Concentrate 1.5oz (FOC) (1x1pcs),Suntory Beverage,BBE,
+PG,0300000074,Brand's Prune Essence Concentrate 1.5oz (FOC) (1x1Pcs),Suntory Beverage,BPE,
+PG,4000000003,Moshi Potato Chips Original 38g - MT Pack (1x12packs),Honesty,Moshi,3000
+PG,4000000004,Moshi Potato Chips Spicy 38g - MT Pack (1x12packs),Honesty,Moshi,3000
+PG,3202211001,May Yee Mon Chicken Congee 25g (1x10x15packs),Ya Thar Taw Win,May Yee Mon,
+PG,4201111009,Phwer Htwe Pickeld Tea Leaves Classic 36g (1x10x30),Constellation,Phwer Htwe,
+PG,4501122002,Excel Care Tile & Marble Shampoo 1000ml (1x15),Glamdust,Excel Care,
+PG,4501122003,Excel Care Lime Scale Remover 5000ml (1x4pcs),Glamdust,Excel Care,
+PG,4501151003,Excel Care Oven Cleaner 5000ml (1x4pcs),Glamdust,Excel Care,
+PG,5001111031,May Kha Lar Preserved Mango Wet Spicy 80g (1x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111032,May Kha Lar Preserved Dried Plum Seedless Spicy 85g (1x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111033,May Kha Lar Preserved Special Steamed Plum 70g (1x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111034,May Kha Lar Preserved Plum Seedless Spicy Wet 100g (1x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111035,May Kha Lar Preserved Plum Seedless Sweet Wet 100g (1x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111036,May Kha Lar Preserved Special Marian Spicy 35g (1x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111037,May Kha Lar Preserved Golden Papaya 50g (1x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111038,May Kha Lar Preserved Damson Original 110g (1x20),CMP Fruits Garden,May Kha Lar,
+PG,5001111039,May Kha Lar Preserved Mixed Fruits 60g (1x35),CMP Fruits Garden,May Kha Lar,
+PG,4501131009,Excel Care Acidic Toilet Cleaner Colorless 1000ml (3x5pcs) on pack,Glamdust,Excel Care,
+PG,4501131010,Excel Care Acidic Toilet Cleaner Magic Clean 1000ml (3x5pcs) on pack,Glamdust,Excel Care,
+PG,4501122001,Excel Care Tile & Marble Shampoo 5000ml (1x4),Glamdust,Excel Care,
+PG,3102111005,O'MaMa Mango Yogurt Cake Rusk 65g (1x72),O'Ma Ma,O'MaMa,
+PG,4800000007,Pai Prawn Cracker 17g - MT Pack (1x12packs),Htoo Kaung Myat,Pai Snack,3000
+PG,4801111005,Pai Prawn Cracker 17g (1x10pcsx12packs),Htoo Kaung Myat,Pai Snack,3000
+PG,4501121003,Excel Care Disinfected Surface Cleaner Lavender 5000ml (1x4pcs),Glamdust,Excel Care,
+PG,4501121004,Excel Care Disinfected Surface Cleaner Pine 5000ml (1x4pcs),Glamdust,Excel Care,
+PG,4501141002,Excel Care Floor Cleaner Green Apple 5000ml (1x4pcs),Glamdust,Excel Care,
+PG,4501131007,Excel Care Acidic Toilet Cleaner Colorless 5000ml (1x4pcs),Glamdust,Excel Care,
+PG,4501131008,Excel Care Acidic Toilet Cleaner Magic Clean 5000ml (1x4pcs),Glamdust,Excel Care,
+PG,5100000001,Zann Sunflower Seeds Salty 90g On Pack (1x5x23pcs),Royal Fantastic,Zann,
+PG,5100000002,Zann Sunflower Seeds Salty 60g on pack (1x5x40Pcs),Royal Fantastic,Zann,
+PG,5001111022,May Kha Lar Preserved Plum Seedless Sweet Wet 100g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
+PG,5001111023,May Kha Lar Preserved Plum Seedless Spicy Wet 100g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
+PG,5001111024,May Kha Lar Preserved Special Steamed Plum 70g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
+PG,5001111025,May Kha Lar Preserved Dried Plum Seedless Spicy 85g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
+PG,5001111026,May Kha Lar Preserved Mango Spicy Wet 80g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
+PG,5001111027,May Kha Lar Preserved Golden Papaya 50g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
+PG,5001111028,May Kha Lar Preserved Special Marian Spicy 35g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
+PG,5001111029,May Kha Lar Preserved Mixed Fruits 60g (1x5x35) on pack,CMP Fruits Garden,May Kha Lar,
+PG,5001111020,May Kha Lar Preserved Mixed Fruits 60g (1x5x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111021,May Kha Lar Preserved Golden Papaya 50g (1x5x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111013,May Kha Lar Preserved Plum Seedless Sweet Wet 100g (1x5x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111014,May Kha Lar Preserved Plum Seedless Spicy Wet 100g (1x5x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111015,May Kha Lar Preserved Mango Spicy Wet 80g (1x5x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111016,May Kha Lar Preserved Dried Plum Seedless Spicy 85g (1x5x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111017,May Kha Lar Preserved Special Steamed Plum 70g (1x5x35),CMP Fruits Garden,May Kha Lar,
+PG,5001111018,May Kha Lar Preserved Special Marian Spicy 35g (1x5x35),CMP Fruits Garden,May Kha Lar,
+PG,4800000005,Pai Cheese Ball 10g - MT Pack (1x10x20 packs),Htoo Kaung Myat,Pai Snack,3000
+PG,4800000006,Pai Cheese Ring 10g - MT Pack (1x10x20 packs),Htoo Kaung Myat,Pai Snack,3000
+PG,4800000003,Pai Cheese Ring 35g - MT Pack (1x10pcsx12packs),Htoo Kaung Myat,Pai Snack,3000
+PG,4800000004,Pai Cheese Ball 35g - MT Pack (1x10pcsx12packs),Htoo Kaung Myat,Pai Snack,3000
+PG,5600000001,Omi Korean Yam Chips BBQ 35g - MT Pack (1x10pcsx12pack),Omi Snack,Omi,3000
+PG,3200000004,May Yee Mon Fish Sauce 50g-MT Pack (1x20packs),Ya Thar Taw Win,May Yee Mon,
+PG,3200000005,May Yee Mon Marine Fish Paste 50g-MT Pack (1x20Packs),Ya Thar Taw Win,May Yee Mon,
+PG,3200000006,May Yee Mon Rakhine Fish Paste 50g- MT Pack (1x20packs),Ya Thar Taw Win,May Yee Mon,
+PG,3200000007,May Yee Mon Tamarind Fish Paste 50g-MT Pack(1x20Packs),Ya Thar Taw Win,May Yee Mon,
+PG,4501131005,Excel Care Lime Scale Remover 1000ml (1x15pcs),Glamdust,Excel Care,
+PG,4501131006,Excel Care Lime Scale Remover 575ml (1x20pcs),Glamdust,Excel Care,
+PG,4501151001,Excel Care Oven Cleaner 1000ml (1x15pcs),Glamdust,Excel Care,
+PG,4501151002,Excel Care Oven Cleaner 575ml (1x20 pcs),Glamdust,Excel Care,
+PG,4501161001,Excel Care Glass Cleaner 500ml (1x24pcs),Glamdust,Excel Care,
+PG,5801111009,Wai Phyo Black Eyed Fried Bean (1x20x20pack),Wai Phyoe Food,Wai Phyoe,
+PG,4201111007,Phwer Htwe Pickled Tea Spicy 30g (1x30 Streamer),Constellation,Phwer Htwe,
+PG,5700000001,Ah Phwar Lay Paprika Powder 32g FOC,New A1 Family,Ah Phwar Lay,
+PG,5701111004,Ah Phwar Lay Chilli Flake 32g (1x20x18pack) with hanger,New A1 Family,Ah Phwar Lay,
+PG,5701111005,Ah Phwar Lay Paprika Powder 32g (1x20x18pack) with hanger,New A1 Family,Ah Phwar Lay,
+PG,5701111006,Ah Phwar Lay Roasted Chilli Powder 32g (1x20x18pack) with hanger,New A1 Family,Ah Phwar Lay,
+PG,5801111001,Wai Phyoe Fried Lab Lab Bean 80g (1x10x20pack),Wai Phyoe Food,Wai Phyoe,
+PG,5801111002,Wai Phyoe Assorted Fried Bean 80g (1x10x20pack),Wai Phyoe Food,Wai Phyoe,
+PG,5801111003,Wai Phyoe Fried Lab Lab Bean Special 80g (1x10x20pack),Wai Phyoe Food,Wai Phyoe,
+PG,5801111004,Wai Phyoe Fried Lab Lab Bean 160g (1x10x10pack),Wai Phyoe Food,Wai Phyoe,
+PG,5801111005,Wai Phyoe Assorted Fried Bean 160g (1x10x10pack),Wai Phyoe Food,Wai Phyoe,
+PG,5801111006,Wai Phyoe Fried Lab Lab Bean Special 160g (1x10x10pack),Wai Phyoe Food,Wai Phyoe,
+PG,5801111007,Wai Phyoe Assorted Fried Bean 400g (1x100pack),Wai Phyoe Food,Wai Phyoe,
+PG,5801111008,Wai Phyoe Assorted Fried Bean Special 400g (1x100pack),Wai Phyoe Food,Wai Phyoe,
+PG,5701111001,Ah Phwar Lay Chilli Flake 32g (1x20x18pack),New A1 Family,Ah Phwar Lay,
+PG,5701111002,Ah Phwar Lay Paprika Powder 32g (1x20x18pack),New A1 Family,Ah Phwar Lay,
+PG,5701111003,Ah Phwar Lay Roasted Chilli Powder 32g (1x20x18pack),New A1 Family,Ah Phwar Lay,
+PG,3202111004,May Yee Mon Tamarind Fish Paste (1x5x20 packs),Ya Thar Taw Win,May Yee Mon,
+PG,4201111006,Phwer Htwe Pickled Tea with Fish Paste (1x30streamers),Constellation,Phwer Htwe,
+PG,4901112001,Danuphyu Daw Saw Yee Fish Paste Sauce 473g Pack (1 x 10 packs),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
+PG,4801111003,Pai Cheese Ring 35g (1x10pcsx12packs),Htoo Kaung Myat,Pai Snack,3000
+PG,4801111004,Pai Cheese Ball 35g (1x10pcsx12packs),Htoo Kaung Myat,Pai Snack,3000
+PG,4501131004,Excel Care Acidic Toilet Cleaner Colorless 575ml (1x24pcs),Glamdust,Excel Care,
+PG,5001111012,May Kha Lar Preserved Fruits Special Steamed Plum Spicy 35g (1x5x50),CMP Fruits Garden,May Kha Lar,
+PG,5001111010,May Kha Lar Preserved Fruits Dried Plum Seedless Spicy 45g (1x5x50),CMP Fruits Garden,May Kha Lar,
+PG,5001111011,May Kha Lar Preserved Fruits Golden Papaya Spicy 35g (1x5x50),CMP Fruits Garden,May Kha Lar,
+PG,4501131001,Excel Care Acidic Toilet Cleaner Colorless 1000ml (1x15pcs),Glamdust,Excel Care,
+PG,4501131002,Excel Care Acidic Toilet Cleaner Magic Clean 1000ml (1x15pcs),Glamdust,Excel Care,
+PG,4501131003,Excel Care Acidic Toilet Cleaner Magic Clean 575ml (1x24pcs),Glamdust,Excel Care,
+PG,4501121001,Excel Care Disinfected Surface Cleaner Pine 1100ml (1x10pcs),Glamdust,Excel Care,
+PG,4501121002,Excel Care Disinfected Surface Cleaner Levender 1100ml (1x10pcs),Glamdust,Excel Care,
+PG,4501141001,Excel Care Floor Cleaner Green Apple 1100ml (1x10pcs),Glamdust,Excel Care,
+PG,4201111005,Phwer Htwe Pickled Tea with Fried Bean Spicy 90g (1x5packsx16),Constellation,Phwer Htwe,
+PG,5601111001,Omi Korean Yam Chips BBQ 35g (1x10pcsx12pack),Omi Snack,Omi,3000
+PG,5501111001,Sweety Curry Powder 60g (1x10x15pack),Diamond And Sweety,Sweety,
+PG,5501112001,Sweety Curry Powder 10g (1x10x60 streamer),Diamond And Sweety,Sweety,
+PG,5501112002,Sweety Curry Powder 10g (1x20x30 pack) with hanger,Diamond And Sweety,Sweety,
+PG,5501113001,Sweety Curry Powder 100g (1x12x4 pack),Diamond And Sweety,Sweety,
+PG,5101111003,Zann Sunflower Seeds Salty 60g (1x200pcs),Royal Fantastic,Zann,
+PG,5101111004,Zann Sunflower Seeds Salty 90g (1x115pcs),Royal Fantastic,Zann,
+PG,3200000001,May Yee Mon Rakhine Fish Paste 50g -MT Pack (1x5x20packs),Ya Thar Taw Win,May Yee Mon,
+PG,3200000002,May Yee Mon Marine Fish Paste 50g-MT Pack (1x5x20packs),Ya Thar Taw Win,May Yee Mon,
+PG,3200000003,May Yee Mon Fish Sauce 50g-MT Pack (1x5x20packs),Ya Thar Taw Win,May Yee Mon,
+PG,5301111007,Aurora Preserved YawThaMa Salad (1x5x140),Aurora,Aurora Preserved Fruits,
+PG,5301111008,Aurora Preserved Plum Sweet Wet (1x5x140),Aurora,Aurora Preserved Fruits,
+PG,5301111009,Aurora Preserved Mango Slice Sweet Wet (1x5x140),Aurora,Aurora Preserved Fruits,
+PG,5301111010,Aurora Preserved Mango Sweet Wet (1x5x140),Aurora,Aurora Preserved Fruits,
+PG,4601112002,Vita Health MV Ener-G (3x10capx72x216pcs),Vita Health,Vita Health,
+PG,4601311006,Vita Health Garlic Oil (3x10capx158x474pcs),Vita Health,Vita Health,
+PG,4601311007,Vita Health Flaxseed Oil (3x10capx158x474pcs),Vita Health,Vita Health,
+PG,4601311008,Vita Health Fish Oil (3x10capx158x474pcs),Vita Health,Vita Health,
+PG,4601311009,Vita Health Almond Oil (3x10capx158x474pcs),Vita Health,Vita Health,
+PG,4601311010,Vita Health Co-Enzyme Q10 (10x10capx100x1000pcs),Vita Health,Vita Health,
+PG,4900000001,Danuphyu Daw Saw Yee Balachaung 500g TDG On-Pack ( 1 x 10 packs),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
+PG,4900000002,Danuphyu Daw Saw Yee Pounded Fish Paste 500g TDG On-Pack (1x9 packs),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
+PG,4800000001,Pai Cheese Ring 10g - MT Pack (10pcsx20packs),Htoo Kaung Myat,Pai Snack,3000
+PG,4800000002,Pai Cheese Ball 10g - MT Pack (10pcsx20packs),Htoo Kaung Myat,Pai Snack,3000
+PG,5001111006,May Kha Lar Preserved Marian Spicy 40g (1x5x50pack),CMP Fruits Garden,May Kha Lar,
+PG,5001111007,May Kha Lar Preserved Mango Slices Spicy 40g (1x5x50pack),CMP Fruits Garden,May Kha Lar,
+PG,5001111008,May Kha Lar Preserved Plum Seedless Sweet 65g (1x5x50pack),CMP Fruits Garden,May Kha Lar,
+PG,5001111009,May Kha Lar Preserved Plum Seedless Spicy 65g (1x5x50pack),CMP Fruits Garden,May Kha Lar,
+PG,4201111004,Phwer Htwe Pickled Tea Spicy 35g 5s on pack (5x60packs),Constellation,Phwer Htwe,
+PG,4201111003,Phwer Htwe Pickled Tea Spicy 30g (1x10packsx30),Constellation,Phwer Htwe,
+PG,5401111001,Coffee Cherry 3 in 1 instant brew coffee 20g 10pcs (1x25bags),Great Ever Top One,Coffee Cherry,
+PG,5401111002,Coffee Cherry 3 in 1 instant brew coffee 20g 20pcs (1x35bags),Great Ever Top One,Coffee Cherry,
+PG,5101111001,Zann Sunflower Seeds Salty 60g (1x150pcs),Royal Fantastic,Zann,
+PG,5101111002,Zann Sunflower Seeds Salty 110g (1x90pcs),Royal Fantastic,Zann,
+PG,5301111001,Aurora Preserved Damson Red (1x5x120),Aurora,Aurora Preserved Fruits,
+PG,5301111002,Aurora Preserved Peach Sweet (1x5x120),Aurora,Aurora Preserved Fruits,
+PG,5301111003,Aurora Preserved Lemon Sweet (1x5x120),Aurora,Aurora Preserved Fruits,
+PG,5301111004,Aurora Preserved Damson Salad (1x5x140),Aurora,Aurora Preserved Fruits,
+PG,5301111005,Aurora Preserved Damson Hot&Spicy Wet (1x5x140),Aurora,Aurora Preserved Fruits,
+PG,5301111006,Aurora Preserved Mixed Fruits Wet (1x5x140),Aurora,Aurora Preserved Fruits,
+PG,3502111002,P1 Choco Milk Popcorn 30g (1x60),Trine,P1,
+PG,5001111001,May Kha Lar Preserved 5 in 1 Sweet 45g (1x5x50pack),CMP Fruits Garden,May Kha Lar,
+PG,5001111002,May Kha Lar Preserved Marian Spicy 40g (1x5x70pack),CMP Fruits Garden,May Kha Lar,
+PG,5001111003,May Kha Lar Preserved Mango Slices Spicy 40g (1x5x70pack),CMP Fruits Garden,May Kha Lar,
+PG,5001111004,May Kha Lar Preserved Plum Seedless Sweet 65g (1x5x40pack),CMP Fruits Garden,May Kha Lar,
+PG,5001111005,May Kha Lar Preserved Plum Seedless Spicy 65g (1x5x40pack),CMP Fruits Garden,May Kha Lar,
+PG,0203112010,Glucerna Powder (Vanilla) 380g (1x24Pcs),Abbott,Glucerna,
+PG,0203112011,Glucerna Powder (Vanilla) 800g (1x12Pcs),Abbott,Glucerna,
+PG,0201112025,Ensure Gold Vanilla 380gm (1x24Pcs),Abbott,Ensure,
+PG,0201112026,Ensure Gold Vanilla 800gm (1x12Pcs),Abbott,Ensure,
+PG,4901111001,Danuphyu Daw Saw Yee Balachaung Streamer - 25g 10's ( 1x 20 streamers),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
+PG,4901111002,Danuphyu Daw Saw Yee Pounded Fish Paste Streamer- 25g 10's ( 1x 20 streamers),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
+PG,4901112003,Danuphyu Daw Saw Yee Balachaung 500g Pack ( 1 x 10 packs),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
+PG,4901112004,Danuphyu Daw Saw Yee Pounded Fish Paste 500g Pack (1 x10 packs),Danuphyu Daw Saw Yee,Danuphyu Daw Saw Yee,
+PG,3102211014,O'Ma Ma Coconut Bun 55g (1x1pcs),O'Ma Ma,O'MaMa,
+PG,3102211015,O'Ma Ma Chili Chicken Floss 55g (1x1pcs),O'Ma Ma,O'MaMa,
+PG,4801111001,Pai Cheese Ring 10g (10pcsx20packs),Htoo Kaung Myat,Pai Snack,3000
+PG,4801111002,Pai Cheese Ball 10g (10pcsx20packs),Htoo Kaung Myat,Pai Snack,3000
+PG,4500000001,Excel Care Dish Washing Liquid Lime 480ml FOC,Glamdust,Excel Care,
+PG,4500000002,Excel Care Dish Washing Liquid Lemon 480ml FOC,Glamdust,Excel Care,
+PG,4500000003,Excel Care Dish Washing Liquid Lemon 1Liter FOC,Glamdust,Excel Care,
+PG,3202121001,May Yee Mon pickled tea and fried bean Spicy&Sour 50g (1x5x20),Ya Thar Taw Win,May Yee Mon,
+PG,3202121002,May Yee Mon pickled tea and fried bean Original 50g (1x5x20),Ya Thar Taw Win,May Yee Mon,
+PG,3102211011,O'MAMA Strawberry Cream Bun 55G (1x1pcs),O'Ma Ma,O'MaMa,
+PG,3102211012,O'MAMA Chocolate Bun 55G (1x1pcs),O'Ma Ma,O'MaMa,
+PG,3102211013,O'MaMa Danish Blueberry 55g (1x1pcs),O'Ma Ma,O'MaMa,
+PG,4700000001,Sam Par Oo Purify Drinking Water 1LT (FOC),Vitaspring,Sam Par Oo,
+PG,4700000002,Sam Par Oo Purify Drinking Water 550ML (FOC),Vitaspring,Sam Par Oo,
+PG,4700000003,Sam Par Oo Purify Drinking Water 300ML (FOC),Vitaspring,Sam Par Oo,
+PG,4700000004,Mingalarpar Purify Drinking Water 1LT (FOC),Vitaspring,Mingalarpar,
+PG,4701111001,Sam Par Oo Purify Drinking Water 6p 1LT,Vitaspring,Sam Par Oo,
+PG,4701111002,Sam Par Oo Purify Drinking Water 12p 550ML,Vitaspring,Sam Par Oo,
+PG,4701111003,Sam Par Oo Purify Drinking Water 12p 300ML,Vitaspring,Sam Par Oo,
+PG,4702111001,Mingalarpar Purify Drinking Water 6p 1LT,Vitaspring,Mingalarpar,
+PG,4300000001,Nagar Pyan 3in1 Tea mix 30's 200g(1x32) - FOC,Nagar Pyan,Nagar Pyan,
+PG,4601311002,Vita Health Flaxseed Oil (3x10capx158),Vita Health,Vita Health,
+PG,4601311003,Vita Health Fish Oil (3x10capx158),Vita Health,Vita Health,
+PG,4601311004,Vita Health Almond Oil (3x10capx158),Vita Health,Vita Health,
+PG,4601311005,Vita Health Co-Enzyme Q10 (10x10capx100),Vita Health,Vita Health,
+PG,4501111002,Excel Care Dish Washing Liquid Lemon 500ml (1x24),Glamdust,Excel Care,
+PG,4501111003,Excel Care Dish Washing Liquid Lemon 5liter  (1x4),Glamdust,Excel Care,
+PG,4501111004,Excel Care Dish Washing Liquid Lemon 2Liter (1x8),Glamdust,Excel Care,
+PG,4501111005,Excel Care Dish Washing Liquid Lemon 1Liter (1x12),Glamdust,Excel Care,
+PG,4601111001,Vita Health OraZinc 100 Tab (1x220),Vita Health,Vita Health,
+PG,4601112001,Vita Health MV Ener-G (3x10capx72),Vita Health,Vita Health,
+PG,4601212001,Vita Health MV Ener-G Kids Syrup 200ml (1x25),Vita Health,Vita Health,
+PG,4601311001,Vita Health Garlic Oil (3x10capx158),Vita Health,Vita Health,
+PG,4501111001,Excel Care Dish Washing Liquid Lime 480ml (1x24),Glamdust,Excel Care,
+PG,4401111001,Pyar Dee Butter Cake Rusk 35g (1x60),Pyar Dee,Pyar Dee,
+PG,4301111001,Nagar Pyan 3in1 Tea mix 30's 200g(1x32),Nagar Pyan,Nagar Pyan,
+PG,4301111002,Nagar Pyan 3in1 Tea mix 10's 200g(1x30),Nagar Pyan,Nagar Pyan,
+PG,4001111004,Moshi Potato Chips Original 38g (1x10x12pcs),Honesty,Moshi,3000
+PG,4001111005,Moshi Potato Chips Spicy 38g (1x10x12pcs),Honesty,Moshi,3000
+PG,3701111003,Kyu Kyu Hmwe Fish Sauce Salty 900ml (1x12),Kyu Kyu Hmwe,Kyu Kyu Hmwe,
+PG,4000000001,Moshi Potato Chips BBQ Spicy 65g 3's (1x20pack),Honesty,Moshi,3000
+PG,4000000002,Moshi Potato Chips BBQ Prawn 65g 3's (1x20pack),Honesty,Moshi,3000
+PG,3102211005,O'MaMa Cheese Pudding Bun with Filling 55g (1x1pcs),O'Ma Ma,O'MaMa,
+PG,3102211006,O'MaMa Danish Strawberry 55g (1x1pcs),O'Ma Ma,O'MaMa,
+PG,3102211009,O'MaMa Milk Toast Slice Bread 315g (1x1pcs),O'Ma Ma,O'MaMa,
+PG,3102211010,O'MaMa Sandwich Bread 200g (1x1pcs),O'Ma Ma,O'MaMa,
+PG,0203112008,Glucerna Powder (Vanilla) 400g (1x24Pcs),Abbott,Glucerna,
+PG,0203112009,Glucerna Powder (Vanilla) 850g (1x12Pcs),Abbott,Glucerna,
+PG,3102111004,O'MaMa Mixed Fruit Cake Rusk 65g (1x72),O'Ma Ma,O'MaMa,
+PG,0200000180,Ensure Gold (Vanilla) Gift Pack (400g x 2 pcs),Abbott,Ensure,
+PG,0200000178,Pediasure 3+ Vanilla 850g with Mini Peptides Can Top Sticker (1x12pcs),Abbott,Pediasure,
+PG,0300000071,BBN 1.5oz Bundle Pack (1x12x4),Suntory Beverage,BBN,
+PG,0201112024,Ensure Non-HMB Vanilla 400gm (1x24Pcs),Abbott,Ensure,
+PG,3102211001,O'MaMa Cheese Custard Solo pack 55g (1x1pcs),O'Ma Ma,O'MaMa,
+PG,3102211002,O'MaMa Cheese Mayo Solo pack 55g (1x1pcs),O'Ma Ma,O'MaMa,
+PG,3401121002,Maymyo Fresh Nature Blend Coffee 100g (1x100Pack),MayMyo Fresh Coffee,Maymyo Fresh,
+PG,3401121003,Maymyo Fresh Nature Blend Coffee 200g (1x60Pack),MayMyo Fresh Coffee,Maymyo Fresh,
+PG,3401211001,Maymyo Burmese Milk Tea 10's (1x30Pack),MayMyo Fresh Coffee,Maymyo Fresh,
+PG,0208111017,Similac Follow On PRODI-G and 5HMOs 850g (1x12pcs),Abbott,Similac,
+PG,0208121015,Similac Infant PRODI-G and 5 HMOs 400g(1x24 pcs),Abbott,Similac,
+PG,0208121016,Similac Infant PRODI-G and 5 HMOs 850g(1x12pcs),Abbott,Similac,
+PG,0206123004,Pediasure 3+ Vanilla 850g  with Mini Peptides (1x12pcs),Abbott,Pediasure,
+PG,0206123006,Pediasure 3+ Vanilla 48.6g sachet   with Mini Peptides (1x100pcs),Abbott,Pediasure,
+PG,0206123007,Pediasure 3+ Strawberry  48.6g sachet   with Mini Peptides (1x100pcs),Abbott,Pediasure,
+PG,0206123001,Pediasure 1+ Vanilla 400g  with Mini Peptides (1x24pcs),Abbott,Pediasure,
+PG,0206123003,Pediasure 3+ Vanilla 400g  with Mini Peptides (1x24pcs),Abbott,Pediasure,
+PG,4101111001,Sardines in Tomato Sauce 155g (1x100),Yummee,Yummee,
+PG,3202111001,May Yee Mon Rakhine Fish Paste 50g (1x5x20packs),Ya Thar Taw Win,May Yee Mon,
+PG,3202111002,May Yee Mon Marine Fish Paste 50g (1x5x20packs),Ya Thar Taw Win,May Yee Mon,
+PG,3202111003,May Yee Mon Fish Sauce 50g (1x5x20packs),Ya Thar Taw Win,May Yee Mon,
+PG,4001111003,Moshi Potato Chips BBQ Prawn 65g (1x60pcs),Honesty,Moshi,3000
+PG,4001111001,Moshi Potato Chips BBQ Spicy 65g (1x60pcs),Honesty,Moshi,3000
+PG,4001111002,Moshi Potato Chips BBQ Original 65g (1x60pcs),Honesty,Moshi,3000
+PG,3801111001,Wasuka Crepes Choco Banana Flavored 50g(1x60),Win Food,Wasuka,
+PG,3801111003,Wasuka Crepes Orange Flavored 50g(1x60),Win Food,Wasuka,
+PG,3701111001,Kyu Kyu Hmwe Fish Sauce 850ml (1x12),Kyu Kyu Hmwe,Kyu Kyu Hmwe,
+PG,1222401006,Sim Card WCDMA (Blank SIM-Promotion Card),MPT,Sim,
+PG,0211111001,Nepro Low Protein 400g (1 x 24pcs),Abbott,Nepro,
+PG,0211111002,Nepro High Protein 400g (1 x 24pcs),Abbott,Nepro,
+PG,3501111001,Mobicorn Premium Popcorn Crunchy Caramel 75g (1x100),Trine,Mobicorn,
+PG,3501111002,Mobicorn Premium Popcorn Choco Crunch 75g (1x100),Trine,Mobicorn,
+PG,3501111003,Mobicorn Premium Popcorn cheesy Kraze 75g (1x100),Trine,Mobicorn,
+PG,3501111004,Mobicorn Premium Popcorn Nutty Delight 75g (1x100),Trine,Mobicorn,
+PG,3502111001,P1 Cheesy Pearl Popcorn 30g (1x60),Trine,P1,
+PG,3102111001,O'MaMa Butter Cake Rusk 150g (1x40),O'Ma Ma,O'MaMa,
+PG,3102111002,O'MaMa Cheese Cake Rusk 150g (1x40),O'Ma Ma,O'MaMa,
+PG,3102111003,O'MaMa Chocolate Cake Rusk 150g (1x40),O'Ma Ma,O'MaMa,
+PG,2802311001,Nature's Way Adult Complete Multivitamin  200 Tablets (1x12pcs),Pharma Care,Nature's Way,
+PG,2802321001,Nature's Way Adult Fish Oil 1000mg 200 Soft Capsules (1x12pcs),Pharma Care,Nature's Way,
+PG,3401111001,Maymyo Fresh Classic 20's 500g (1x50Pack),MayMyo Fresh Coffee,Maymyo Fresh,
+PG,3401111002,Maymyo Fresh Classic 5's 120g (1x200Pack),MayMyo Fresh Coffee,Maymyo Fresh,
+PG,3401111003,Maymyo Fresh Classic Plus 10's 260g (1x60Pack),MayMyo Fresh Coffee,Maymyo Fresh,
+PG,3401111004,Maymyo Fresh Brown 20's 500g (1x50Pack),MayMyo Fresh Coffee,Maymyo Fresh,
+PG,3401111005,Maymyo Fresh Brown 5's 120g (1x200Pack),MayMyo Fresh Coffee,Maymyo Fresh,
+PG,3305111001,Quaker Instant Oatmeal  400g (1x24),Pepsico,QUAKER OAT,
+PG,3305111002,Quaker Instant Oatmeal  800g (1x12),Pepsico,QUAKER OAT,
+PG,3305111004,Quaker Quick Cook Oatmeal  800g (1x12),Pepsico,QUAKER OAT,
+PG,3305112001,Quaker Instant Oatmeal 1kg (1x12),Pepsico,QUAKER OAT,
+PG,3001111002,Clorox Liquid Bleach Original 1L (1x12Pcs),Clorox,Clorox,
+PG,0200000139,Similac Total Comfort Stage 3 (ML) 820gm with Can top Sticker (1x12pcs),Abbott,Similac,
+PG,0301181001,Brand's Berry Essence Concentrate (1X72),Suntory Beverage,BBE,
+PG,0301181002,Brand's Prune Essence Concentrate (1X72),Suntory Beverage,BPE,
+PG,2301111007,Gullon Sugar Free Cookie Choco Chip 125g (1x12),Gullon,Gullon,
+PG,2301112001,Gullon Sugar Free Wafer Vanilla 3'S 180g (1x12),Gullon,Gullon,
+PG,0301122011,BEC Junior Chocolate 1.5oz (1x72Pcs),Suntory Beverage,BEC,
+PG,0100000213,Oral B Shiny Clean 35 Soft BCd On Pack (1x6Pcs),P&G,Oral-B,
+PG,0701104019,NONG SHIM Shin Kimchi Ramyun Noodle 120g (1x40),Nong Shim,NONG SHIM,
+PG,2301111001,Gullon Sugar Free Fibre Biscuits 170g (1x16),Gullon,Gullon,
+PG,2301111002,Gullon Sugar Free Digestive Biscuits (Cookies) 400g (1x15),Gullon,Gullon,
+PG,2301111003,Gullon Digestive Classics Biscuits 400g (1x20),Gullon,Gullon,
+PG,2301111004,Gullon Cuor Di Cereale Chocolate Biscuits 280g (1x16),Gullon,Gullon,
+PG,0300000057,Brand’s Prune 1.5oz Price Off Promotion (1x6pcs),Suntory Beverage,BPE,
+PG,0300000058,Brand’s Berry 1.5oz Price Off Promotion (1x6pcs),Suntory Beverage,BBE,
+PG,0301112009,BNSF Collagen 1.5oz (1x48),Suntory Beverage,BBN,
+PG,2201111001,Dr Care Disinfectant Liquid 750ml (1x12),Dr.Care,Dr Care,
+PG,0106122013,Head & Shoulders-12ml (Menthol)(1x42Dz),P&G,Head&Shoulder,
+PG,0701104018,NONG SHIM Shin Red Super Spicy Noodle 120g (1x20),Nong Shim,NONG SHIM,
+PG,0106122011,Head & Shoulders-12ml (Silky Smooth) (1x36Dz),P&G,Head&Shoulder,
+PG,0201112017,Ensure Gold Strawberry 400gm (1x24Pcs),Abbott,Ensure,
+PG,0201112018,Ensure Gold Strawberry 850gm (1x12Pcs),Abbott,Ensure,
+PG,1900000001,Equal Classic 50`S 50g with 10`S FOC (Promo Pack) (1x12),Merisant,Equal,
+PG,1900000002,Equal Classic 100`S 100g with 20`S FOC (Promo Pack) (1x36),Merisant,Equal,
+PG,1222401005,Sim Card WCDMA (Beautiful Number SIM Card),MPT,Sim,
+PG,0200000113,Ensure Gold Wheat 400gm with Can Top Sticker (1x24Pcs),Abbott,Ensure,
+PG,0200000114,Ensure Gold Wheat 850gm with Can Top Sticker (1x12Pcs),Abbott,Ensure,
+PG,0101121009,Ambi Pur Aerosol Blue Ocean 300ml (1x6Pcs),P&G,Ambi Pur,
+PG,0101121012,Ambi Pur Aerosol Lavender Breeze 300ml (1x6Pcs),P&G,Ambi Pur,
+PG,0101122004,Ambi Pur GEL Fresh Relaxing Lavender 180g (1x12Pcs),P&G,Ambi Pur,
+PG,0101122005,Ambi Pur GEL Fresh Refreshing Lemon 180g (1x12Pcs),P&G,Ambi Pur,
+PG,0110122005,Pantene 10ml-(Hair Fall Control)(1x40Dz),P&G,Pantene,
+PG,0113111003,Whisper Heavy Flow -16's(1x12Pcs),P&G,Whispers,
+PG,0113112007,Whisper Regular Flow Wing -20's(1x12Pcs),P&G,Whispers,
+PG,0200000037,Similac Gain IQ PRODI-G and 5HMOs 400gm with Can Top Sticker (1x24Pcs),Abbott,Similac,
+PG,0200000040,Glucerna Powder with 4xInositol (Vanilla) 850g with Can Top Sticker (1x12Pcs),Abbott,Glucerna,
+PG,0200000087,Similac Gain IQ PRODI-G and 5HMOs 850gm with Can Top Sticker (1x12Pcs),Abbott,Similac,
+PG,0200000090,Similac Mum Eye-Q(IQ) Vanilla 400g with Can Top Sticker (1x24Pcs),Abbott,Similac,
+PG,0201112013,Ensure Gold Vanilla 400gm (1x24Pcs),Abbott,Ensure,
+PG,0201112015,Ensure Gold (Wheat) 400gm (1x24Pcs),Abbott,Ensure,
+PG,0201112016,Ensure Gold (Wheat) 850gm (1x12Pcs),Abbott,Ensure,
+PG,0201113005,Ensure Gold Vanilla Sachet 60.6gm (1x100Pcs),Abbott,Ensure,
+PG,0203112005,Glucerna Powder Triple Care (Vanilla) 400gm (Thai Label) (1x24Pcs),Abbott,Glucerna,
+PG,0208131004,Similac Mum Eye-Q(IQ) Strawberry Yoghurt 400g (1x24Pcs),Abbott,Similac,
+PG,0208141003,Similac Neosure HMO 850gm (1x12Pcs),Abbott,Similac,
+PG,0208211001,Similac Baby Changing Mat - Black Fabric(1x50Pcs),Abbott,FOC,
+PG,0208211002,Similac Baby Changing Mat - Green Fabric(1x50Pcs),Abbott,FOC,
+PG,0207112001,Prosure Orange  380gm (1x24),Abbott,Prosure,
+PG,0105111001,Gillette MACH 3 Cart 4's Blade(1x72pcs),P&G,Gillette,
+PG,0105111011,Gillette MACH 3 Cart 2's Blade(1x72pcs),P&G,Gillette,
+PG,0105111012,Gillette Fusion Cart 2s(1x40Pcs),P&G,Gillette,
+PG,0105112001,Gillette Blue II Plus dis  2 sent(1 x240Pcs),P&G,Gillette,
+PG,0105112002,Gillette Blue II Plus dis  5 sent(1 x144Pcs),P&G,Gillette,
+PG,0105112004,Gillette Super Thin 2 dis 24 Fxd Blade(1x288pcs),P&G,Gillette,
+PG,0105113001,Gillette Super Click Razor(1x144pcs),P&G,Gillette,
+PG,0105113002,Gillette Super Thin Blade 5+1(1x1000Pcs),P&G,Gillette,
+PG,0105114002,Gillette MACH 3  Turbo 1 Up(1x30pcs),P&G,Gillette,
+PG,0105114004,Gillette Vector Plus 1 Up (1x144Pcs),P&G,Gillette,
+PG,0105114007,Gillette Fusion Manual Razor(1x16Pcs),P&G,Gillette,
+PG,0107112019,Olay Total Effects UV Normal Cream SPF-15  50g (1X6),P&G,Olay,
+PG,0107112031,Olay Natural White Light Night Shine 50g (1X24),P&G,Olay,
+PG,0107112034,Olay Natural White Light 50g (1X24),P&G,Olay,
+PG,0106121056,Head & Shoulder-300ml (Silky Smooth)(1x12Pcs),P&G,Head&Shoulder,
+PG,0106121058,Head & Shoulder-300ml (Menthol)(1x12Pcs),P&G,Head&Shoulder,
+PG,0107114003,Olay Regenerist Serum  50ml (1X6),P&G,Olay,
+PG,0107114006,Olay Regenerist Micro-Sculpting Serum 50ml(1x6Pcs),P&G,Olay,
+PG,0107114009,Olay Total Effects Serum 50ml (1x6),P&G,Olay,
+PG,0108120043,Oral B Multi Brush set(1x24Pcs),P&G,Oral-B,
+PG,0108211001,Oral B All Rounder MICROTHIN CLN 40XS AS(1x96Pcs),P&G,Oral-B,
+PG,0108211003,Oral B Classic 40 Soft TB(1x96Pcs),P&G,Oral-B,
+PG,0108211007,Oral B Complete Easy Clean 40 Medium BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211012,Oral B Cross ProHlth Clinic Soft BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211013,Oral B Cross ProHlth Clinic Soft 3 BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211014,Oral B Cross Action ProHlth 7 Soft BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211015,Oral B Cross Action ProHlth 7 Soft 3 BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211016,Oral B Interdental Kit BCd(1x24Pcs),P&G,Oral-B,
+PG,0108211017,Oral B Stage 8 Yrs+ Soft BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211019,Oral B Stage 2-4 Yrs Mickey/Minnie Soft BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211020,Oral B Stage 4-24 Mth Disney Baby Soft BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211021,Oral B Shiny Clean 35 Soft BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211022,Oral B Ultra Thin Black Tea Soft BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211023,Oral B Ultra Thin Black Tea Soft 3 BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211024,Oral B Ultra Thin Pro Deep Clean Soft BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211025,Oral B Ultra Thin Pro Deep Clean Soft 3 BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211026,Oral B Ultra Thin Green Tea Soft BCd(1x96Pcs),P&G,Oral-B,
+PG,0108211027,Oral B Ultra Thin Green Tea Soft 3 BCd(1x96Pcs),P&G,Oral-B,
+PG,0108311001,Oral B Power Refill Precision Clean 2s(1x24Pcs),P&G,Oral-B,
+PG,0108311002,Oral B Power Pro 500 Power Handle(1x6Pcs),P&G,Oral-B,
+PG,0108311004,Oral B Power Refill Cross Action 2s(1x24Pcs),P&G,Oral-B,
+PG,0301122003,BEC1.5oz(1x72),Suntory Beverage,BEC,
+PG,0301122005,BEC2.5oz(1x72),Suntory Beverage,BEC,
+PG,0301112003,BBN1.5oz(1x48),Suntory Beverage,BBN,
+PG,0301112004,BNSF 1.5 oz (1x48Pcs),Suntory Beverage,BBN,
+PG,0301112005,BBN2.5oz(1x48),Suntory Beverage,BBN,
+PG,0301112006,BNSF 2.5 oz (1x48Pcs),Suntory Beverage,BBN,
+PG,0502111003,Nescafe Gold Blend 200g (8x200g),Nestrade,Nescafe Gold,
+PG,0701104007,NONG SHIM Shin Ramyun Hot  Spicy Noodle 120g (1x40),Nong Shim,NONG SHIM,
+PG,0701104010,NONG SHIM Neoguri Seafood Spicy Noodle 120g (1x20),Nong Shim,NONG SHIM,
+PG,0701104013,NONG SHIM Chapaghetti Noodle 140g (1x40),Nong Shim,NONG SHIM,
+PG,0701104014,NONG SHIM Chapaghetti Spicy Noodle 137g (1x40),Nong Shim,NONG SHIM,
+PG,1221102001,Active GSM E-Top Up,MPT,Top-up,
+PG,1222401001,Active WCDMA SimCard,MPT,Sim,
+PG,1222401002,Sim Card WCDMA (Blank SIM),MPT,Sim,
+PG,1222401004,Sim Card WCDMA (Blank SIM-Lost and Damage Card),MPT,Sim,
+PG,1211101001,Empty GSM TP 5000,MPT,Top-up,
+PG,1211101002,Empty GSM TP 10000,MPT,Top-up,
+PG,1211101003,Empty GSM TP 1000,MPT,Top-up,
+PG,1211101004,Empty GSM TP 3000,MPT,Top-up,
+PG,1211201001,Empty CDMA-800 TP 5000,MPT,Top-up,
+PG,1211201002,Empty CDMA-800 TP 10000,MPT,Top-up,
+PG,1211301001,Empty CDMA-450 TP 5000,MPT,Top-up,
+PG,1211301002,Empty CDMA-450 TP 10000,MPT,Top-up,
+PG,1221101001,Active GSM TP 5000,MPT,Top-up,
+PG,1221101002,Active GSM TP 10000,MPT,Top-up,
+PG,1221101004,Active GSM TP 3000,MPT,Top-up,
+PG,1221101006,Active GSM TP 1000 (QR),MPT,Top-up,
+PG,1103213009,Oreo Sandwich Cookies Chocolate Cream-119.6gm (1x24Pcs),MDLZ,Oreo,
+PG,1103213014,Oreo Sandwich Cookies Vanilla Cream-27.6gm (1x9x12Packs),MDLZ,Oreo,
+PG,1103213017,Oreo Sandwich Cookies Chocolate Cream-26.25gm (12x12Packs),MDLZ,Oreo,
+PG,1103213018,Oreo Sandwich Cookies Vanilla Cream-26.25gm (12x12Packs),MDLZ,Oreo,
+PG,0801111011,Philips Tornado Cool daylight 24W E27 220-240V(1x12Pcs),Philips,Philips,
+PG,0801111012,Philips Tornado Warm White 24W E27 220-240V Energy Saver(1x12Pcs),Philips,Philips,
+PG,0801111026,Philips Tornado Cool daylight 24W B22 220-240V(1x12Pcs),Philips,Philips,
+PG,0801112002,Philips Brightboost Super 80 Tubelight TL-D 36W/865(1x25Pcs),Philips,Philips,
+PG,0801112004,Philips Lifemax Tubelight TL-D 36W/54-765(1x25Pcs),Philips,Philips,
+PG,0801112007,Philips Brightboost Super 80 Tubelight TL-D 36W/840(1x25Pcs),Philips,Philips,
+PG,0801114001,Philips Essential Cool Daylight TCH086 TL5-28W/865(1x24pcs),Philips,Philips,
+PG,1901111001,Equal Classic 15`S 15g (1x36),Merisant,Equal,
+PG,1901111002,Equal Classic 25`S 25g (1x36),Merisant,Equal,
+PG,1901111003,Equal Classic 50`S 50g (1x12),Merisant,Equal,
+PG,1901111004,Equal Classic 100`S 100g (1x36),Merisant,Equal,
+PG,1901311001,Equal Gold 50`S 40G(1x12),Merisant,Equal,
+PG,1901311002,Equal Gold 150g (Sugarly) (1x12),Merisant,Equal,
+PG,1901411002,Equal Stevia 40`S 80g (1x6),Merisant,Equal,
+PG,1901411003,Equal Stevia 100`S 200g (1x12),Merisant,Equal,
+PG,2001111001,1 Stop E Money,1 Stop,Top-up,
+PG,2101111002,Healthy Chef Soybean 1L (1x12),TVO,Healthy Chef,
+PG,2101111005,Healthy Chef Sunflower 1L (1x12),TVO,Healthy Chef,
+PDG,120801330018,JIM BEAM KENTUCKY STRAIGHT BOURBON WHITE WHISKEY 5CL,BEAM SUNTORY,JIM BEAM,10000
+PDG,120802330004,FIESTA GRAPPINO MUSCAT 35CL,MYANMAR VINEYARD ESTATE,FIESTA,10000
+PDG,120802330004,FIESTA GRAPPINO MUSCAT 35CL,MYANMAR VINEYARD ESTATE,FIESTA,10000
+PDG,120802330004,FIESTA GRAPPINO MUSCAT 35CL,MYANMAR VINEYARD ESTATE,FIESTA,10000
+PDG,120802330005,FIESTA LYCHEE FRUITY BRANDY 0.375CL,MYANMAR VINEYARD ESTATE,FIESTA,10000
+PDG,120802330005,FIESTA LYCHEE FRUITY BRANDY 0.375CL,MYANMAR VINEYARD ESTATE,FIESTA,10000
+PDG,120802330005,FIESTA LYCHEE FRUITY BRANDY 0.375CL,MYANMAR VINEYARD ESTATE,FIESTA,10000
+PDG,120802330005,FIESTA LYCHEE FRUITY BRANDY 0.375CL,MYANMAR VINEYARD ESTATE,FIESTA,10000
+PDG,120802330005,FIESTA LYCHEE FRUITY BRANDY 0.375CL,MYANMAR VINEYARD ESTATE,FIESTA,10000
+PDG,120802330006,WILLDER GRAPPINO 500ML,"MYANAMAR VINEYARD ESTATE CO.,L",WILLDER,10000
+PDG,120802330006,WILLDER GRAPPINO 500ML,"MYANAMAR VINEYARD ESTATE CO.,L",WILLDER,10000
+PDG,120802330006,WILLDER GRAPPINO 500ML,"MYANAMAR VINEYARD ESTATE CO.,L",WILLDER,10000
+PDG,120804330004,CAMUS COGNAC EXTRA ELEGANCE 70CL,CAMUS,CAMUS,10000
+PDG,120805330002,LARIOS GIN ORIGINAL 70CL,BEAM SUNTORY,LARIOS,10000
+PDG,120806330001,COURVOISIER VS COGNAC 70CL,BEAM SUNTORY,COURVOISIER VS,10000
+PDG,120808330001,WILLDER LYCHEE BRANDY 500ML,"MYANAMAR VINEYARD ESTATE CO.,L",WILLDER,10000
+PDG,120808330002,WILLDER GRAPE LIQUEUR 500ML,"MYANAMAR VINEYARD ESTATE CO.,L",WILLDER,10000
+PDG,120808330003,WILLDER BRANDY 500ML,"MYANAMAR VINEYARD ESTATE CO.,L",WILLDER,10000
+PDG,120809440013,!MANDALAY EXPORT RUM 700ML,"VICTORY MYANMAR GROUP CO., LTD",MANDALAY RUM,10000
+PDG,120809440017,MANDALAY RUM 350ML,"VICTORY MYANMAR GROUP CO., LTD",MANDALAY RUM,10000
+PDG,120809440019,MANDALAY SPECIAL RUM 700ML,"VICTORY MYANMAR GROUP CO., LTD",MANDALAY RUM,10000
+PDG,120809440020,MANDALAY OLD BRANDY 700ML,"VICTORY MYANMAR GROUP CO., LTD",MANDALAY RUM,10000
+PDG,120809440021,MANDALAY DRY GIN 700ML,"VICTORY MYANMAR GROUP CO., LTD",MANDALAY RUM,10000
+PDG,120809440022,GLAN MASTER DOUBLE SMOOTH 175ML,"CENTRAL MANUFACTURING CO., LTD",GLAN MASTER,10000
+PDG,120809440025,GRAND ROYAL SIGNATURE WHISKY 70CL (ICE BLAST),"MYANMAR DISTILLERY CO., LTD",GRAND ROYAL,10000
+PDG,120809440026,GRAND ROYAL SIGNATURE WHISKY 35CL (ICE BLAST),"MYANMAR DISTILLERY CO., LTD",GRAND ROYAL,10000
+PDG,120809440030,IMPERIAL BLUE WHISKY 17.5CL,SEAGRAM MYANMAR,IMPERIAL BLUE,10000
+PDG,120809440032,HIGH CLASS SPECIAL BLENDED WHISKY 17.5CL,SEAGRAM MYANMAR,HIGH CLASS,10000
+PDG,120809440033,HIGH CLASS SPECIAL BLENDED WHISKY 70CL,SEAGRAM MYANMAR,HIGH CLASS,10000
+PDG,120809440034,IMPERIAL BLUE WHISKY 35CL,SEAGRAM MYANMAR,IMPERIAL BLUE,10000
+PDG,120809440036,GLAN MASTER BEER SMOOTH WHISKY 17.5CL,"CENTRAL MANUFACTURING CO., LTD",GLAN MASTER,10000
+PDG,120809440037,GLAN MASTER BEER SMOOTH WHISKY 35CL,"CENTRAL MANUFACTURING CO., LTD",GLAN MASTER,10000
+PDG,120809440038,GLAN MASTER BEER SMOOTH WHISKY 70CL,"CENTRAL MANUFACTURING CO., LTD",GLAN MASTER,10000
+PDG,120809440039,GLAN MASTER MASTER'S RESERVE 17.5CL,"CENTRAL MANUFACTURING CO., LTD",GLAN MASTER,10000
+PDG,120809440040,GLAN MASTER MASTER'S RESERVE 35CL,"CENTRAL MANUFACTURING CO., LTD",GLAN MASTER,10000
+PDG,120809440041,GLAN MASTER MASTER'S RESERVE 70CL,"CENTRAL MANUFACTURING CO., LTD",GLAN MASTER,10000
+PDG,120810440001,WAR HORSE RUM TONIC 500ML,ICICLE FOODS INDUSTRIAL CO.LTD,WAR HORSE,10000
+PDG,120810440002,WAR HORSE RICE ALCOHOL MIX GRAPE&HONEY 500ML,ICICLE FOODS INDUSTRIAL CO.LTD,WAR HORSE,10000
+PDG,120810440003,WAR HORSE RICE ALCHOL MIX PEACH&HONEY 500ML,ICICLE FOODS INDUSTRIAL CO.LTD,WAR HORSE,10000
+PDG,120810440004,WAR HORSE RICE ALCHOL MIX ORIGINAL 500ML,ICICLE FOODS INDUSTRIAL CO.LTD,WAR HORSE,10000
+PDG,120810440004,WAR HORSE RICE ALCHOL MIX ORIGINAL 500ML,ICICLE FOODS INDUSTRIAL CO.LTD,WAR HORSE,10000
+PDG,127900330001,LWINT WINE COCKTAIL RED WINE 0.275LTR (RING PULL CAP),MYANMAR VINEYARD ESTATE,LWINT,10000
+PDG,127900330001,LWINT WINE COCKTAIL RED WINE 0.275LTR (RING PULL CAP),MYANMAR VINEYARD ESTATE,LWINT,10000
+PDG,127900330001,LWINT WINE COCKTAIL RED WINE 0.275LTR (RING PULL CAP),MYANMAR VINEYARD ESTATE,LWINT,10000
+PDG,127901330002,!TORRES GRAN VINA SOL CHARDONNAY WHITE WINE 75CL,TORRES,TORRES,10000
+PDG,127901330002,!TORRES GRAN VINA SOL CHARDONNAY WHITE WINE 75CL,TORRES,TORRES,10000
+PDG,127901330002,!TORRES GRAN VINA SOL CHARDONNAY WHITE WINE 75CL,TORRES,TORRES,10000
+PDG,127901330002,!TORRES GRAN VINA SOL CHARDONNAY WHITE WINE 75CL,TORRES,TORRES,10000
+PDG,127901330002,!TORRES GRAN VINA SOL CHARDONNAY WHITE WINE 75CL,TORRES,TORRES,10000
+PDG,127901330003,TORRES VINA SOL WHITE WINE 75CL,TORRES,TORRES,10000
+PDG,127901330004,!CASILLERO DEL DIABLO CHARDONNAY WHITE WINE 75CL,CONCHA Y TORO,CASILLERO,10000
+PDG,127901330007,GALLO FAMILY VINEYARDS CHARDONAY WHITE WINE 75CL,E&J GALLO WINERY,GALLO FAMILY VINEYARDS,10000
+PDG,127901330007,GALLO FAMILY VINEYARDS CHARDONAY WHITE WINE 75CL,E&J GALLO WINERY,GALLO FAMILY VINEYARDS,10000
+PDG,127901330009,BAREFOOT CALIFORNIA BLANC SAUVIGNON WHITE WINE 75CL,E&J GALLO WINERY,BAREFOOT,10000
+PDG,127901330011,CARLO ROSSI CALIFORNIA WHITE WINE 1.5LTR,E&J GALLO WINERY,CARLO ROSSI,10000
+PDG,127901330012,!EGOT TREBBIANO CHARDONNAY RUBICONE IGT WHITE WINE 75CL,ITALIAN TRADING,CEVICO,10000
+PDG,127901330013,CAPSULA VIOLA WHITE WINE 75CL,ITALIAN TRADING,ANTINORI,10000
+PDG,127901330013,CAPSULA VIOLA WHITE WINE 75CL,ITALIAN TRADING,ANTINORI,10000
+PDG,127901330013,CAPSULA VIOLA WHITE WINE 75CL,ITALIAN TRADING,ANTINORI,10000
+PDG,127901330015,TORLASCO MOSCATO D`ASTI SWEET WHITE WINE 75CL,ITALIAN TRADING,TOSTI,10000
+PDG,127901330018,!CANTINE RONCO TERRE SICILIA IGT WHITE WINE 1LTR,ITALIAN TRADING,CEVICO,10000
+PDG,127901330018,!CANTINE RONCO TERRE SICILIA IGT WHITE WINE 1LTR,ITALIAN TRADING,CEVICO,10000
+PDG,127901330018,!CANTINE RONCO TERRE SICILIA IGT WHITE WINE 1LTR,ITALIAN TRADING,CEVICO,10000
+PDG,127901330019,LA FERLA INZOLIA TERRE SICILIANE IGP WHITE WINE 75CL,ITALIAN TRADING,D'ALESSANDRO,10000
+PDG,127901330019,LA FERLA INZOLIA TERRE SICILIANE IGP WHITE WINE 75CL,ITALIAN TRADING,D'ALESSANDRO,10000
+PDG,127901330019,LA FERLA INZOLIA TERRE SICILIANE IGP WHITE WINE 75CL,ITALIAN TRADING,D'ALESSANDRO,10000
+PDG,127901330027,!ELENA WALCH PINOT GRIGIO WHITE WINE 75CL,ITALIAN TRADING,ELENA WALCH,10000
+PDG,127901330027,!ELENA WALCH PINOT GRIGIO WHITE WINE 75CL,ITALIAN TRADING,ELENA WALCH,10000
+PDG,127901330028,!ELENA WALCH MULLER THURGAU WHITE WINE 75CL,ITALIAN TRADING,ELENA WALCH,10000
+PDG,127901330028,!ELENA WALCH MULLER THURGAU WHITE WINE 75CL,ITALIAN TRADING,ELENA WALCH,10000
+PDG,127901330029,GORGHI TONDI GRILLO SICILIA IGP WHITE WINE 75CL,ITALIAN TRADING,GORGHI TONDI,10000
+PDG,127901330033,TORRES SAN VALENTIN PARELLADA WHITE WINE 75CL,TORRES,TORRES,10000
+PDG,127901330034,MUD HOUSE SAUVIGNON BLANC WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,MUD HOUSE,10000
+PDG,127901330038,LE CHARME LOIRE VALLEY POUILLY FUME WHITE WINE 75CL,CASTEL,LE CHARME,10000
+PDG,127901330046,CUVEE BORIE VIN BLANC DE FRANCE WHITE WINE 75CL,BORIE MANOUX,BORIE MANOUX,10000
+PDG,127901330047,BROOKLAND VALLEY VERSE 1 CHARDONNAY WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,BROOKLAND VALLEL,10000
+PDG,127901330050,!AYTHAYA SAUVIGNON BLANC WHITE WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330050,!AYTHAYA SAUVIGNON BLANC WHITE WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330050,!AYTHAYA SAUVIGNON BLANC WHITE WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330052,MONTE VINO COLOMBARD WHITE WINE 37.5 CL,MYANMAR VINEYARD ESTATE,MONTE VINO,10000
+PDG,127901330055,DUROI BORDEAUX WHITE WINE 75CL,BORIE MANOUX,BORIE MANOUX,10000
+PDG,127901330055,DUROI BORDEAUX WHITE WINE 75CL,BORIE MANOUX,BORIE MANOUX,10000
+PDG,127901330056,TA KU SAUVIGION BLANCE MARLBOROUGH WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,TA KU,10000
+PDG,127901330056,TA KU SAUVIGION BLANCE MARLBOROUGH WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,TA KU,10000
+PDG,127901330056,TA KU SAUVIGION BLANCE MARLBOROUGH WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,TA KU,10000
+PDG,127901330056,TA KU SAUVIGION BLANCE MARLBOROUGH WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,TA KU,10000
+PDG,127901330056,TA KU SAUVIGION BLANCE MARLBOROUGH WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,TA KU,10000
+PDG,127901330057,GOUNDREY HOMESTEAD UNWOODED CHARDONNAY WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,GOUNDREY HOMESTEAD,10000
+PDG,127901330059,KNAPPSTEIN CLARE VALLEY RIESLING WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,KNAPPSTEIN,10000
+PDG,127901330059,KNAPPSTEIN CLARE VALLEY RIESLING WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,KNAPPSTEIN,10000
+PDG,127901330061,PETALUMA ADELAIDE HILLS SAUVIGNON BLANC WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,PETALUMA,10000
+PDG,127901330062,PETALUMA HANLIN HILLS RIESLING WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,PETALUMA,10000
+PDG,127901330062,PETALUMA HANLIN HILLS RIESLING WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,PETALUMA,10000
+PDG,127901330063,ASTROLABE PROVINCE MARLBOROUGH SAUVIGNON BLANC WHITE WINE 75CL,ASTROLABE WINES LTD,ASTROLABE,10000
+PDG,127901330068,HARDYS RIDDLE SAUVIGNON BLANCE WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,HARDY'S RIDDLE,10000
+PDG,127901330068,HARDYS RIDDLE SAUVIGNON BLANCE WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,HARDY'S RIDDLE,10000
+PDG,127901330068,HARDYS RIDDLE SAUVIGNON BLANCE WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,HARDY'S RIDDLE,10000
+PDG,127901330068,HARDYS RIDDLE SAUVIGNON BLANCE WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,HARDY'S RIDDLE,10000
+PDG,127901330068,HARDYS RIDDLE SAUVIGNON BLANCE WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,HARDY'S RIDDLE,10000
+PDG,127901330069,BRIDLEWOOD CHARDONNAY WHITE WINE 75CL,E&J GALLO WINERY,BRIDLEWOOD,10000
+PDG,127901330070,!AYTHAYA GRAND RESERVE WHITE WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330070,!AYTHAYA GRAND RESERVE WHITE WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330071,CASTILLO DE JUMILLA DOP WHITE WINE 75CL,BODEGAS BLEDA S.L,CASTILLO DE JUMILLA,10000
+PDG,127901330072,ARDECHE TERRASSES IPG WHITE WINE 75CL,VIGNERONS ARDECHOIS,VIGNERONS ARDECHOIS,10000
+PDG,127901330072,ARDECHE TERRASSES IPG WHITE WINE 75CL,VIGNERONS ARDECHOIS,VIGNERONS ARDECHOIS,10000
+PDG,127901330075,VIEUX PAPES COLOMBARD CHARDONNAY WHITE WINE 75 CL,CASTEL,VIEUX PAPES,10000
+PDG,127901330076,CANTINA DEI COLLI AMERINI BIANCO UMBRIA WHITE WINE 75CL,ITALIAN TRADING,COLLE AMERINI,10000
+PDG,127901330081,HAKUNA MATATA WHITE WINE 75CL,MYANMAR VINEYARD ESTATE,HAKUNA MATATA,10000
+PDG,127901330081,HAKUNA MATATA WHITE WINE 75CL,MYANMAR VINEYARD ESTATE,HAKUNA MATATA,10000
+PDG,127901330082,AYTHAYA SAUVIGNON BLANC WHITE WINE 75CL(HOUSE WINE PACKAGE)BUY-3CTN GET 3 WINE OPENER,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330083,RADIO BAR CHENIN COLOMBARD WHITE WINE 75CL,MYANMAR VINEYARD ESTATE,RADIO BAR,10000
+PDG,127901330084,RADIO BAR SAUVIGNON BLANC WHITE WINE 75CL,MYANMAR VINEYARD ESTATE,RADIO BAR,10000
+PDG,127901330085,AYTHAYA DESSERT WHITE WINE 37.5CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330086,AYTHAYA SEMILLON WHITE WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330086,AYTHAYA SEMILLON WHITE WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330086,AYTHAYA SEMILLON WHITE WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330086,AYTHAYA SEMILLON WHITE WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330087,AYTHAYA WHITE WINE SEMI SWEET MOSCATO 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330087,AYTHAYA WHITE WINE SEMI SWEET MOSCATO 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330087,AYTHAYA WHITE WINE SEMI SWEET MOSCATO 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127901330088,NEDERBURG WINEMASTER SAUVIGNON BLANC WHITE WINE 75CL,DISTELL LIMITED,NEDERBURG,10000
+PDG,127901330096,YELLOW TAIL SAUVIGNON BLANC WHITE WINE 75CL,CASELLA FAMILY,YELLOW TAIL,10000
+PDG,127901330098,YELLOW TAIL CHARDONNAY WHITE WINE 75CL,CASELLA FAMILY,YELLOW TAIL,10000
+PDG,127901330099,YELLOW TAIL RIESLING WHITE WINE 75CL,CASELLA FAMILY,YELLOW TAIL,10000
+PDG,127901330100,YELLOW TAIL CHARDONNAY WHITE WINE 18.7CL,CASELLA FAMILY,YELLOW TAIL,10000
+PDG,127901330101,YELLOW TAIL PINOT GRIGIO WHITE 18.7CL,CASELLA FAMILY,YELLOW TAIL,10000
+PDG,127901330101,YELLOW TAIL PINOT GRIGIO WHITE 18.7CL,CASELLA FAMILY,YELLOW TAIL,10000
+PDG,127901330102,TWO EIGHTS SAUVIGNON BLC SEMILLON WHITE WINE 75CL,TWO EIGHTS WINERY,TWO EIGHTS,10000
+PDG,127901330105,RED MOUNTAIN MOSCATO WHITE WINE 75CL,RED MOUNTAIN ESTATE,RED MOUNTAIN,10000
+PDG,127901330106,RED MOUNTAIN INLE VALLEY BLENDED WHITE WINE 75CL,RED MOUNTAIN ESTATE,RED MOUNTAIN,10000
+PDG,127901330107,LINDEMAN`S BIN 65 CHARDONNAY WHITE WINE 75CL,TREASURY WINE ESTATES,LINDEMAN`S,10000
+PDG,127902330113,TORRES CORONAS RED WINE 75CL,TORRES,TORRES,10000
+PDG,127902330119,CHAPELLE DE LA TRINITE N.PRES ST EMILION RED WINE 75CL,BORIE MANOUX,BORIE MANOUX,10000
+PDG,127902330149,!TABLE MOUNTAIN SHIRAZ RED WINE 75CL,DISTELL LIMITED,TABLE MOUNTAIN,10000
+PDG,127902330153,GORGHI TONDI MERLOT SICILIA IGP RED WINE 75CL,ITALIAN TRADING,GORGHI TONDI,10000
+PDG,127902330165,MUD HOUSE PINOT NOIR RED WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,MUD HOUSE,10000
+PDG,127902330166,LA CASTELLINA CHIANTI CLASSICO DOCG RED WINE 75CL,ITALIAN TRADING,LA CASTELLINA,10000
+PDG,127902330168,AQUILAE SYRAH SICILIA IGT RED WINE 75CL,ITALIAN TRADING,D'ALESSANDRO,10000
+PDG,127902330171,APOTHIC WINEMAKER`S BLEND RED WINE 75CL,E&J GALLO WINERY,APOTHIC,10000
+PDG,127902330173,LE ROCCHE TOP MASTINO SANGIOVESE SUPERIORE RESERVE MALATESTIANE RED 75CL,ITALIAN TRADING,CEVICO,10000
+PDG,127902330184,NOEMIE VERNAUX GEVREY CHAMBERTIN RED WINE 75CL (2012),CASTEL,NOEMIE VERNAUX,10000
+PDG,127902330184,NOEMIE VERNAUX GEVREY CHAMBERTIN RED WINE 75CL (2012),CASTEL,NOEMIE VERNAUX,10000
+PDG,127902330184,NOEMIE VERNAUX GEVREY CHAMBERTIN RED WINE 75CL (2012),CASTEL,NOEMIE VERNAUX,10000
+PDG,127902330188,BROOKLAND VALLEY VERSE 1 SHIRAZ RED WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,BROOKLAND VALLEL,10000
+PDG,127902330190,TRIVENTO ARGENTINA RESERVE MALBEC RED WINE 75CL,TRIVENTO,TRIVENTO RESERVE,10000
+PDG,127902330190,TRIVENTO ARGENTINA RESERVE MALBEC RED WINE 75CL,TRIVENTO,TRIVENTO RESERVE,10000
+PDG,127902330194,AYTHAYA MUSCAT SWEET  DESSERT RED WINE 0.375CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330194,AYTHAYA MUSCAT SWEET  DESSERT RED WINE 0.375CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330195,MONTE VINO CINSAULT RED WINE 37.5CL,MYANMAR VINEYARD ESTATE,MONTE VINO,10000
+PDG,127902330196,MONTE VINO CINSAULT RED WINE 75CL(SOUTH AFRICA),MYANMAR VINEYARD ESTATE,MONTE VINO,10000
+PDG,127902330199,TA KU PINOT NOIR MARLBOROUGH RED WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,TA KU,10000
+PDG,127902330199,TA KU PINOT NOIR MARLBOROUGH RED WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,TA KU,10000
+PDG,127902330199,TA KU PINOT NOIR MARLBOROUGH RED WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,TA KU,10000
+PDG,127902330202,!MAISON CASTEL SAINT EMILION BORDEAUX SELECTION RED WINE AOC 75CL,CASTEL,MAISION CASTEL AOC SELECTION,10000
+PDG,127902330204,MASSERIA BORGO DEI TRULLI NEGROAMARO SALENTO IGP RED WINE 75CL,ITALIAN TRADING,CEVICO,10000
+PDG,127902330206,TALAMONTI MONTEPULCIANO D`ABRUZZO MODA DOC RED WINE 75CL,ITALIAN TRADING,TALAMONTI,10000
+PDG,127902330207,TORRES ALTOS IBERICOS RESERVA TEMPRANILLO RIOJA DOC RED WINE 75CL,TORRES,TORRES,10000
+PDG,127902330209,ASTROLABE PROVINCE MARLBOROUGH PINOT NOIR RED WINE 75CL,ASTROLABE WINES LTD,ASTROLABE,10000
+PDG,127902330209,ASTROLABE PROVINCE MARLBOROUGH PINOT NOIR RED WINE 75CL,ASTROLABE WINES LTD,ASTROLABE,10000
+PDG,127902330212,NEDERBURG BARONNE CABERNET SAUVIGNON SHIRAZ RED WINE 75CL,DISTELL LIMITED,NEDERBURG,10000
+PDG,127902330214,BRIDLEWOOD CABERNET SAUVIGNON RED WINE 75CL,E&J GALLO WINERY,BRIDLEWOOD,10000
+PDG,127902330214,BRIDLEWOOD CABERNET SAUVIGNON RED WINE 75CL,E&J GALLO WINERY,BRIDLEWOOD,10000
+PDG,127902330214,BRIDLEWOOD CABERNET SAUVIGNON RED WINE 75CL,E&J GALLO WINERY,BRIDLEWOOD,10000
+PDG,127902330215,BRIDLEWOOD PINOT NOIR RED WINE 75CL,E&J GALLO WINERY,BRIDLEWOOD,10000
+PDG,127902330216,!AYTHAYA SHIRAZ & DORNFELDER CUVEE RED WINE 37.5CL (SCREW CAP),MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330217,TORRES SANGRE TORO RESERVA RED WINE 75CL,TORRES,TORRES,10000
+PDG,127902330218,AYTHAYA GRAND RESERVE RED WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330221,CASTILLO DE JUMILLA CRIANZA RED WINE 75CL,BODEGAS BLEDA S.L,CASTILLO DE JUMILLA,10000
+PDG,127902330223,MITHRA COTES DU RHONE AOP RED WINE 75CL,VIGNERONS ARDECHOIS,VIGNERONS ARDECHOIS,10000
+PDG,127902330224,ORGANIC COTES DU RHONE AOP RED WINE 75CL,VIGNERONS ARDECHOIS,VIGNERONS ARDECHOIS,10000
+PDG,127902330225,ARDECHE TERRASSES IPG RED WINE 75CL,VIGNERONS ARDECHOIS,VIGNERONS ARDECHOIS,10000
+PDG,127902330226,ARDECHE CLASSIQUES MERLOT IPG RED WINE 75CL,VIGNERONS ARDECHOIS,VIGNERONS ARDECHOIS,10000
+PDG,127902330231,VIEUX PAPES  MERLOT SYRAH RED WINE 75 CL,CASTEL,VIEUX PAPES,10000
+PDG,127902330237,WOLF BLASS RED LABEL SHIRAZ CABERNET RED WINE 75LCL,TREASURY WINE ESTATES,WOLF BLASS,10000
+PDG,127902330239,ROTHBURY ESTATE SERIES SHIRAZ CABERNET RED WINE 75CL,TREASURY WINE ESTATES,ROTHBURY ESTATE,10000
+PDG,127902330240,HAKUNA MATATA RED WINE 75CL,MYANMAR VINEYARD ESTATE,HAKUNA MATATA,10000
+PDG,127902330241,KAROO MOUNTAIN SHIRAZ PINOTAGE RED WINE 75CL,MYANMAR VINEYARD ESTATE,KAROO MOUNTAIN,10000
+PDG,127902330242,AYTHAYA SHIRAZ AND DORNFELDER CUVEE RED WINE 75CL(HOUSE WINE PACKAGE)BUY-3CTN GET 3 WINE OPENER,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330247,AYTHAYA DORNLFELDER RED WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330247,AYTHAYA DORNLFELDER RED WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330247,AYTHAYA DORNLFELDER RED WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330248,AYTHAYA TEMPRANILLO RED WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330248,AYTHAYA TEMPRANILLO RED WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330249,AYTHAYA SHIRAZ RED WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330249,AYTHAYA SHIRAZ RED WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330249,AYTHAYA SHIRAZ RED WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330249,AYTHAYA SHIRAZ RED WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330250,AYTHAYA SHIRAZ RED WINE 37.5CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330250,AYTHAYA SHIRAZ RED WINE 37.5CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330251,LA BODEGA RED WINE CINSUALUT PINOTAGE 75CL,MYANMAR VINEYARD ESTATE,LA BODEGA,10000
+PDG,127902330251,LA BODEGA RED WINE CINSUALUT PINOTAGE 75CL,MYANMAR VINEYARD ESTATE,LA BODEGA,10000
+PDG,127902330251,LA BODEGA RED WINE CINSUALUT PINOTAGE 75CL,MYANMAR VINEYARD ESTATE,LA BODEGA,10000
+PDG,127902330252,LA BODEGA RED WINE SEMI SWEET 75CL,MYANMAR VINEYARD ESTATE,LA BODEGA,10000
+PDG,127902330252,LA BODEGA RED WINE SEMI SWEET 75CL,MYANMAR VINEYARD ESTATE,LA BODEGA,10000
+PDG,127902330258,AYTHAYA RED WINE SEMI SWEET MOSCATO 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330258,AYTHAYA RED WINE SEMI SWEET MOSCATO 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127902330260,KAROO MOUNTAIN CINSAULT RED WINE BIB 3LTR,"MYANMAR VINEYARD ESTATE CO.,L",KAROO MOUNTAIN,10000
+PDG,127902330260,KAROO MOUNTAIN CINSAULT RED WINE BIB 3LTR,"MYANMAR VINEYARD ESTATE CO.,L",KAROO MOUNTAIN,10000
+PDG,127902330272,TWO EIGHTS SHIRAZ RED WINE 75CL,TWO EIGHTS WINERY,TWO EIGHTS,10000
+PDG,127902330273,MOUTON CADET BORDEAUX RED WINE 1.5LTR,CHATEAU MOUTON ROTHSCHILD,MOUTON CADET,10000
+PDG,127902330276,RED MOUNTAIN ESTATE SYRAH RED WINE 75CL,RED MOUNTAIN ESTATE,RED MOUNTAIN,10000
+PDG,127902330279,RED MOUNTAIN TAWNY FORTIFIED RED WINE 50CL,RED MOUNTAIN ESTATE,RED MOUNTAIN,10000
+PDG,127902330283,LWINT WINE COCKTAIL GRAPE 0.275LTR (RING PULL CAP),MYANMAR VINEYARD ESTATE,LWINT,10000
+PDG,127902330283,LWINT WINE COCKTAIL GRAPE 0.275LTR (RING PULL CAP),MYANMAR VINEYARD ESTATE,LWINT,10000
+PDG,127902330283,LWINT WINE COCKTAIL GRAPE 0.275LTR (RING PULL CAP),MYANMAR VINEYARD ESTATE,LWINT,10000
+PDG,127902330284,LWINT WINE COCKTAIL PINEAPPLE 0.275LTR (RING PULL CAP),MYANMAR VINEYARD ESTATE,LWINT,10000
+PDG,127902330284,LWINT WINE COCKTAIL PINEAPPLE 0.275LTR (RING PULL CAP),MYANMAR VINEYARD ESTATE,LWINT,10000
+PDG,127903330004,!AYTHAYA SHIRAZ MUSCAT CUVEE ROSE WINE 37.5CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127903330004,!AYTHAYA SHIRAZ MUSCAT CUVEE ROSE WINE 37.5CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127903330005,!AYTHAYA SHIRAZ MUSCAT CUVEE ROSE WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127903330005,!AYTHAYA SHIRAZ MUSCAT CUVEE ROSE WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127903330006,TORRES SANGRE DE TORO ROSADO ROSE WINE 75CL,TORRES,TORRES,10000
+PDG,127903330006,TORRES SANGRE DE TORO ROSADO ROSE WINE 75CL,TORRES,TORRES,10000
+PDG,127904330013,MAISON CASTEL CUVEE BLANCE BRUT SPARKLING WINE 75CL,CASTEL,MASFLEUREY,10000
+PDG,127904330016,PRINCE DE RICHEMONT ROSE SPARKLING WINE 75CL,VEUVE AMBAL,PRINCE DE RICHEMONT,10000
+PDG,127904330017,!MYANMAR SHIRAZ MUSCAT CUVEE ROSE SPARKLING 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330017,!MYANMAR SHIRAZ MUSCAT CUVEE ROSE SPARKLING 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330017,!MYANMAR SHIRAZ MUSCAT CUVEE ROSE SPARKLING 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330017,!MYANMAR SHIRAZ MUSCAT CUVEE ROSE SPARKLING 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330018,AYTHAYA SAUVIGNON BRUT BLANC SHANPANYA 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330018,AYTHAYA SAUVIGNON BRUT BLANC SHANPANYA 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330018,AYTHAYA SAUVIGNON BRUT BLANC SHANPANYA 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330018,AYTHAYA SAUVIGNON BRUT BLANC SHANPANYA 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330022,AYTHAYA SHANPANYA BRUT SPARKLING WINE 1.5LTR,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330022,AYTHAYA SHANPANYA BRUT SPARKLING WINE 1.5LTR,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330023,WOLF BLASS RED LABEL PINOT NOIR CHARDONNAY SPARKLING WINE 75CL,TREASURY WINE ESTATES,WOLF BLASS,10000
+PDG,127904330024,WOLF BLASS RED LABEL PINK MOSCATO SPARKLING WINE 75CL,TREASURY WINE ESTATES,WOLF BLASS,10000
+PDG,127904330025,MAYBOWLE SPARKLING WINE 75CL,MYANMAR VINEYARD ESTATE,MAYBOWLE,10000
+PDG,127904330025,MAYBOWLE SPARKLING WINE 75CL,MYANMAR VINEYARD ESTATE,MAYBOWLE,10000
+PDG,127904330027,AYTHAYA SHANPANYA ROSE SPARKLING WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330027,AYTHAYA SHANPANYA ROSE SPARKLING WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330027,AYTHAYA SHANPANYA ROSE SPARKLING WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330027,AYTHAYA SHANPANYA ROSE SPARKLING WINE 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127904330029,AZAY BALLOONS BAGAN SAUVIGNON BRUT BLANC SHANPANYA 75CL,MYANMAR VINEYARD ESTATE,AYTHAYA,10000
+PDG,127906330003,PETALUMA PICCADILLY VALLEY CHARDONAY WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,PETALUMA,10000
+PDG,127906330003,PETALUMA PICCADILLY VALLEY CHARDONAY WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,PETALUMA,10000
+PDG,127906330003,PETALUMA PICCADILLY VALLEY CHARDONAY WHITE WINE 75CL,ACCOLADE WINES AUSTRALIA LIMI,PETALUMA,10000
+PDG,127906330006,CHATEAU BAHANS HAUT BRION RED WINE 75CL,ASIATIC MART HOLDING PTE LTD,BORIE MANOUX,10000
+PDG,127906330006,CHATEAU BAHANS HAUT BRION RED WINE 75CL,ASIATIC MART HOLDING PTE LTD,BORIE MANOUX,10000
+PDG,127906330008,CHATEAU PONTET CANET PAUILLAC RED WINE 75CL,ASIATIC MART HOLDING PTE LTD,BORIE MANOUX,10000
+PDG,127906330013,CHATEAU PONTAC LYNCH MARGAUX RED WINE 75CL,BORIE MANOUX,BORIE MANOUX,10000
+PDG,127906330017,LE POESIE AMARONE DELLA VALPOLICELLA DOCG RED WINE 75CL,ITALIAN TRADING,CANTINA DI SOAVE,10000
+PDG,127906330025,CHATEAU HAUT BAGES LIBERAL PAUILLAC RED WINE 75CL,BORIE MANOUX,BORIE MANOUX,10000
+PDG,127906330026,CHATEAU GRAND PUY DUCASSE PAUILLAC RED WINE 75CL,BORIE MANOUX,BORIE MANOUX,10000
+PDG,127906330026,CHATEAU GRAND PUY DUCASSE PAUILLAC RED WINE 75CL,BORIE MANOUX,BORIE MANOUX,10000
+PDG,127906330026,CHATEAU GRAND PUY DUCASSE PAUILLAC RED WINE 75CL,BORIE MANOUX,BORIE MANOUX,10000
+PDG,127906330027,CHATEAU BATAILLEY PAUILLAC RED WINE 75CL (2011),BORIE MANOUX,BORIE MANOUX,10000
+PDG,127906330028,TORRES SALMOS PRIORAT DOC RED WINE 75CL,TORRES,TORRES,10000
+PDG,127906330029,CHATEAU BRANAIRE DUCRU RED WINE 75CL,BORIE MANOUX,BORIE MANOUX,10000
+PDG,127906330031,DULUC DE BRANAIRE DUCRU RED WINE 75CL,BORIE MANOUX,SAINT JULIEN,10000

@@ -55,6 +55,7 @@ def startup_db():
             CREATE TABLE IF NOT EXISTS Item_Pricing (
                 [Pricing ID] INTEGER PRIMARY KEY,
                 [Gate ID] INTEGER,
+                [BU] TEXT,
                 [Item ID] TEXT,
                 [Item Name] TEXT,
                 [Principal] TEXT,
@@ -122,6 +123,8 @@ def startup_db():
         try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [claimed_at] TEXT")
         except sqlite3.OperationalError: pass
         try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [calculated_products] TEXT")
+        except sqlite3.OperationalError: pass
+        try: cursor.execute("ALTER TABLE Item_Pricing ADD COLUMN [BU] TEXT")
         except sqlite3.OperationalError: pass
         
         # --- User Table ---
@@ -272,7 +275,33 @@ def startup_db():
         # Seed references
         cursor.execute("SELECT COUNT(*) FROM Locations")
         if cursor.fetchone()[0] == 0:
-            default_locs = [('YGN',), ('MDY',), ('NPT',), ('MGW',), ('TGI',), ('TGU',), ('PTN',), ('MLM',)]
+            default_locs = [
+    ('Yangon',), 
+    ('Mandalay',), 
+    ('Naypyitaw',), 
+    ('Magaway',), 
+    ('Taunggyi',), 
+    ('Taunggu',), 
+    ('Pathein',), 
+    ('Mawlamyine',),
+    ('Taungtwingyi',),
+    ('Meikhtila',),
+    ('Dawei',),
+    ('Myingyan',),
+    ('Yae',),
+    ('Chauk',),
+    ('Aunglan',),
+    ('Danuphyu',),
+    ('Ngathaingchaung',),
+    ('Yamethin',),
+    ('Phyue',),
+    ('Kyauktagar',),
+    ('Nyaunglaypin',),
+    ('Nyaungoo',),
+    ('Kyaukpadaung',),
+    ('Myeik',),
+    ('Twantay',)
+]
             cursor.executemany("INSERT INTO Locations (name) VALUES (?)", default_locs)
 
         cursor.execute("SELECT COUNT(*) FROM UOMs")
@@ -383,6 +412,7 @@ class ItemLogItem(BaseModel):
 class ItemPricingData(BaseModel):
     pricing_id: Optional[int] = None
     gate_id: int
+    bu: Optional[str] = ""
     item_code: str
     item_name: str
     principal: Optional[str] = ""
@@ -1650,7 +1680,7 @@ def export_item_pricing_excel(gate_id: int):
             raise HTTPException(status_code=404, detail="Gate not found")
         gate_name, from_loc, to_loc = gate_row[0], gate_row[1] or "", gate_row[2] or ""
         
-        cursor.execute("SELECT [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? ORDER BY [Item ID]", (gate_id,))
+        cursor.execute("SELECT [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? ORDER BY [Item ID]", (gate_id,))
         rows = cursor.fetchall()
         conn.close()
         
@@ -1660,7 +1690,7 @@ def export_item_pricing_excel(gate_id: int):
         ws['A1'] = f"Gate: {gate_name} ({from_loc} -> {to_loc})"
         ws['A1'].font = Font(bold=True, size=14)
         
-        headers = ['Item Code', 'Item Name', 'Principal', 'Brand', 'Transportation Cost']
+        headers = ['BU', 'Item Code', 'Item Name', 'Principal', 'Brand', 'Transportation Cost']
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
         header_font = Font(bold=True, color='FFFFFF')
         
@@ -1709,12 +1739,16 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         item_codes_to_check = set()
         
         for row_idx, row in enumerate(ws.iter_rows(min_row=4, values_only=True), start=4):
-            if not row[0]: continue
-            item_code = str(row[0]).strip()
+            if not row[1]: continue # row[1] is now the Item Code
+            item_code = str(row[1]).strip()
             excel_rows.append({
-                "row_num": row_idx, "code": item_code, "name": str(row[1]).strip() if row[1] else "",
-                "principal": str(row[2]).strip() if row[2] else "", "brand": str(row[3]).strip() if row[3] else "",
-                "cost": str(row[4]).strip() if len(row) > 4 and row[4] else ""
+                "row_num": row_idx, 
+                "bu": str(row[0]).strip() if row[0] else "", 
+                "code": item_code, 
+                "name": str(row[2]).strip() if row[2] else "",
+                "principal": str(row[3]).strip() if row[3] else "", 
+                "brand": str(row[4]).strip() if row[4] else "",
+                "cost": str(row[5]).strip() if len(row) > 5 and row[5] else ""
             })
             item_codes_to_check.add(item_code)
             
@@ -1729,10 +1763,17 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         for i in range(0, len(unique_codes_list), batch_size):
             batch = unique_codes_list[i:i + batch_size]
             placeholders = ','.join('?' * len(batch))
-            cursor_dwbi.execute(f"SELECT ItemCode, ItemName, ItmsGrpNam, U_BrandName FROM Itemmasterallpp WHERE ItemCode IN ({placeholders})", batch)
+            # Added Sector to the query here
+            cursor_dwbi.execute(f"SELECT ItemCode, ItemName, ItmsGrpNam, U_BrandName, Sector FROM Itemmasterallpp WHERE ItemCode IN ({placeholders})", batch)
             rows = cursor_dwbi.fetchall()
             for r in rows:
-                dwbi_data[str(r[0]).strip()] = {"name": str(r[1]).strip() if r[1] else "", "principal": str(r[2]).strip() if r[2] else "", "brand": str(r[3]).strip() if r[3] else ""}
+                # Added bu to the mapped dictionary
+                dwbi_data[str(r[0]).strip()] = {
+                    "name": str(r[1]).strip() if r[1] else "", 
+                    "principal": str(r[2]).strip() if r[2] else "", 
+                    "brand": str(r[3]).strip() if r[3] else "",
+                    "bu": str(r[4]).strip() if r[4] else ""
+                }
         conn_dwbi.close()
         
         errors = []
@@ -1745,6 +1786,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
             if row["name"].lower() != db_item["name"].lower(): errors.append(f"Row {row['row_num']}: Item Name mismatch. Excel: '{row['name']}', System: '{db_item['name']}'")
             if row["principal"].lower() != db_item["principal"].lower(): errors.append(f"Row {row['row_num']}: Principal mismatch.")
             if row["brand"].lower() != db_item["brand"].lower(): errors.append(f"Row {row['row_num']}: Brand mismatch.")
+            if row["bu"].lower() != db_item["bu"].lower(): errors.append(f"Row {row['row_num']}: BU mismatch.")
 
         if errors:
             error_msg = errors[:10]
@@ -1783,9 +1825,9 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
 
                 cursor.execute("""
                     UPDATE Item_Pricing
-                    SET [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ?
+                    SET [BU] = ?, [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ?
                     WHERE [Gate ID] = ? AND [Item ID] = ?
-                """, (row["name"], row["principal"], row["brand"], row["cost"], gate_id, item_code))
+                """, (row["bu"], row["name"], row["principal"], row["brand"], row["cost"], gate_id, item_code))
                 updates_made += 1
             else:
                 while True:
@@ -1794,9 +1836,9 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                         used_ids.add(new_id)
                         break
                 cursor.execute("""
-                    INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost])
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (new_id, gate_id, item_code, row["name"], row["principal"], row["brand"], row["cost"]))
+                    INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost])
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (new_id, gate_id, row["bu"], item_code, row["name"], row["principal"], row["brand"], row["cost"]))
                 inserts_made += 1
                 
         if change_logs:
@@ -1925,9 +1967,9 @@ def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT [Pricing ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
+        cursor.execute("SELECT [Pricing ID], [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
         rows = cursor.fetchall()
-        items = [{"pricing_id": r[0], "item_code": r[1], "item_name": r[2], "principal": r[3], "brand": r[4], "transportation_cost": r[5]} for r in rows]
+        items = [{"pricing_id": r[0], "bu": r[1], "item_code": r[2], "item_name": r[3], "principal": r[4], "brand": r[5], "transportation_cost": r[6]} for r in rows]
         conn.close()
         return {"items": items, "gate_id": gate_id}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading items: {str(e)}")
@@ -1960,8 +2002,8 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_curre
             if changes:
                  cursor.executemany("INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
 
-            cursor.execute("UPDATE Item_Pricing SET [Item ID] = ?, [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ? WHERE [Pricing ID] = ?", 
-                (item_data.item_code, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost, pricing_id))
+            cursor.execute("UPDATE Item_Pricing SET [Item ID] = ?, [BU] = ?, [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ? WHERE [Pricing ID] = ?", 
+                (item_data.item_code, item_data.bu, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost, pricing_id))
         else:
             if "add_item" not in perms:
                 conn.close()
@@ -1971,8 +2013,8 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_curre
                 new_id = random.randint(10000000, 99999999)
                 cursor.execute("SELECT 1 FROM Item_Pricing WHERE [Pricing ID] = ?", (new_id,))
                 if not cursor.fetchone(): break
-            cursor.execute("INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                (new_id, item_data.gate_id, item_data.item_code, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost))
+            cursor.execute("INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+                (new_id, item_data.gate_id, item_data.bu, item_data.item_code, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost))
 
         conn.commit()
         conn.close()
@@ -2016,25 +2058,32 @@ def search_dwbi_items(q: str = Query(..., min_length=2)):
         conn = get_dwbi_connection()
         cursor = conn.cursor()
         search_term = f"%{q}%"
-        cursor.execute("SELECT TOP 50 ItemCode, ItemName, ItmsGrpNam, U_BrandName FROM Itemmasterallpp WHERE ItemCode LIKE ? OR ItemName LIKE ?", (search_term, search_term))
+        # Added 'Sector' to the SELECT query
+        cursor.execute("SELECT TOP 50 ItemCode, ItemName, ItmsGrpNam, U_BrandName, Sector FROM Itemmasterallpp WHERE ItemCode LIKE ? OR ItemName LIKE ?", (search_term, search_term))
         rows = cursor.fetchall()
-        items = [{"item_code": r[0], "item_name": r[1], "principal": r[2], "brand": r[3]} for r in rows]
+        # Mapped r[4] (Sector) to the 'bu' key
+        items = [{"item_code": r[0], "item_name": r[1], "principal": r[2], "brand": r[3], "bu": r[4]} for r in rows]
         conn.close()
         return {"items": items}
-    except Exception as e: raise HTTPException(status_code=500, detail=f"Error searching items: {str(e)}")
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=f"Error searching items: {str(e)}")
 
 @app.get("/dwbi/items/validate")
 def validate_dwbi_item(code: str = Query(...)):
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT ItemCode, ItemName, ItmsGrpNam, U_BrandName FROM Itemmasterallpp WHERE ItemCode = ?", (code,))
+        # Added 'Sector' to the SELECT query
+        cursor.execute("SELECT ItemCode, ItemName, ItmsGrpNam, U_BrandName, Sector FROM Itemmasterallpp WHERE ItemCode = ?", (code,))
         row = cursor.fetchone()
         conn.close()
         
-        if row: return {"valid": True, "item": {"item_code": row[0], "item_name": row[1], "principal": row[2], "brand": row[3]}}
+        if row: 
+            # Mapped row[4] (Sector) to the 'bu' key
+            return {"valid": True, "item": {"item_code": row[0], "item_name": row[1], "principal": row[2], "brand": row[3], "bu": row[4]}}
         return {"valid": False}
-    except Exception as e: raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
 
 @app.get("/locations/from")
 def get_from_locations():

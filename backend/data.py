@@ -115,8 +115,8 @@ def generate_sql():
     # Create Table Definitions (DDL) for Gate and Item_Pricing
     sql_statements.append("CREATE TABLE Gate ([Gate ID] INTEGER PRIMARY KEY, [Gate Name] VARCHAR(255), [From] VARCHAR(255), [To] VARCHAR(255), [UOM] VARCHAR(50), [Unit] INTEGER, [Cost] DECIMAL(18,2));")
     
-    # UPDATED: Removed [UOM] column from Item_Pricing table
-    sql_statements.append("CREATE TABLE Item_Pricing ([Pricing ID] INTEGER PRIMARY KEY, [Gate ID] INT, [Item ID] VARCHAR(50), [Item Name] VARCHAR(255), [Principal] VARCHAR(255), [Brand] VARCHAR(255), [Transportation Cost] VARCHAR(50));")
+    # UPDATED: Added [BU] column to Item_Pricing table to align with updated item master files
+    sql_statements.append("CREATE TABLE Item_Pricing ([Pricing ID] INTEGER PRIMARY KEY, [Gate ID] INT, [BU] VARCHAR(50), [Item ID] VARCHAR(50), [Item Name] VARCHAR(255), [Principal] VARCHAR(255), [Brand] VARCHAR(255), [Transportation Cost] VARCHAR(50));")
     sql_statements.append("")
 
     # TRACKER: Set to keep track of generated IDs to ensure uniqueness
@@ -166,15 +166,16 @@ def generate_sql():
                         
                         val_gate_fk = str(gate_id)
                         
+                        # UPDATED: Added extraction for the new 'BU' column
+                        val_bu = clean_sql_string(item_row.get('BU'))
                         val_item_id = clean_sql_string(item_row.get('Item Code'))
                         val_item_name = clean_sql_string(item_row.get('Item Name'))
                         val_principal = clean_sql_string(item_row.get('Principal'))
                         val_brand = clean_sql_string(item_row.get('Brand'))
-                        
                         val_trans_cost = clean_sql_string(item_row.get('Transportation Cost'))
                         
-                        # UPDATED: Insert statement has UOM logic removed
-                        sql_statements.append(f"INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES ({val_pricing_id}, {val_gate_fk}, {val_item_id}, {val_item_name}, {val_principal}, {val_brand}, {val_trans_cost});")
+                        # UPDATED: Insert statement now includes [BU]
+                        sql_statements.append(f"INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES ({val_pricing_id}, {val_gate_fk}, {val_bu}, {val_item_id}, {val_item_name}, {val_principal}, {val_brand}, {val_trans_cost});")
                         
                 except Exception as e:
                     print(f"Error processing {file_name}: {e}")
