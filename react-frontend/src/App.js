@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Calendar, Percent, BarChart2 } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Calendar, Percent, BarChart2, Key } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -193,7 +193,7 @@ const PricingApp = () => {
 
   // Reference Management State
   const [refLocations, setRefLocations] = useState([]);
-  const [refRateCartLocations, setRefRateCartLocations] = useState([]); // <-- NEW STATE
+  const [refRateCartLocations, setRefRateCartLocations] = useState([]); 
   const [refUOMs, setRefUOMs] = useState([]);
   const [refChannels, setRefChannels] = useState([]); 
   const [selectedChannel, setSelectedChannel] = useState(''); 
@@ -211,6 +211,9 @@ const PricingApp = () => {
   const [showRateCartLogModal, setShowRateCartLogModal] = useState(false);
   const [rateCartLogsData, setRateCartLogsData] = useState([]);
   const [currentLogRateCartLocation, setCurrentLogRateCartLocation] = useState('');
+
+  // Change Password State
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
 
   // --- Pagination (Load More) State ---
   const INITIAL_LOAD_COUNT = 50;
@@ -361,7 +364,7 @@ const PricingApp = () => {
           if (locResp.ok) setRefLocations(await locResp.json());
           
           const rcLocResp = await authFetch(`${API_URL}/references/rate-cart-locations`);
-          if (rcLocResp.ok) setRefRateCartLocations(await rcLocResp.json()); // <-- ADDED
+          if (rcLocResp.ok) setRefRateCartLocations(await rcLocResp.json()); 
 
           const uomResp = await authFetch(`${API_URL}/references/uoms`);
           if (uomResp.ok) setRefUOMs(await uomResp.json());
@@ -638,7 +641,6 @@ const PricingApp = () => {
     if (token && currentPage === 'rate_carts' && permissions.includes('view_rate_carts')) { loadRateCarts(); loadReferenceData(); }
     if (token && currentPage === 'daily_report' && permissions.includes('view_daily_report')) { fetchDailyReport(dailyReportDate); }
     
-    // Fetch combined dashboard data once when accessing the dashboard
     if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { 
         fetchCombinedDashboard(dashboardMonth); 
     }
@@ -669,7 +671,6 @@ const PricingApp = () => {
   }, [selectedGate, calculationType, products, gates, token, currentPage]);
 
   // --- Utility Fetch/Calculations Functions ---
-  
   const calculateCosts = async () => {
     if (selectedDocNums.length === 0 || !selectedFrom || !selectedTo || !selectedGate || !selectedChannel) { showNotification('Please select Doc Num(s), From, To, Gate, and Channel', 'error'); return; }
     setIsLoading(true);
@@ -1055,7 +1056,6 @@ const PricingApp = () => {
                             disabled={!!rateCart}
                         >
                             <option value="">-- Select Location --</option>
-                            {/* CHANGED TO USE refRateCartLocations HERE */}
                             {refRateCartLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}
                         </select>
                     </div>
@@ -1070,6 +1070,72 @@ const PricingApp = () => {
                 </div>
             </div>
         </div>
+    );
+  };
+
+  const ChangePasswordModal = ({ onClose }) => {
+    const [oldPassword, setOldPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      if (newPassword !== confirmPassword) {
+        showNotification('New passwords do not match', 'error');
+        return;
+      }
+      
+      setIsSubmitting(true);
+      try {
+        const response = await authFetch(`${API_URL}/users/me/password`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
+        });
+        
+        if (response.ok) {
+          showNotification('Password changed successfully', 'success');
+          onClose();
+        } else {
+          const err = await response.json();
+          showNotification(getErrorMessage(err), 'error');
+        }
+      } catch (error) {
+        showNotification(`Error: ${error.message}`, 'error');
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <h2 className="text-2xl font-bold mb-4">Change Password</h2>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold mb-1">Current Password <span className="text-red-500">*</span></label>
+              <input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full p-2 border rounded" required />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">New Password <span className="text-red-500">*</span></label>
+              <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-2 border rounded" required />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">Confirm New Password <span className="text-red-500">*</span></label>
+              <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full p-2 border rounded" required />
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button type="submit" disabled={isSubmitting} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:bg-blue-400">
+                {isSubmitting ? 'Saving...' : 'Save Password'}
+              </button>
+              <button type="button" onClick={onClose} disabled={isSubmitting} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     );
   };
 
@@ -1106,26 +1172,32 @@ const PricingApp = () => {
   );
 
   const renderNavigation = () => (
-    <div className="bg-white shadow-md mb-6">
-      <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => setCurrentPage('calculator')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'calculator' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calculator size={18} /> Calculator</button>
-          {permissions.includes('view_gates') && <button onClick={() => setCurrentPage('gates')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Gates</button>}
-          {permissions.includes('view_items') && <button onClick={() => setCurrentPage('items')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><FileText size={18} /> Items</button>}
-          {permissions.includes('view_rate_carts') && <button onClick={() => setCurrentPage('rate_carts')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'rate_carts' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Percent size={18} /> Rate Carts</button>}
-          {permissions.includes('view_daily_report') && <button onClick={() => setCurrentPage('daily_report')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'daily_report' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calendar size={18} /> Daily Report</button>}
-          {permissions.includes('view_dashboard') && <button onClick={() => setCurrentPage('dashboard')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><BarChart2 size={18} /> Dashboard</button>}
-          <button onClick={() => setCurrentPage('history')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><History size={18} /> History</button>
-          {permissions.includes('view_references') && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={18} /> References</button>)}
-          {permissions.includes('view_users') && (<button onClick={() => setCurrentPage('users')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Users size={18} /> Users</button>)}
-          {permissions.includes('view_roles') && (<button onClick={() => setCurrentPage('roles')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'roles' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Shield size={18} /> Roles</button>)}
-        </div>
-        <div className="flex items-center gap-4">
-            <div className="text-right"><p className="text-xs text-gray-500">Logged in as</p><div className="flex items-center gap-1"><User size={14} className="text-blue-600"/><p className="font-bold text-sm text-blue-600 capitalize">{username} ({userRole})</p></div></div>
-            <button onClick={handleLogout} className="text-gray-500 hover:text-red-500 transition p-2 hover:bg-red-50 rounded-full" title="Logout"><LogOut size={20} /></button>
+    <>
+      <div className="bg-white shadow-md mb-6">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setCurrentPage('calculator')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'calculator' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calculator size={18} /> Calculator</button>
+            {permissions.includes('view_gates') && <button onClick={() => setCurrentPage('gates')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Gates</button>}
+            {permissions.includes('view_items') && <button onClick={() => setCurrentPage('items')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><FileText size={18} /> Items</button>}
+            {permissions.includes('view_rate_carts') && <button onClick={() => setCurrentPage('rate_carts')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'rate_carts' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Percent size={18} /> Rate Carts</button>}
+            {permissions.includes('view_daily_report') && <button onClick={() => setCurrentPage('daily_report')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'daily_report' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calendar size={18} /> Daily Report</button>}
+            {permissions.includes('view_dashboard') && <button onClick={() => setCurrentPage('dashboard')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><BarChart2 size={18} /> Dashboard</button>}
+            <button onClick={() => setCurrentPage('history')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><History size={18} /> History</button>
+            {permissions.includes('view_references') && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={18} /> References</button>)}
+            {permissions.includes('view_users') && (<button onClick={() => setCurrentPage('users')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Users size={18} /> Users</button>)}
+            {permissions.includes('view_roles') && (<button onClick={() => setCurrentPage('roles')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'roles' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Shield size={18} /> Roles</button>)}
+          </div>
+          <div className="flex items-center gap-4">
+              <div className="text-right"><p className="text-xs text-gray-500">Logged in as</p><div className="flex items-center gap-1"><User size={14} className="text-blue-600"/><p className="font-bold text-sm text-blue-600 capitalize">{username} ({userRole})</p></div></div>
+              <div className="flex gap-1 border-l pl-4 ml-2 border-gray-200">
+                  <button onClick={() => setShowChangePasswordModal(true)} className="text-gray-500 hover:text-blue-600 transition p-2 hover:bg-blue-50 rounded-full" title="Change Password"><Key size={20} /></button>
+                  <button onClick={handleLogout} className="text-gray-500 hover:text-red-500 transition p-2 hover:bg-red-50 rounded-full" title="Logout"><LogOut size={20} /></button>
+              </div>
+          </div>
         </div>
       </div>
-    </div>
+      {showChangePasswordModal && <ChangePasswordModal onClose={() => setShowChangePasswordModal(false)} />}
+    </>
   );
 
   // --- Views ---

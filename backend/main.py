@@ -466,6 +466,12 @@ class Token(BaseModel):
     role: str
     username: str
     permissions: List[str]
+    
+    
+    
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
 
 # --- Auth Helpers ---
     
@@ -664,6 +670,45 @@ def delete_user(username: str, user: dict = Depends(require_permission("delete_u
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
+    
+    
+    
+@app.put("/users/me/password")
+def change_password(data: ChangePasswordRequest, current_user: dict = Depends(get_current_user)):
+    username = current_user["username"]
+    
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        # 1. Fetch the user's current hashed password from the database
+        cursor.execute("SELECT hashed_password FROM Users WHERE username = ?", (username,))
+        row = cursor.fetchone()
+        
+        if not row:
+            conn.close()
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        current_hashed_password = row[0]
+        
+        # 2. Verify that the provided old password is correct
+        if not verify_password(data.old_password, current_hashed_password):
+            conn.close()
+            raise HTTPException(status_code=400, detail="Incorrect old password")
+            
+        # 3. Hash the new password and update the database
+        new_hashed_password = pwd_context.hash(data.new_password)
+        cursor.execute("UPDATE Users SET hashed_password = ? WHERE username = ?", (new_hashed_password, username))
+        
+        conn.commit()
+        conn.close()
+        
+        return {"message": "Password changed successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error changing password: {str(e)}")
 
 # --- Helper Functions for Calculation ---
 
