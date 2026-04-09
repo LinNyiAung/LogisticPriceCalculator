@@ -174,7 +174,7 @@ const PricingApp = () => {
   const [activeDailyTab, setActiveDailyTab] = useState('item'); 
   
   const [dailyReportFilters, setDailyReportFilters] = useState({ 
-    branch: '', item_code: '', item_name: '', principal: '', brand: '', driver_name: '',
+    bu: '', branch: '', item_code: '', item_name: '', principal: '', brand: '', driver_name: '',
     ctns: '', driver_total_ctns: '', branch_cost: '', cost_per_carton: '', allocated_cost: '', sales_amount: '' 
   });
   
@@ -1630,6 +1630,7 @@ const PricingApp = () => {
 
   if (currentPage === 'daily_report' && permissions.includes('view_daily_report')) {
       const filteredDailyReportData = dailyReportData.filter(row => {
+        const matchBu = (row.bu || '').toLowerCase().includes((dailyReportFilters.bu || '').toLowerCase());
         const matchBranch = (row.branch || '').toLowerCase().includes(dailyReportFilters.branch.toLowerCase());
         const matchItemCode = (row.item_code || '').toLowerCase().includes(dailyReportFilters.item_code.toLowerCase());
         const matchItemName = (row.item_name || '').toLowerCase().includes(dailyReportFilters.item_name.toLowerCase());
@@ -1643,7 +1644,7 @@ const PricingApp = () => {
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(dailyReportFilters.allocated_cost.toLowerCase());
         const matchSalesAmount = String(row.sales_amount || '').toLowerCase().includes(dailyReportFilters.sales_amount.toLowerCase());
 
-        return matchBranch && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchDriverName && matchCtns && matchDriverTotal && matchBranchCost && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
+        return matchBu && matchBranch && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchDriverName && matchCtns && matchDriverTotal && matchBranchCost && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
       });
 
       const filteredTownshipReportData = dailyTownshipReportData.filter(row => {
@@ -1720,6 +1721,10 @@ const PricingApp = () => {
                                       <thead className="bg-gray-100 sticky top-0">
                                           <tr>
                                               <th className="border p-2 text-left">
+                                                  <div>BU</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.bu || ''} onChange={(e) => setDailyReportFilters({...dailyReportFilters, bu: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
                                                   <div>Branch</div>
                                                   <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={dailyReportFilters.branch} onChange={(e) => setDailyReportFilters({...dailyReportFilters, branch: e.target.value})} />
                                               </th>
@@ -1771,10 +1776,11 @@ const PricingApp = () => {
                                       </thead>
                                       <tbody>
                                           {displayedDailyItem.length === 0 ? (
-                                              <tr><td colSpan="12" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date or matching filters.</td></tr>
+                                              <tr><td colSpan="13" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date or matching filters.</td></tr>
                                           ) : (
                                               displayedDailyItem.map((row, idx) => (
                                                   <tr key={idx} className="hover:bg-gray-50 text-sm">
+                                                      <td className="border p-2 font-bold text-gray-700">{row.bu || '-'}</td>
                                                       <td className="border p-2 font-bold text-gray-700">{row.branch}</td>
                                                       <td className="border p-2">{row.driver_name}</td>
                                                       <td className="border p-2">{row.principal}</td>

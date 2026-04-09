@@ -468,7 +468,6 @@ class Token(BaseModel):
     permissions: List[str]
     
     
-    
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
@@ -670,8 +669,6 @@ def delete_user(username: str, user: dict = Depends(require_permission("delete_u
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
-    
-    
     
 @app.put("/users/me/password")
 def change_password(data: ChangePasswordRequest, current_user: dict = Depends(get_current_user)):
@@ -1118,7 +1115,7 @@ def _get_daily_report_data(target_date: str):
     conn_dwbi = get_dwbi_connection()
     cursor_dwbi = conn_dwbi.cursor()
     query = """
-        SELECT Branch, ItemCode, MAX(ItemName), MAX(Principal), MAX(Brand), [Driver Name], SUM(ctnQty), CustomerCode, MAX(ContactPerson), Township, SUM(SalesAmount)
+        SELECT Branch, ItemCode, MAX(ItemName), MAX(Principal), MAX(Brand), [Driver Name], SUM(ctnQty), CustomerCode, MAX(ContactPerson), Township, SUM(SalesAmount), MAX(BU)
         FROM VersaFleetDetail_TC
         WHERE CONVERT(DATE, [Task Date]) = ? AND [Task Status] = 'successful'
         GROUP BY Branch, [Driver Name], ItemCode, CustomerCode, Township
@@ -1150,12 +1147,13 @@ def _get_daily_report_data(target_date: str):
         
         township = row[9].strip() if row[9] else "UNKNOWN"
         sales_amount = float(row[10]) if row[10] else 0.0
+        bu = row[11].strip() if (len(row) > 11 and row[11]) else ""
 
         granular_data.append({
             "branch": branch, "item_code": item_code, "item_name": item_name,
             "principal": principal, "brand": brand, "driver_name": driver_name,
             "ctns": ctns, "customer_code": customer_code, "contact_person": contact_person,
-            "township": township, "sales_amount": sales_amount
+            "township": township, "sales_amount": sales_amount, "bu": bu
         })
         
         driver_key = (branch, driver_name)
@@ -1183,7 +1181,7 @@ def _get_daily_report_data(target_date: str):
         i_key = (b, d, g["item_code"])
         if i_key not in item_report_dict:
             item_report_dict[i_key] = {
-                "branch": b, "driver_name": d, "item_code": g["item_code"],
+                "bu": g["bu"], "branch": b, "driver_name": d, "item_code": g["item_code"],
                 "item_name": g["item_name"], "principal": g["principal"], "brand": g["brand"],
                 "ctns": 0.0, "allocated_cost": 0.0, "cost_per_carton": cost_per_ctn,
                 "driver_total_ctns": d_total, "branch_cost": b_cost, "sales_amount": 0.0
