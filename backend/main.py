@@ -1950,23 +1950,60 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
 # --- Gate Management Endpoints (SQLite) ---
 
 @app.get("/account/gates")
-def get_all_gates(user: dict = Depends(get_current_user)):
+def get_all_gates(
+    gate_name: Optional[str] = Query(None, description="Filter by gate name"),
+    from_loc: Optional[str] = Query(None, description="Filter by origin location"),
+    to_loc: Optional[str] = Query(None, description="Filter by destination location"),
+    uom: Optional[str] = Query(None, description="Filter by UOM"),
+    cost: Optional[str] = Query(None, description="Filter by cost"),
+    user: dict = Depends(get_current_user)
+):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT [Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost] FROM Gate")
+        
+        # Base query
+        query = "SELECT [Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost] FROM Gate WHERE 1=1"
+        params = []
+        
+        # Dynamically append filters if they are provided in the request
+        if gate_name:
+            query += " AND [Gate Name] LIKE ?"
+            params.append(f"%{gate_name}%")
+        if from_loc:
+            query += " AND [From] LIKE ?"
+            params.append(f"%{from_loc}%")
+        if to_loc:
+            query += " AND [To] LIKE ?"
+            params.append(f"%{to_loc}%")
+        if uom:
+            query += " AND [UOM] LIKE ?"
+            params.append(f"%{uom}%")
+        if cost:
+            query += " AND CAST([Cost] AS TEXT) LIKE ?"
+            params.append(f"%{cost}%")
+
+        cursor.execute(query, params)
         rows = cursor.fetchall()
+        
         gates = []
         for row in rows:
             gate_id = row[0]
             calc_type = determine_calculation_type_sql(gate_id)
             gates.append({
-                "gate_id": gate_id, "gate_name": row[1], "from_loc": row[2], "to_loc": row[3], "uom": row[4],         
-                "unit": row[5], "cost": float(row[6]) if row[6] is not None else None, "calculation_type": calc_type
+                "gate_id": gate_id, 
+                "gate_name": row[1], 
+                "from_loc": row[2], 
+                "to_loc": row[3], 
+                "uom": row[4],         
+                "unit": row[5], 
+                "cost": float(row[6]) if row[6] is not None else None, 
+                "calculation_type": calc_type
             })
         conn.close()
         return {"gates": gates}
-    except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading gates: {str(e)}")
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=f"Error loading gates: {str(e)}")
 
 @app.post("/account/gates")
 def save_gate(gate_data: GateData, user: dict = Depends(get_current_user)):

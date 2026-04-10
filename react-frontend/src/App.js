@@ -140,8 +140,11 @@ const PricingApp = () => {
 
   const [gateData, setGateData] = useState([]);
   const [selectedGateForPricing, setSelectedGateForPricing] = useState('');
-  const [itemPricingData, setItemPricingData] = useState([]);
   
+  // NEW: Search filters for Gates
+  const [gateFilters, setGateFilters] = useState({ gate_name: '', from_loc: '', to_loc: '', uom: '', unit: '', cost: '' });
+  
+  const [itemPricingData, setItemPricingData] = useState([]);
   const [itemFilters, setItemFilters] = useState({ bu: '', item_code: '', item_name: '', principal: '', brand: '', transportation_cost: '' });
 
   const [editingGate, setEditingGate] = useState(null);
@@ -2084,6 +2087,18 @@ const PricingApp = () => {
   }
 
   if (currentPage === 'gates' && permissions.includes('view_gates')) {
+    
+    // --- Local Filtering Logic applied directly on the Frontend matching existing UI ---
+    const filteredGates = gateData.filter(gate => {
+      const matchName = (gate.gate_name || '').toLowerCase().includes(gateFilters.gate_name.toLowerCase());
+      const matchFrom = (gate.from_loc || '').toLowerCase().includes(gateFilters.from_loc.toLowerCase());
+      const matchTo = (gate.to_loc || '').toLowerCase().includes(gateFilters.to_loc.toLowerCase());
+      const matchUom = (gate.uom || '').toLowerCase().includes(gateFilters.uom.toLowerCase());
+      const matchUnit = String(gate.unit || '').toLowerCase().includes(gateFilters.unit.toLowerCase());
+      const matchCost = String(gate.cost || '').toLowerCase().includes(gateFilters.cost.toLowerCase());
+      return matchName && matchFrom && matchTo && matchUom && matchUnit && matchCost;
+    });
+
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
@@ -2095,9 +2110,59 @@ const PricingApp = () => {
               {permissions.includes('add_gate') && (<button onClick={() => setShowAddGateModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Gate</button>)}
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse border">
-                <thead className="bg-gray-100"><tr><th className="border p-3 text-left">Gate Name</th><th className="border p-3 text-left">From</th><th className="border p-3 text-left">To</th><th className="border p-3 text-left">UOM</th><th className="border p-3 text-left">Unit</th><th className="border p-3 text-left">Cost</th><th className="border p-3 text-center">Actions</th></tr></thead>
-                <tbody>{gateData.map((gate, index) => (<tr key={index}><td className="border p-3">{gate.gate_name}</td><td className="border p-3">{gate.from_loc}</td><td className="border p-3">{gate.to_loc}</td><td className="border p-3">{gate.uom || '-'}</td><td className="border p-3">{gate.unit || '-'}</td><td className="border p-3">{formatNumber(gate.cost)}</td><td className="border p-3 text-center"><div className="flex items-center justify-center gap-2"><button onClick={() => fetchGateLogs(gate)} className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={16} /></button>{permissions.includes('edit_gate') && <button onClick={() => { setOriginalGateName(gate.gate_name); setEditingGate(gate); setShowAddGateModal(true); }} className="p-2 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={16} /></button>}{permissions.includes('delete_gate') && <button onClick={() => deleteGate(gate.gate_id)} className="p-2 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={16} /></button>}</div></td></tr>))}</tbody>
+              <table className="w-full border-collapse border text-sm">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="border p-2 text-left">
+                        <div>Gate Name</div>
+                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.gate_name} onChange={(e) => setGateFilters({...gateFilters, gate_name: e.target.value})} />
+                    </th>
+                    <th className="border p-2 text-left">
+                        <div>From</div>
+                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.from_loc} onChange={(e) => setGateFilters({...gateFilters, from_loc: e.target.value})} />
+                    </th>
+                    <th className="border p-2 text-left">
+                        <div>To</div>
+                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.to_loc} onChange={(e) => setGateFilters({...gateFilters, to_loc: e.target.value})} />
+                    </th>
+                    <th className="border p-2 text-left">
+                        <div>UOM</div>
+                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.uom} onChange={(e) => setGateFilters({...gateFilters, uom: e.target.value})} />
+                    </th>
+                    <th className="border p-2 text-left">
+                        <div>Unit</div>
+                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.unit} onChange={(e) => setGateFilters({...gateFilters, unit: e.target.value})} />
+                    </th>
+                    <th className="border p-2 text-left">
+                        <div>Cost</div>
+                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.cost} onChange={(e) => setGateFilters({...gateFilters, cost: e.target.value})} />
+                    </th>
+                    <th className="border p-2 text-center align-top">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredGates.length === 0 ? (
+                    <tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No gates found matching your filters.</td></tr>
+                  ) : (
+                    filteredGates.map((gate, index) => (
+                    <tr key={index} className="hover:bg-gray-50">
+                        <td className="border p-2">{gate.gate_name}</td>
+                        <td className="border p-2">{gate.from_loc}</td>
+                        <td className="border p-2">{gate.to_loc}</td>
+                        <td className="border p-2">{gate.uom || '-'}</td>
+                        <td className="border p-2">{gate.unit || '-'}</td>
+                        <td className="border p-2">{formatNumber(gate.cost)}</td>
+                        <td className="border p-2 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                                <button onClick={() => fetchGateLogs(gate)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
+                                {permissions.includes('edit_gate') && <button onClick={() => { setOriginalGateName(gate.gate_name); setEditingGate(gate); setShowAddGateModal(true); }} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={14} /></button>}
+                                {permissions.includes('delete_gate') && <button onClick={() => deleteGate(gate.gate_id)} className="p-1 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={14} /></button>}
+                            </div>
+                        </td>
+                    </tr>
+                    ))
+                  )}
+                </tbody>
               </table>
             </div>
           </div>
