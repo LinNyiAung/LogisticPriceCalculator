@@ -106,6 +106,17 @@ def startup_db():
                 [created_at] TEXT
             )
         """)
+        
+        # --- NEW: User Activity Log Table ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS User_Activity_Log (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [username] TEXT,
+                [action] TEXT,
+                [details] TEXT,
+                [timestamp] TEXT
+            )
+        """)
 
         # Safely attempt to add columns for existing databases
         try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [channel] TEXT")
@@ -251,7 +262,7 @@ def startup_db():
                     'view_references', 'add_reference', 'delete_reference',
                     'view_all_history', 'delete_history', 'claim_calculation', 'submit_calculation',
                     'view_rate_carts', 'add_rate_cart', 'edit_rate_cart', 'delete_rate_cart',
-                    'view_daily_report', 'view_dashboard'
+                    'view_daily_report', 'view_dashboard', 'view_activity_logs' # Added view_activity_logs
                 ])),
                 ('account', json.dumps([
                     'view_gates', 'add_gate', 'edit_gate', 
@@ -366,6 +377,22 @@ def get_logistic_connection():
     conn = sqlite3.connect(db_path)
     return conn
 
+# --- Helper: Activity Logger ---
+def log_user_activity(username: str, action: str, details: str = ""):
+    """Inserts a new record into the User_Activity_Log table."""
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute(
+            "INSERT INTO User_Activity_Log (username, action, details, timestamp) VALUES (?, ?, ?, ?)",
+            (username, action, details, now_str)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Failed to log user activity: {str(e)}")
+
 # --- Pydantic Models ---
 
 class RateCartData(BaseModel):
@@ -467,10 +494,20 @@ class Token(BaseModel):
     username: str
     permissions: List[str]
     
-    
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
+
+class ActivityLogResponse(BaseModel):
+    id: int
+    username: str
+    action: str
+    details: str
+    timestamp: str
+
+class ActivityLogPaginatedResponse(BaseModel):
+    total: int
+    logs: List[ActivityLogResponse]
 
 # --- Auth Helpers ---
     
@@ -532,7 +569,68 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     
     permissions = json.loads(user[3]) if user[3] else []
     access_token = create_access_token(data={"sub": user[0], "role": user[2], "permissions": permissions})
+    
+    # Log successful login
+    log_user_activity(user[0], "LOGIN", "User authenticated successfully")
+    
     return {"access_token": access_token, "token_type": "bearer", "role": user[2], "username": user[0], "permissions": permissions}
+
+# --- System Activity Log Endpoint ---
+
+@app.get("/admin/activity-logs", response_model=ActivityLogPaginatedResponse)
+def get_activity_logs(
+    limit: int = Query(50, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    timestamp: Optional[str] = Query(None, description="Filter by timestamp"),
+    username: Optional[str] = Query(None, description="Filter by username"),
+    action: Optional[str] = Query(None, description="Filter by action type"),
+    details: Optional[str] = Query(None, description="Filter by details"),
+    user: dict = Depends(require_permission("view_activity_logs"))
+):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        query = "SELECT id, username, action, details, timestamp FROM User_Activity_Log WHERE 1=1"
+        count_query = "SELECT COUNT(*) FROM User_Activity_Log WHERE 1=1"
+        params = []
+        
+        # Dynamically build the WHERE clause based on provided filters
+        if timestamp:
+            query += " AND timestamp LIKE ?"
+            count_query += " AND timestamp LIKE ?"
+            params.append(f"%{timestamp}%")
+        if username:
+            query += " AND username LIKE ?"
+            count_query += " AND username LIKE ?"
+            params.append(f"%{username}%")
+        if action:
+            query += " AND action LIKE ?"
+            count_query += " AND action LIKE ?"
+            params.append(f"%{action}%")
+        if details:
+            query += " AND details LIKE ?"
+            count_query += " AND details LIKE ?"
+            params.append(f"%{details}%")
+            
+        query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+        
+        # Get the total count for pagination
+        cursor.execute(count_query, params)
+        total_count = cursor.fetchone()[0]
+        
+        # Get the paginated rows
+        params.extend([limit, offset])
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        conn.close()
+        
+        logs = [{"id": r[0], "username": r[1], "action": r[2], "details": r[3], "timestamp": r[4]} for r in rows]
+        return {"total": total_count, "logs": logs}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching activity logs: {str(e)}")
 
 # --- Role Management Endpoints ---
 
@@ -561,6 +659,8 @@ def create_role(role_data: RoleCreate, user: dict = Depends(require_permission("
                       (role_data.name, json.dumps(role_data.permissions)))
         conn.commit()
         conn.close()
+        
+        log_user_activity(user['username'], "CREATE_ROLE", f"Created role: {role_data.name}")
         return {"message": "Role created successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating role: {str(e)}")
@@ -573,6 +673,8 @@ def update_role(role_name: str, role_data: RoleUpdate, user: dict = Depends(requ
         cursor.execute("UPDATE Roles SET permissions = ? WHERE name = ?", (json.dumps(role_data.permissions), role_name))
         conn.commit()
         conn.close()
+        
+        log_user_activity(user['username'], "UPDATE_ROLE", f"Updated permissions for role: {role_name}")
         return {"message": "Role updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating role: {str(e)}")
@@ -591,6 +693,8 @@ def delete_role(role_name: str, user: dict = Depends(require_permission("delete_
         cursor.execute("DELETE FROM Roles WHERE name = ?", (role_name,))
         conn.commit()
         conn.close()
+        
+        log_user_activity(user['username'], "DELETE_ROLE", f"Deleted role: {role_name}")
         return {"message": "Role deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting role: {str(e)}")
@@ -623,6 +727,8 @@ def create_user(user_data: UserCreate, user: dict = Depends(require_permission("
                       (user_data.username, hashed_pw, user_data.role))
         conn.commit()
         conn.close()
+        
+        log_user_activity(user['username'], "CREATE_USER", f"Created user: {user_data.username} with role: {user_data.role}")
         return {"message": "User created successfully"}
     except HTTPException:
         raise
@@ -638,13 +744,20 @@ def update_user(username: str, user_data: UserUpdate, user: dict = Depends(requi
         if not cursor.fetchone():
             conn.close()
             raise HTTPException(status_code=404, detail="User not found")
+            
+        changes = []
         if user_data.password:
             hashed_pw = pwd_context.hash(user_data.password)
             cursor.execute("UPDATE Users SET hashed_password = ? WHERE username = ?", (hashed_pw, username))
+            changes.append("password")
         if user_data.role:
             cursor.execute("UPDATE Users SET role = ? WHERE username = ?", (user_data.role, username))
+            changes.append(f"role to {user_data.role}")
+            
         conn.commit()
         conn.close()
+        
+        log_user_activity(user['username'], "UPDATE_USER", f"Updated user: {username} ({', '.join(changes)})")
         return {"message": "User updated successfully"}
     except HTTPException:
         raise
@@ -664,6 +777,8 @@ def delete_user(username: str, user: dict = Depends(require_permission("delete_u
             raise HTTPException(status_code=404, detail="User not found")
         conn.commit()
         conn.close()
+        
+        log_user_activity(user['username'], "DELETE_USER", f"Deleted user: {username}")
         return {"message": "User deleted successfully"}
     except HTTPException:
         raise
@@ -678,7 +793,6 @@ def change_password(data: ChangePasswordRequest, current_user: dict = Depends(ge
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # 1. Fetch the user's current hashed password from the database
         cursor.execute("SELECT hashed_password FROM Users WHERE username = ?", (username,))
         row = cursor.fetchone()
         
@@ -688,18 +802,17 @@ def change_password(data: ChangePasswordRequest, current_user: dict = Depends(ge
             
         current_hashed_password = row[0]
         
-        # 2. Verify that the provided old password is correct
         if not verify_password(data.old_password, current_hashed_password):
             conn.close()
             raise HTTPException(status_code=400, detail="Incorrect old password")
             
-        # 3. Hash the new password and update the database
         new_hashed_password = pwd_context.hash(data.new_password)
         cursor.execute("UPDATE Users SET hashed_password = ? WHERE username = ?", (new_hashed_password, username))
         
         conn.commit()
         conn.close()
         
+        log_user_activity(username, "CHANGE_PASSWORD", "User changed their own password")
         return {"message": "Password changed successfully"}
         
     except HTTPException:
@@ -708,7 +821,6 @@ def change_password(data: ChangePasswordRequest, current_user: dict = Depends(ge
         raise HTTPException(status_code=500, detail=f"Error changing password: {str(e)}")
 
 # --- Helper Functions for Calculation ---
-
 def determine_calculation_type_sql(gate_id):
     try:
         conn = get_logistic_connection()
@@ -730,11 +842,6 @@ def determine_calculation_type_sql(gate_id):
         return "unknown"
 
 def get_rounded_ctns(val):
-    """
-    Safely parses carton values. 
-    If the value is > 0 but rounds down to 0 (e.g., 0.25, 0.33), 
-    it forces the value to be at least 1.
-    """
     if not val:
         return 0
     try:
@@ -745,11 +852,9 @@ def get_rounded_ctns(val):
     except (ValueError, TypeError):
         return 0
 
-
 def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, manual_total_cost=None, additional_charges=0.0):
     add_charges = float(additional_charges) if additional_charges is not None else 0.0
 
-    # Parse combined doc_nums to separate PG and PDG requests seamlessly
     pg_nums = [str(d).replace("PG - ", "").replace("PG-", "") for d in doc_nums if not str(d).startswith("PDG")]
     pdg_nums = [str(d).replace("PDG - ", "").replace("PDG-", "") for d in doc_nums if str(d).startswith("PDG")]
 
@@ -759,7 +864,6 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
         conn_dwbi = get_dwbi_connection()
         cursor_dwbi = conn_dwbi.cursor()
 
-        # PG Details Fetch
         if pg_nums:
             placeholders = ','.join('?' * len(pg_nums))
             query_pg = f"""
@@ -772,7 +876,6 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
             cursor_dwbi.execute(query_pg, pg_nums)
             pick_rows.extend(cursor_dwbi.fetchall())
 
-        # PDG Details Fetch
         if pdg_nums:
             placeholders = ','.join('?' * len(pdg_nums))
             query_pdg = f"""
@@ -796,7 +899,6 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
         conn_log = get_logistic_connection()
         cursor_log = conn_log.cursor()
         
-        # Use From and To locations if provided to pinpoint the exact gate if names are duplicated
         if from_loc and to_loc:
             cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit] FROM Gate WHERE [Gate Name] = ? AND [From] = ? AND [To] = ?", (gate_name, from_loc, to_loc))
         else:
@@ -1028,11 +1130,13 @@ def save_rate_cart(data: RateCartData, user: dict = Depends(get_current_user)):
                 """, (data.location, username, change_date, 'Cost', str(old_cost), str(data.cost)))
 
             cursor.execute("UPDATE Rate_Cart SET cost = ? WHERE location = ?", (data.cost, data.location))
+            log_user_activity(username, "UPDATE_RATE_CART", f"Updated rate cart for {data.location}")
         else:
             if "add_rate_cart" not in perms:
                 conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_rate_cart' permission")
             cursor.execute("INSERT INTO Rate_Cart (location, cost) VALUES (?, ?)", (data.location, data.cost))
+            log_user_activity(username, "ADD_RATE_CART", f"Added rate cart for {data.location}")
             
         conn.commit()
         conn.close()
@@ -1054,6 +1158,8 @@ def delete_rate_cart(location: str, user: dict = Depends(require_permission("del
         
         conn.commit()
         conn.close()
+        
+        log_user_activity(user['username'], "DELETE_RATE_CART", f"Deleted rate cart for {location}")
         return {"message": "Rate cart deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting rate cart: {str(e)}")
@@ -1074,18 +1180,12 @@ def get_rate_cart_logs(location: str, user: dict = Depends(get_current_user)):
 # --- Daily Report Logic & Automation ---
 
 def get_rate_carts_for_date(target_date: str) -> dict:
-    """
-    Determines the rate cart cost for all locations exactly as it was on the `target_date`.
-    It reads the current Rate_Cart table and traces backward using Rate_Cart_Change_Log.
-    """
     conn = get_logistic_connection()
     cursor = conn.cursor()
     
-    # 1. Fetch current costs
     cursor.execute("SELECT location, cost FROM Rate_Cart")
     current_costs = {row[0].strip().upper(): float(row[1]) for row in cursor.fetchall()}
     
-    # 2. Fetch logs that occurred strictly AFTER the target_date
     query_threshold = target_date + " 23:59:59"
     cursor.execute("""
         SELECT location, change_date, old_value 
@@ -1096,7 +1196,6 @@ def get_rate_carts_for_date(target_date: str) -> dict:
     logs = cursor.fetchall()
     conn.close()
 
-    # 3. Replay changes backward to reconstruct history
     historical_costs = current_costs.copy()
     for row in logs:
         loc = row[0].strip().upper()
@@ -1106,12 +1205,9 @@ def get_rate_carts_for_date(target_date: str) -> dict:
 
     return historical_costs
 
-
 def _get_daily_report_data(target_date: str):
-    # 1. Get Rate Carts mapping strictly for the target date
     rate_carts = get_rate_carts_for_date(target_date)
 
-    # 2. Get DWBI Data
     conn_dwbi = get_dwbi_connection()
     cursor_dwbi = conn_dwbi.cursor()
     query = """
@@ -1124,7 +1220,6 @@ def _get_daily_report_data(target_date: str):
     rows = cursor_dwbi.fetchall()
     conn_dwbi.close()
 
-    # 3. Process Data
     granular_data = []
     driver_totals = {}
     driver_customers = {} 
@@ -1177,7 +1272,6 @@ def _get_daily_report_data(target_date: str):
         d_total_customers = len(driver_customers.get((b, d), set()))
         cost_per_drop_point = (b_cost / d_total_customers) if d_total_customers > 0 else 0.0
 
-        # Item Level Report 
         i_key = (b, d, g["item_code"])
         if i_key not in item_report_dict:
             item_report_dict[i_key] = {
@@ -1190,7 +1284,6 @@ def _get_daily_report_data(target_date: str):
         item_report_dict[i_key]["allocated_cost"] += allocated_cost
         item_report_dict[i_key]["sales_amount"] += g["sales_amount"]
 
-        # Township Level Report
         t_key = (g["branch"], g["township"], g["customer_code"], g["driver_name"])
         if t_key not in township_report_dict:
             township_report_dict[t_key] = {
@@ -1217,17 +1310,15 @@ def _get_daily_report_data(target_date: str):
     }
 
 def generate_and_save_daily_report(target_date: str):
-    """Calculates and securely writes the daily report back into SQLite"""
     try:
         data = _get_daily_report_data(target_date)
         if not data["item_report"] and not data["township_report"]:
-            return  # Skip saving empty dates
+            return 
 
         conn = get_logistic_connection()
         cursor = conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Upsert operation
         cursor.execute("""
             INSERT INTO Daily_Report_History (target_date, item_report_json, township_report_json, created_at)
             VALUES (?, ?, ?, ?)
@@ -1250,7 +1341,6 @@ def generate_and_save_daily_report(target_date: str):
         return None
 
 def daily_job_generator():
-    """Triggered by APScheduler at the end of each day"""
     target_date = datetime.datetime.now().strftime("%Y-%m-%d")
     logger.info(f"Running automated EOD report generation for {target_date}")
     generate_and_save_daily_report(target_date)
@@ -1261,7 +1351,6 @@ def get_daily_rate_cart_report(target_date: Optional[str] = None, user: dict = D
         target_date = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
         
     try:
-        # Fast path: Serve directly from Daily_Report_History DB
         conn = get_logistic_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT item_report_json, township_report_json FROM Daily_Report_History WHERE target_date = ?", (target_date,))
@@ -1275,7 +1364,6 @@ def get_daily_rate_cart_report(target_date: Optional[str] = None, user: dict = D
                 "township_report": json.loads(row[1])
             }
             
-        # Slow path: Compute on the fly if not generated yet
         data = _get_daily_report_data(target_date)
         return {
             "target_date": target_date, 
@@ -1311,6 +1399,7 @@ def add_ref_location(item: ReferenceItem, user: dict = Depends(require_permissio
             conn.close()
             raise HTTPException(status_code=400, detail="Location already exists")
         conn.close()
+        log_user_activity(user['username'], "ADD_REFERENCE", f"Added location: {item.name}")
         return {"message": "Added successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -1326,6 +1415,7 @@ def delete_ref_location(name: str, user: dict = Depends(require_permission("dele
              raise HTTPException(status_code=404, detail="Not found")
         conn.commit()
         conn.close()
+        log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted location: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -1355,6 +1445,7 @@ def add_ref_rate_cart_location(item: ReferenceItem, user: dict = Depends(require
             conn.close()
             raise HTTPException(status_code=400, detail="Rate Cart Location already exists")
         conn.close()
+        log_user_activity(user['username'], "ADD_REFERENCE", f"Added rate cart location: {item.name}")
         return {"message": "Added successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -1370,6 +1461,7 @@ def delete_ref_rate_cart_location(name: str, user: dict = Depends(require_permis
              raise HTTPException(status_code=404, detail="Not found")
         conn.commit()
         conn.close()
+        log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted rate cart location: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -1398,6 +1490,7 @@ def add_ref_uom(item: ReferenceItem, user: dict = Depends(require_permission("ad
             conn.close()
             raise HTTPException(status_code=400, detail="UOM already exists")
         conn.close()
+        log_user_activity(user['username'], "ADD_REFERENCE", f"Added UOM: {item.name}")
         return {"message": "Added successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -1413,6 +1506,7 @@ def delete_ref_uom(name: str, user: dict = Depends(require_permission("delete_re
              raise HTTPException(status_code=404, detail="Not found")
         conn.commit()
         conn.close()
+        log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted UOM: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -1440,6 +1534,7 @@ def add_ref_channel(item: ReferenceItem, user: dict = Depends(require_permission
             conn.close()
             raise HTTPException(status_code=400, detail="Channel already exists")
         conn.close()
+        log_user_activity(user['username'], "ADD_REFERENCE", f"Added channel: {item.name}")
         return {"message": "Added successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -1455,6 +1550,7 @@ def delete_ref_channel(name: str, user: dict = Depends(require_permission("delet
              raise HTTPException(status_code=404, detail="Not found")
         conn.commit()
         conn.close()
+        log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted channel: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -1487,6 +1583,7 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
                 data.final_total_cost, data.channel, data.status, calculated_products_json, data.id
             ))
             message = "Calculation updated successfully"
+            log_user_activity(user['username'], "UPDATE_CALCULATION", f"Updated saved calculation ID: {data.id}")
         else:
             while True:
                 new_id = int(datetime.datetime.now().strftime("%y%m%d%H%M%S"))
@@ -1505,6 +1602,7 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
                 data.channel, data.status, user["username"], calculated_products_json
             ))
             message = "Calculation saved successfully"
+            log_user_activity(user['username'], "SAVE_CALCULATION", f"Saved new calculation ID: {new_id}")
         
         conn.commit()
         conn.close()
@@ -1524,6 +1622,7 @@ def submit_history_item(record_id: int, user: dict = Depends(require_permission(
             raise HTTPException(status_code=404, detail="Record not found")
         conn.commit()
         conn.close()
+        log_user_activity(user['username'], "SUBMIT_CALCULATION", f"Submitted calculation ID: {record_id}")
         return {"message": "Calculation submitted successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error submitting record: {str(e)}")
 
@@ -1539,6 +1638,7 @@ def claim_history_item(record_id: int, user: dict = Depends(require_permission("
             raise HTTPException(status_code=404, detail="Record not found")
         conn.commit()
         conn.close()
+        log_user_activity(user['username'], "CLAIM_CALCULATION", f"Claimed calculation ID: {record_id}")
         return {"message": "Calculation claimed successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error claiming record: {str(e)}")
 
@@ -1587,7 +1687,6 @@ def get_history(user: dict = Depends(get_current_user)):
         for row in rows:
             record_dict = dict(zip(columns, row))
             record_dict["doc_nums"] = json.loads(record_dict["doc_nums"]) if record_dict["doc_nums"] else []
-            # Do not return 'calculated_products' in the list to save bandwidth. It's fetched via GET /history/{id}
             if "calculated_products" in record_dict:
                 del record_dict["calculated_products"]
             history.append(record_dict)
@@ -1606,6 +1705,7 @@ def delete_history_item(record_id: int, user: dict = Depends(require_permission(
             raise HTTPException(status_code=404, detail="Record not found")
         conn.commit()
         conn.close()
+        log_user_activity(user['username'], "DELETE_CALCULATION", f"Deleted calculation ID: {record_id}")
         return {"message": "Record deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting record: {str(e)}")
@@ -1628,7 +1728,6 @@ def download_history_excel(record_id: int):
         conn.close()
 
         products = []
-        # ATTEMPT TO FETCH FROM DWBI FIRST (LIVE DATA)
         try:
             calc_result = _perform_calculation_logic(
                 gate_name=record['gate_name'], doc_nums=record['doc_nums'],
@@ -1637,7 +1736,6 @@ def download_history_excel(record_id: int):
             )
             products = calc_result['calculated_products']
         except Exception as e:
-            # IF DWBI FAILS (E.G. DATA WAS DELETED AFTER 3 WEEKS), FALLBACK TO LOCAL SQLITE SAVED DB
             if record.get('calculated_products'):
                 products = json.loads(record['calculated_products'])
             else:
@@ -1647,7 +1745,6 @@ def download_history_excel(record_id: int):
         ws = wb.active
         ws.title = "Cost Details"
 
-        # "BU" is added as the 10th column, right after "Brand"
         headers = [
             "No", "Claim Date", "Delivery Date", "SIN No", "Area", "Code", "Name", "Principal", "Brand", "Item Code", "Item", "Ctns", 
             "Price", "Total Amount", "Weight", "UOM", "Gate", "Channel", "Month", "Year", "Description for Account", 
@@ -1690,7 +1787,6 @@ def download_history_excel(record_id: int):
 
             concat_desc = f"{b_desc.strip()} - {ctns_formatted} ctns @{price_formatted} kyats"
 
-            # Strip out "PG - " and "PDG - " strictly for Excel download format
             raw_sin_no = str(item.get('sin_no', ''))
             clean_sin_no = raw_sin_no.replace('PDG - ', '').replace('PDG-', '').replace('PG - ', '').replace('PG-', '').strip()
 
@@ -1827,7 +1923,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         item_codes_to_check = set()
         
         for row_idx, row in enumerate(ws.iter_rows(min_row=4, values_only=True), start=4):
-            if not row[1]: continue # row[1] is now the Item Code
+            if not row[1]: continue
             item_code = str(row[1]).strip()
             excel_rows.append({
                 "row_num": row_idx, 
@@ -1851,11 +1947,9 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         for i in range(0, len(unique_codes_list), batch_size):
             batch = unique_codes_list[i:i + batch_size]
             placeholders = ','.join('?' * len(batch))
-            # Added Sector to the query here
             cursor_dwbi.execute(f"SELECT ItemCode, ItemName, ItmsGrpNam, U_BrandName, Sector FROM Itemmasterallpp WHERE ItemCode IN ({placeholders})", batch)
             rows = cursor_dwbi.fetchall()
             for r in rows:
-                # Added bu to the mapped dictionary
                 dwbi_data[str(r[0]).strip()] = {
                     "name": str(r[1]).strip() if r[1] else "", 
                     "principal": str(r[2]).strip() if r[2] else "", 
@@ -1892,7 +1986,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         used_ids = {row[0] for row in cursor.fetchall()}
         
         updated_items_set = set()
-        updates_made, inserts_made = 0, 0
+        updates_made, inserts_made, deletes_made = 0, 0, 0
         
         change_logs = []
         change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1933,7 +2027,6 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
             cursor.executemany("INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", change_logs)
         
         items_to_delete = existing_items - updated_items_set
-        deletes_made = 0
         for item_code in items_to_delete:
             pricing_id = existing_items_data[item_code]['pricing_id']
             cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (pricing_id,))
@@ -1943,6 +2036,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         conn.commit()
         conn.close()
         
+        log_user_activity(username, "BULK_IMPORT_ITEMS", f"Imported items to gate ID {gate_id} (Updates: {updates_made}, Inserts: {inserts_made}, Deletes: {deletes_made})")
         return {"message": "Import completed successfully", "updates": updates_made, "inserts": inserts_made, "deletes": deletes_made}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error importing: {str(e)}")
@@ -1962,11 +2056,9 @@ def get_all_gates(
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # Base query
         query = "SELECT [Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost] FROM Gate WHERE 1=1"
         params = []
         
-        # Dynamically append filters if they are provided in the request
         if gate_name:
             query += " AND [Gate Name] LIKE ?"
             params.append(f"%{gate_name}%")
@@ -2012,7 +2104,6 @@ def save_gate(gate_data: GateData, user: dict = Depends(get_current_user)):
         conn = get_logistic_connection()
         cursor = conn.cursor()
 
-        # Check by gate_id instead of original_gate_name to prevent overwrite issues when names overlap
         if gate_data.gate_id is not None:
             if "edit_gate" not in perms:
                 conn.close()
@@ -2044,6 +2135,7 @@ def save_gate(gate_data: GateData, user: dict = Depends(get_current_user)):
             cursor.execute("""
                 UPDATE Gate SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Cost] = ? WHERE [Gate ID] = ?
             """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, gate_data.gate_id))
+            log_user_activity(user['username'], "UPDATE_GATE", f"Updated gate ID {gate_data.gate_id}: {gate_data.gate_name}")
         else:
             if "add_gate" not in perms:
                 conn.close()
@@ -2051,6 +2143,7 @@ def save_gate(gate_data: GateData, user: dict = Depends(get_current_user)):
                 
             cursor.execute("INSERT INTO Gate ([Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES (?, ?, ?, ?, ?, ?)", 
                   (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost))
+            log_user_activity(user['username'], "CREATE_GATE", f"Created gate: {gate_data.gate_name}")
         
         conn.commit()
         conn.close()
@@ -2083,6 +2176,8 @@ def delete_gate(gate_id: int, user: dict = Depends(require_permission("delete_ga
              raise HTTPException(status_code=404, detail="Gate not found")
         conn.commit()
         conn.close()
+        
+        log_user_activity(user['username'], "DELETE_GATE", f"Deleted gate ID: {gate_id}")
         return {"message": f"Gate {gate_id} deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting gate: {str(e)}")
@@ -2129,6 +2224,7 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_curre
 
             cursor.execute("UPDATE Item_Pricing SET [Item ID] = ?, [BU] = ?, [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ? WHERE [Pricing ID] = ?", 
                 (item_data.item_code, item_data.bu, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost, pricing_id))
+            log_user_activity(user['username'], "UPDATE_ITEM_PRICING", f"Updated pricing for item {item_data.item_code} on gate ID {item_data.gate_id}")
         else:
             if "add_item" not in perms:
                 conn.close()
@@ -2140,6 +2236,7 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_curre
                 if not cursor.fetchone(): break
             cursor.execute("INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
                 (new_id, item_data.gate_id, item_data.bu, item_data.item_code, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost))
+            log_user_activity(user['username'], "CREATE_ITEM_PRICING", f"Added pricing for item {item_data.item_code} to gate ID {item_data.gate_id}")
 
         conn.commit()
         conn.close()
@@ -2174,6 +2271,7 @@ def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(requi
             raise HTTPException(status_code=404, detail="Item not found")
         conn.commit()
         conn.close()
+        log_user_activity(user['username'], "DELETE_ITEM_PRICING", f"Deleted item {item_code} from gate {gate_id}")
         return {"message": "Item deleted successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting item: {str(e)}")
 
@@ -2183,10 +2281,8 @@ def search_dwbi_items(q: str = Query(..., min_length=2)):
         conn = get_dwbi_connection()
         cursor = conn.cursor()
         search_term = f"%{q}%"
-        # Added 'Sector' to the SELECT query
         cursor.execute("SELECT TOP 50 ItemCode, ItemName, ItmsGrpNam, U_BrandName, Sector FROM Itemmasterallpp WHERE ItemCode LIKE ? OR ItemName LIKE ?", (search_term, search_term))
         rows = cursor.fetchall()
-        # Mapped r[4] (Sector) to the 'bu' key
         items = [{"item_code": r[0], "item_name": r[1], "principal": r[2], "brand": r[3], "bu": r[4]} for r in rows]
         conn.close()
         return {"items": items}
@@ -2198,13 +2294,11 @@ def validate_dwbi_item(code: str = Query(...)):
     try:
         conn = get_dwbi_connection()
         cursor = conn.cursor()
-        # Added 'Sector' to the SELECT query
         cursor.execute("SELECT ItemCode, ItemName, ItmsGrpNam, U_BrandName, Sector FROM Itemmasterallpp WHERE ItemCode = ?", (code,))
         row = cursor.fetchone()
         conn.close()
         
         if row: 
-            # Mapped row[4] (Sector) to the 'bu' key
             return {"valid": True, "item": {"item_code": row[0], "item_name": row[1], "principal": row[2], "brand": row[3], "bu": row[4]}}
         return {"valid": False}
     except Exception as e: 
@@ -2277,7 +2371,6 @@ def get_doc_nums():
             elif isinstance(doc_date_val, str) and len(doc_date_val) >= 10: doc_date_str = doc_date_val[:10]
             else: doc_date_str = str(doc_date_val) if doc_date_val else ""
             
-            # Formats the doc num to automatically match the frontend string template formatting ("PG - 123456")
             doc_nums.append({"doc_num": f"{row[0]} - {row[1]}", "doc_date": doc_date_str})
         conn.close()
         return {"doc_nums": doc_nums}
@@ -2289,7 +2382,6 @@ def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums"))
     try:
         if not doc_nums: return {"products": [], "total_weight": 0}
         
-        # Safely extract actual DocNums corresponding to respective Sources
         pg_nums = [str(d).replace("PG - ", "").replace("PG-", "") for d in doc_nums if not str(d).startswith("PDG")]
         pdg_nums = [str(d).replace("PDG - ", "").replace("PDG-", "") for d in doc_nums if str(d).startswith("PDG")]
         
@@ -2351,9 +2443,6 @@ def get_products_by_doc_num(doc_num: str):
 # --- Dashboard Helper Functions ---
 
 def _generate_allocation_data(target_month: str):
-    """
-    Reads from local SQLite Daily_Report_History
-    """
     try:
         year, month = map(int, target_month.split('-'))
     except ValueError:
@@ -2378,7 +2467,6 @@ def _generate_allocation_data(target_month: str):
     _, last_day = calendar.monthrange(year, month)
     end_date = f"{year:04d}-{month:02d}-{last_day:02d}"
 
-    # Connect to the local SQLite DB where daily reports are saved
     conn = get_logistic_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -2393,7 +2481,6 @@ def _generate_allocation_data(target_month: str):
 
     for row in rows:
         target_date_str = row[0]
-        # Target date format is YYYY-MM-DD
         task_month = target_date_str[:7]
         
         if task_month not in valid_months:
@@ -2422,7 +2509,6 @@ def _generate_allocation_data(target_month: str):
             brands_data[brand][task_month]["cost"] += allocated_cost
             brands_data[brand][task_month]["ctns"] += ctns
 
-    # Format Final Response
     dashboard_results = []
     for brand, data in brands_data.items():
         result = {
@@ -2463,7 +2549,6 @@ def _generate_allocation_data(target_month: str):
 
 
 def _generate_calculated_data(target_month: str):
-    # Setup date thresholds
     try:
         year, month = map(int, target_month.split('-'))
     except ValueError:
@@ -2484,7 +2569,6 @@ def _generate_calculated_data(target_month: str):
     month1_label = months_list[1]
     month2_label = months_list[2]
 
-    # Fetch data from local SQLite
     conn = get_logistic_connection()
     cursor = conn.cursor()
     
@@ -2536,7 +2620,6 @@ def _generate_calculated_data(target_month: str):
                 brands_data[brand][task_month]["cost"] += cost
                 brands_data[brand][task_month]["ctns"] += ctns
 
-    # Format Final Response
     dashboard_results = []
     for brand, data in brands_data.items():
         result = {

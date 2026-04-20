@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Calendar, Percent, BarChart2, Key } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Calendar, Percent, BarChart2, Key, Activity } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -32,7 +32,8 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'add_rate_cart', label: 'Add Rate Cart' },
   { id: 'edit_rate_cart', label: 'Edit Rate Cart' },
   { id: 'delete_rate_cart', label: 'Delete Rate Cart' },
-  { id: 'view_daily_report', label: 'View Daily Report' }
+  { id: 'view_daily_report', label: 'View Daily Report' },
+  { id: 'view_activity_logs', label: 'View Activity Logs' } // NEW: Added Activity Logs Permission
 ];
 
 // --- Login Component ---
@@ -101,7 +102,7 @@ const PricingApp = () => {
   const [username, setUsername] = useState(localStorage.getItem('username') || '');
   const [permissions, setPermissions] = useState(JSON.parse(localStorage.getItem('permissions')) || []);
 
-  // --- Dashboard State (Unified) ---
+  // --- Dashboard State ---
   const getCurrentMonthString = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -141,9 +142,7 @@ const PricingApp = () => {
   const [gateData, setGateData] = useState([]);
   const [selectedGateForPricing, setSelectedGateForPricing] = useState('');
   
-  // NEW: Search filters for Gates
   const [gateFilters, setGateFilters] = useState({ gate_name: '', from_loc: '', to_loc: '', uom: '', unit: '', cost: '' });
-  
   const [itemPricingData, setItemPricingData] = useState([]);
   const [itemFilters, setItemFilters] = useState({ bu: '', item_code: '', item_name: '', principal: '', brand: '', transportation_cost: '' });
 
@@ -217,6 +216,14 @@ const PricingApp = () => {
 
   // Change Password State
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+
+  // --- NEW: System Activity Logs State ---
+  const [activityLogsData, setActivityLogsData] = useState([]);
+  const [activityLogsTotal, setActivityLogsTotal] = useState(0);
+  const [activityLogsPage, setActivityLogsPage] = useState(0);
+  const [activityLogFilters, setActivityLogFilters] = useState({ timestamp: '', username: '', action: '', details: '' });
+  const [isActivityLogsLoading, setIsActivityLogsLoading] = useState(false);
+  const ACTIVITY_LOGS_LIMIT = 50;
 
   // --- Pagination (Load More) State ---
   const INITIAL_LOAD_COUNT = 50;
@@ -420,7 +427,6 @@ const PricingApp = () => {
     }
   };
 
-
   const fetchDailyReport = async (targetDate) => {
       setIsDailyReportLoading(true);
       try {
@@ -439,6 +445,35 @@ const PricingApp = () => {
           }
       } catch (error) { showNotification(`Error fetching report: ${error.message}`, 'error'); } 
       finally { setIsDailyReportLoading(false); }
+  };
+
+  // --- NEW: Activity Logs Fetch Function ---
+const fetchActivityLogs = async (page = 0) => {
+    setIsActivityLogsLoading(true);
+    try {
+        const offset = page * ACTIVITY_LOGS_LIMIT;
+        let url = `${API_URL}/admin/activity-logs?limit=${ACTIVITY_LOGS_LIMIT}&offset=${offset}`;
+        
+        if (activityLogFilters.timestamp) url += `&timestamp=${encodeURIComponent(activityLogFilters.timestamp)}`;
+        if (activityLogFilters.username) url += `&username=${encodeURIComponent(activityLogFilters.username)}`;
+        if (activityLogFilters.action) url += `&action=${encodeURIComponent(activityLogFilters.action)}`;
+        if (activityLogFilters.details) url += `&details=${encodeURIComponent(activityLogFilters.details)}`;
+
+        const response = await authFetch(url);
+        if (response.ok) {
+            const data = await response.json();
+            setActivityLogsData(data.logs);
+            setActivityLogsTotal(data.total);
+            setActivityLogsPage(page);
+        } else {
+            const error = await response.json();
+            showNotification(getErrorMessage(error), 'error');
+        }
+    } catch (error) {
+        showNotification(`Error: ${error.message}`, 'error');
+    } finally {
+        setIsActivityLogsLoading(false);
+    }
   };
 
   // --- API Actions ---
@@ -643,10 +678,8 @@ const PricingApp = () => {
     if (token && currentPage === 'references' && permissions.includes('view_references')) loadReferenceData();
     if (token && currentPage === 'rate_carts' && permissions.includes('view_rate_carts')) { loadRateCarts(); loadReferenceData(); }
     if (token && currentPage === 'daily_report' && permissions.includes('view_daily_report')) { fetchDailyReport(dailyReportDate); }
-    
-    if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { 
-        fetchCombinedDashboard(dashboardMonth); 
-    }
+    if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { fetchCombinedDashboard(dashboardMonth); }
+    if (token && currentPage === 'activity_logs' && permissions.includes('view_activity_logs')) { fetchActivityLogs(0); }
   }, [currentPage, token, permissions]); 
 
   useEffect(() => {
@@ -1189,6 +1222,7 @@ const PricingApp = () => {
             {permissions.includes('view_references') && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={18} /> References</button>)}
             {permissions.includes('view_users') && (<button onClick={() => setCurrentPage('users')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Users size={18} /> Users</button>)}
             {permissions.includes('view_roles') && (<button onClick={() => setCurrentPage('roles')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'roles' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Shield size={18} /> Roles</button>)}
+            {permissions.includes('view_activity_logs') && (<button onClick={() => setCurrentPage('activity_logs')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'activity_logs' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Activity size={18} /> System Logs</button>)}
           </div>
           <div className="flex items-center gap-4">
               <div className="text-right"><p className="text-xs text-gray-500">Logged in as</p><div className="flex items-center gap-1"><User size={14} className="text-blue-600"/><p className="font-bold text-sm text-blue-600 capitalize">{username} ({userRole})</p></div></div>
@@ -1206,6 +1240,92 @@ const PricingApp = () => {
   // --- Views ---
   if (!token) return <LoginScreen onLogin={handleLogin} />;
 
+  // --- NEW VIEW: Activity Logs ---
+  if (currentPage === 'activity_logs' && permissions.includes('view_activity_logs')) {
+    const totalPages = Math.ceil(activityLogsTotal / ACTIVITY_LOGS_LIMIT);
+
+    return (
+        <div className="min-h-screen bg-gray-50 p-6">
+            <div className="max-w-7xl mx-auto">
+                {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
+                {renderNavigation()}
+                <div className="bg-white rounded-lg shadow-md p-6">
+                    <h1 className="text-3xl font-bold text-gray-800 mb-6">System Activity Logs</h1>
+
+                    
+
+                    <div className="overflow-x-auto border rounded mb-4">
+                        <table className="w-full border-collapse">
+                            <thead className="bg-gray-100">
+                                <tr>
+                                    <th className="border p-2 text-left w-48">
+                                        <div>Timestamp</div>
+                                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={activityLogFilters.timestamp} onChange={(e) => setActivityLogFilters({...activityLogFilters, timestamp: e.target.value})} onKeyDown={e => e.key === 'Enter' && fetchActivityLogs(0)} />
+                                    </th>
+                                    <th className="border p-2 text-left w-48">
+                                        <div>User</div>
+                                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={activityLogFilters.username} onChange={(e) => setActivityLogFilters({...activityLogFilters, username: e.target.value})} onKeyDown={e => e.key === 'Enter' && fetchActivityLogs(0)} />
+                                    </th>
+                                    <th className="border p-2 text-left w-48">
+                                        <div>Action</div>
+                                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={activityLogFilters.action} onChange={(e) => setActivityLogFilters({...activityLogFilters, action: e.target.value})} onKeyDown={e => e.key === 'Enter' && fetchActivityLogs(0)} />
+                                    </th>
+                                    <th className="border p-2 text-left">
+                                        <div>Details</div>
+                                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={activityLogFilters.details} onChange={(e) => setActivityLogFilters({...activityLogFilters, details: e.target.value})} onKeyDown={e => e.key === 'Enter' && fetchActivityLogs(0)} />
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {isActivityLogsLoading ? (
+                                    <tr><td colSpan="4" className="text-center p-8 text-gray-500 font-medium">Loading activity logs...</td></tr>
+                                ) : activityLogsData.length === 0 ? (
+                                    <tr><td colSpan="4" className="text-center p-8 text-gray-500 italic">No activity logs found matching your criteria.</td></tr>
+                                ) : (
+                                    activityLogsData.map((log) => (
+                                        <tr key={log.id} className="hover:bg-gray-50 text-sm transition">
+                                            <td className="border p-3 whitespace-nowrap text-gray-500">{log.timestamp}</td>
+                                            <td className="border p-3 font-semibold text-blue-700">{log.username}</td>
+                                            <td className="border p-3">
+                                                <span className="bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider">{log.action}</span>
+                                            </td>
+                                            <td className="border p-3 text-gray-700">{log.details}</td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Server-Side Pagination Controls */}
+                    {totalPages > 0 && (
+                        <div className="flex items-center justify-between mt-6 bg-gray-50 p-4 rounded-lg border">
+                            <p className="text-sm text-gray-600 font-medium">
+                                Showing {activityLogsTotal === 0 ? 0 : (activityLogsPage * ACTIVITY_LOGS_LIMIT) + 1} to {Math.min((activityLogsPage + 1) * ACTIVITY_LOGS_LIMIT, activityLogsTotal)} of {activityLogsTotal} entries
+                            </p>
+                            <div className="flex gap-2">
+                                <button 
+                                    disabled={activityLogsPage === 0 || isActivityLogsLoading} 
+                                    onClick={() => fetchActivityLogs(activityLogsPage - 1)} 
+                                    className="px-4 py-2 border rounded bg-white text-gray-700 disabled:opacity-50 hover:bg-gray-100 transition font-medium"
+                                >
+                                    Previous
+                                </button>
+                                <button 
+                                    disabled={activityLogsPage >= totalPages - 1 || isActivityLogsLoading} 
+                                    onClick={() => fetchActivityLogs(activityLogsPage + 1)} 
+                                    className="px-4 py-2 border rounded bg-white text-gray-700 disabled:opacity-50 hover:bg-gray-100 transition font-medium"
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+  }
 
   if (currentPage === 'dashboard' && permissions.includes('view_dashboard')) {
     
@@ -1551,7 +1671,7 @@ const PricingApp = () => {
             </div>
             <table className="w-full border-collapse border">
               <thead className="bg-gray-100"><tr><th className="border p-3 text-left">Role Name</th><th className="border p-3 text-left">Permissions</th><th className="border p-3 text-center w-32">Actions</th></tr></thead>
-              <tbody>{rolesList.map((r, i) => (<tr key={i} className="hover:bg-gray-50"><td className="border p-3 font-semibold text-gray-700">{r.name}</td><td className="border p-3 text-xs text-gray-600"><div className="flex flex-wrap gap-1">{r.permissions.map(p => <span key={p} className="bg-gray-200 px-2 py-1 rounded text-gray-700">{p.replace('_', ' ')}</span>)}</div></td><td className="border p-3 text-center"><div className="flex justify-center gap-2">{permissions.includes('edit_role') && <button onClick={() => { setEditingRole(r); setShowRoleModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded"><Edit2 size={16} /></button>}{permissions.includes('delete_role') && <button onClick={() => deleteRole(r.name)} className="p-2 bg-red-100 text-red-600 rounded"><Trash2 size={16} /></button>}</div></td></tr>))}</tbody>
+              <tbody>{rolesList.map((r, i) => (<tr key={i} className="hover:bg-gray-50"><td className="border p-3 font-semibold text-gray-700">{r.name}</td><td className="border p-3 text-xs text-gray-600"><div className="flex flex-wrap gap-1">{r.permissions.map(p => <span key={p} className="bg-gray-200 px-2 py-1 rounded text-gray-700">{p.replace(/_/g, ' ')}</span>)}</div></td><td className="border p-3 text-center"><div className="flex justify-center gap-2">{permissions.includes('edit_role') && <button onClick={() => { setEditingRole(r); setShowRoleModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded"><Edit2 size={16} /></button>}{permissions.includes('delete_role') && <button onClick={() => deleteRole(r.name)} className="p-2 bg-red-100 text-red-600 rounded"><Trash2 size={16} /></button>}</div></td></tr>))}</tbody>
             </table>
           </div>
         </div>
@@ -1921,7 +2041,6 @@ const PricingApp = () => {
                 {renderNavigation()}
                 <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Reference Data</h1>
                 
-                {/* --- CHANGED TO 4 COLUMNS --- */}
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                     
                     {/* Gates Locations */}
@@ -1943,7 +2062,7 @@ const PricingApp = () => {
                         </div>
                     </div>
 
-                    {/* NEW: Rate Cart Locations */}
+                    {/* Rate Cart Locations */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-emerald-700">Rate Cart Locations</h2>
                         {permissions.includes('add_reference') && (
@@ -2087,8 +2206,6 @@ const PricingApp = () => {
   }
 
   if (currentPage === 'gates' && permissions.includes('view_gates')) {
-    
-    // --- Local Filtering Logic applied directly on the Frontend matching existing UI ---
     const filteredGates = gateData.filter(gate => {
       const matchName = (gate.gate_name || '').toLowerCase().includes(gateFilters.gate_name.toLowerCase());
       const matchFrom = (gate.from_loc || '').toLowerCase().includes(gateFilters.from_loc.toLowerCase());
