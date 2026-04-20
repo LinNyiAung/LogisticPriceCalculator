@@ -1541,7 +1541,7 @@ const PricingApp = () => {
   if (currentPage === 'roles' && permissions.includes('view_roles')) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6">
@@ -1563,7 +1563,7 @@ const PricingApp = () => {
   if (currentPage === 'users' && permissions.includes('view_users')) {
       return (
         <div className="min-h-screen bg-gray-50 p-6">
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-7xl mx-auto">
                 {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
                 {renderNavigation()}
                 <div className="bg-white rounded-lg shadow-md p-6">
@@ -1588,7 +1588,7 @@ const PricingApp = () => {
   if (currentPage === 'rate_carts' && permissions.includes('view_rate_carts')) {
     return (
         <div className="min-h-screen bg-gray-50 p-6">
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-7xl mx-auto">
                 {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
                 {renderNavigation()}
                 <div className="bg-white rounded-lg shadow-md p-6">
@@ -1673,7 +1673,7 @@ const PricingApp = () => {
 
       return (
           <div className="min-h-screen bg-gray-50 p-6">
-              <div className="max-w-full mx-auto">
+              <div className="max-w-7xl mx-auto">
                   {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
                   {renderNavigation()}
                   <div className="bg-white rounded-lg shadow-md p-6">
@@ -1916,7 +1916,7 @@ const PricingApp = () => {
   if (currentPage === 'references' && permissions.includes('view_references')) {
       return (
         <div className="min-h-screen bg-gray-50 p-6">
-            <div className="max-w-[1400px] mx-auto">
+            <div className="max-w-7xl mx-auto">
                 {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
                 {renderNavigation()}
                 <h1 className="text-3xl font-bold text-gray-800 mb-6">Manage Reference Data</h1>
@@ -2030,7 +2030,7 @@ const PricingApp = () => {
 
     return (
       <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6">
@@ -2101,7 +2101,7 @@ const PricingApp = () => {
 
     return (
       <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6">
@@ -2284,7 +2284,7 @@ const PricingApp = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
         {renderNavigation()}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
