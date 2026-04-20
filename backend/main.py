@@ -331,10 +331,15 @@ def startup_db():
         
         # --- Start Scheduler ---
         scheduler = BackgroundScheduler()
+        
         # Schedule daily job at 23:55 (11:55 PM) to compute end-of-day reports
         scheduler.add_job(daily_job_generator, 'cron', hour=23, minute=55)
+        
+        # Schedule daily job at 01:00 AM to clean up 1-month-old activity logs
+        scheduler.add_job(cleanup_old_activity_logs, 'cron', hour=1, minute=0)
+        
         scheduler.start()
-        logger.info("Daily end-of-day report scheduler started.")
+        logger.info("Daily end-of-day report and activity log cleanup schedulers started.")
 
     except Exception as e:
         logger.error(f"Error initializing database: {str(e)}")
@@ -392,6 +397,43 @@ def log_user_activity(username: str, action: str, details: str = ""):
         conn.close()
     except Exception as e:
         logger.error(f"Failed to log user activity: {str(e)}")
+        
+        
+# --- Helper: Activity Logger ---
+def log_user_activity(username: str, action: str, details: str = ""):
+    """Inserts a new record into the User_Activity_Log table."""
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute(
+            "INSERT INTO User_Activity_Log (username, action, details, timestamp) VALUES (?, ?, ?, ?)",
+            (username, action, details, now_str)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Failed to log user activity: {str(e)}")
+
+def cleanup_old_activity_logs():
+    """Automated job to delete activity logs older than 30 days."""
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        # Calculate the threshold date (30 days ago)
+        threshold_date = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+        
+        cursor.execute("DELETE FROM User_Activity_Log WHERE timestamp < ?", (threshold_date,))
+        deleted_count = cursor.rowcount
+        
+        conn.commit()
+        conn.close()
+        
+        if deleted_count > 0:
+            logger.info(f"Cleaned up {deleted_count} system activity logs older than {threshold_date}.")
+    except Exception as e:
+        logger.error(f"Failed to clean up old activity logs: {str(e)}")
 
 # --- Pydantic Models ---
 
