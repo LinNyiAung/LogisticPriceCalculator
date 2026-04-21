@@ -166,16 +166,17 @@ const PricingApp = () => {
   const [additionalCharges, setAdditionalCharges] = useState('');
   const [estimatedTotalCost, setEstimatedTotalCost] = useState(null);
 
+  // History State
   const [historyData, setHistoryData] = useState([]);
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
   const [historyFilters, setHistoryFilters] = useState({ id_status: '', date: '', route: '', doc_nums: '', total_cost: '', author: '' });
-
+  
   // Rate Cart State
   const [rateCarts, setRateCarts] = useState([]);
   const [showRateCartModal, setShowRateCartModal] = useState(false);
   const [editingRateCart, setEditingRateCart] = useState(null);
 
-  // Daily Report State (Now initialized to yesterday)
+  // Daily Report State
   const [dailyReportDate, setDailyReportDate] = useState('');
   const [dailyReportStartDate, setDailyReportStartDate] = useState(''); 
   const [dailyReportEndDate, setDailyReportEndDate] = useState('');
@@ -192,6 +193,15 @@ const PricingApp = () => {
   
   const [townshipFilters, setTownshipFilters] = useState({ 
     branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', driver_total_ctns: '', branch_cost: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: '' 
+  });
+
+  // Submitted Allocation State
+  const [submittedAllocationData, setSubmittedAllocationData] = useState([]);
+  const [isAllocationLoading, setIsAllocationLoading] = useState(false);
+  const [allocationStartDate, setAllocationStartDate] = useState('');
+  const [allocationEndDate, setAllocationEndDate] = useState('');
+  const [allocationFilters, setAllocationFilters] = useState({ 
+    calc_id: '', sin_no: '', gate_name: '', route: '', bu: '', item_code: '', item_name: '', principal: '', brand: '', ctns: '', unit_cost: '', total_cost: '' 
   });
 
   // User & Role Management State
@@ -239,6 +249,7 @@ const PricingApp = () => {
   const INITIAL_LOAD_COUNT = 50;
   const [visibleCounts, setVisibleCounts] = useState({
     history: INITIAL_LOAD_COUNT,
+    allocation: INITIAL_LOAD_COUNT,
     items: INITIAL_LOAD_COUNT,
     dailyItem: INITIAL_LOAD_COUNT,
     dailyTownship: INITIAL_LOAD_COUNT
@@ -249,6 +260,7 @@ const PricingApp = () => {
   };
 
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, history: INITIAL_LOAD_COUNT })); }, [historyFilters]);
+  useEffect(() => { setVisibleCounts(prev => ({ ...prev, allocation: INITIAL_LOAD_COUNT })); }, [allocationFilters]);
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, items: INITIAL_LOAD_COUNT })); }, [itemFilters]);
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, dailyItem: INITIAL_LOAD_COUNT })); }, [dailyReportFilters]);
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, dailyTownship: INITIAL_LOAD_COUNT })); }, [townshipFilters]);
@@ -294,12 +306,11 @@ const PricingApp = () => {
     localStorage.setItem('username', data.username);
     localStorage.setItem('permissions', JSON.stringify(perms));
     
-    // Automatically redirect to the first available page if they don't have calculator access
     if (!perms.includes('view_calculator')) {
         if (perms.includes('view_history')) setCurrentPage('history');
         else if (perms.includes('view_dashboard')) setCurrentPage('dashboard');
         else if (perms.includes('view_gates')) setCurrentPage('gates');
-        else setCurrentPage(''); // Trigger fallback screen
+        else setCurrentPage(''); 
     } else {
         setCurrentPage('calculator');
     }
@@ -375,6 +386,33 @@ const PricingApp = () => {
     } catch (error) { showNotification(`Error loading history: ${error.message}`, 'error'); }
   };
 
+  const fetchSubmittedAllocation = async (start = '', end = '') => {
+    setIsAllocationLoading(true);
+    try {
+        let url = `${API_URL}/account/submitted-allocation-report`;
+        const params = new URLSearchParams();
+        if (start) params.append('start_date', start);
+        if (end) params.append('end_date', end);
+        
+        const queryString = params.toString();
+        if (queryString) url += `?${queryString}`;
+
+        const response = await authFetch(url);
+        if (response.ok) {
+            const res = await response.json();
+            setSubmittedAllocationData(res.data || []);
+            showNotification('Allocation report loaded', 'success');
+        } else {
+            const err = await response.json();
+            showNotification(getErrorMessage(err), 'error');
+        }
+    } catch (error) {
+        showNotification(`Error fetching allocation report: ${error.message}`, 'error');
+    } finally {
+        setIsAllocationLoading(false);
+    }
+  };
+
   const loadUsers = async () => {
     try {
         const response = await authFetch(`${API_URL}/users`);
@@ -412,17 +450,13 @@ const PricingApp = () => {
       } catch (error) { showNotification(`Error loading rate carts: ${error.message}`, 'error'); }
   };
 
-  // --- Unified Dashboard Fetch ---
   const fetchCombinedDashboard = async (monthToFetch, branchToFetch = '', toLocToFetch = '') => {
     setIsDashboardLoading(true);
     try {
       let url = `${API_URL}/dashboard/combined?target_month=${encodeURIComponent(monthToFetch)}`;
-      if (branchToFetch) {
-          url += `&branch=${encodeURIComponent(branchToFetch)}`;
-      }
-      if (toLocToFetch) {
-          url += `&to_loc=${encodeURIComponent(toLocToFetch)}`;
-      }
+      if (branchToFetch) url += `&branch=${encodeURIComponent(branchToFetch)}`;
+      if (toLocToFetch) url += `&to_loc=${encodeURIComponent(toLocToFetch)}`;
+      
       const response = await authFetch(url);
       if (response.ok) {
         const result = await response.json();
@@ -482,11 +516,9 @@ const PricingApp = () => {
               setDailyTownshipReportData(data.township_report || []);
               showNotification(`Report loaded for ${data.target_date}`, 'success');
 
-              // NEW: Populate the empty date box with the date generated by your backend
               if (!useRange && !targetDateVal && data.target_date) {
                   setDailyReportDate(data.target_date);
               }
-
           } else {
               const error = await response.json();
               showNotification(getErrorMessage(error), 'error');
@@ -495,7 +527,6 @@ const PricingApp = () => {
       finally { setIsDailyReportLoading(false); }
   };
 
-  // --- Activity Logs Fetch Function ---
   const fetchActivityLogs = async (page = 0) => {
     setIsActivityLogsLoading(true);
     try {
@@ -720,15 +751,22 @@ const PricingApp = () => {
   }, [selectedGateForPricing, token]);
 
   useEffect(() => {
-    if (token && currentPage === 'history' && permissions.includes('view_history')) loadHistory();
+    if (token && currentPage === 'history' && permissions.includes('view_history')) {
+        loadHistory();
+    }
     if (token && currentPage === 'users' && permissions.includes('view_users')) { loadUsers(); loadRoles(); }
     if (token && currentPage === 'roles' && permissions.includes('view_roles')) loadRoles();
     if (token && currentPage === 'references' && permissions.includes('view_references')) loadReferenceData();
     if (token && currentPage === 'rate_carts' && permissions.includes('view_rate_carts')) { loadRateCarts(); loadReferenceData(); }
-    if (token && currentPage === 'daily_report' && permissions.includes('view_daily_report')) { fetchDailyReport(dailyReportDate, dailyReportStartDate, dailyReportEndDate, isDateRange); }
+    if (token && currentPage === 'daily_report' && permissions.includes('view_daily_report')) { 
+        fetchDailyReport(dailyReportDate, dailyReportStartDate, dailyReportEndDate, isDateRange); 
+        if(activeDailyTab === 'submitted' && submittedAllocationData.length === 0) {
+            fetchSubmittedAllocation();
+        }
+    }
     if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc); }
     if (token && currentPage === 'activity_logs' && permissions.includes('view_activity_logs')) { fetchActivityLogs(0); }
-  }, [currentPage, token, permissions]); 
+  }, [currentPage, token, permissions, activeDailyTab]); 
 
   useEffect(() => {
     const checkManualCostStatus = async () => {
@@ -1288,7 +1326,6 @@ const PricingApp = () => {
   // --- Views ---
   if (!token) return <LoginScreen onLogin={handleLogin} />;
 
-  // --- NEW VIEW: Activity Logs ---
   if (currentPage === 'activity_logs' && permissions.includes('view_activity_logs')) {
     const totalPages = Math.ceil(activityLogsTotal / ACTIVITY_LOGS_LIMIT);
 
@@ -1343,7 +1380,6 @@ const PricingApp = () => {
                         </table>
                     </div>
 
-                    {/* Server-Side Pagination Controls */}
                     {totalPages > 0 && (
                         <div className="flex items-center justify-between mt-6 bg-gray-50 p-4 rounded-lg border">
                             <p className="text-sm text-gray-600 font-medium">
@@ -1375,7 +1411,6 @@ const PricingApp = () => {
 
   if (currentPage === 'dashboard' && permissions.includes('view_dashboard')) {
     
-    // Theme configurations
     const allocTheme = { 
         bg: 'bg-blue-50', 
         border: 'border-blue-200', 
@@ -1408,7 +1443,6 @@ const PricingApp = () => {
           
           <div className="bg-white rounded-lg shadow-md p-6">
             
-            {/* Header Controls */}
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 pb-4 border-b">
               <h1 className="text-3xl font-bold text-gray-800">Logistic Cost Dashboard</h1>
               <div className="flex flex-wrap items-center gap-2 mt-4 md:mt-0">
@@ -1431,12 +1465,8 @@ const PricingApp = () => {
               </div>
             </div>
 
-            {/* Brand & Branch Selectors */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 border-b pb-6">
-                
-                {/* --- Rate Cart (Allocation) Selectors --- */}
                 <div className={`flex flex-col gap-4 ${allocTheme.bg} p-4 rounded-lg border ${allocTheme.border} h-full`}>
-                    {/* Branch Filter */}
                     <div className="flex flex-col gap-1">
                         <label className={`text-sm font-semibold ${allocTheme.text}`}>Branch Filter:</label>
                         <select
@@ -1454,7 +1484,6 @@ const PricingApp = () => {
                         </select>
                     </div>
 
-                    {/* Brand Filter */}
                     {allocationData.length > 0 ? (
                         <div className="flex flex-col gap-1 border-t border-blue-200 pt-3">
                             <label className={`text-sm font-semibold ${allocTheme.text}`}>Brand (Rate Cart):</label>
@@ -1475,10 +1504,7 @@ const PricingApp = () => {
                     )}
                 </div>
 
-                {/* --- Third Party (Calculated) Selectors --- */}
                 <div className={`flex flex-col gap-4 ${calcTheme.bg} p-4 rounded-lg border ${calcTheme.border} h-full`}>
-                    
-                    {/* To Location Filter */}
                     <div className="flex flex-col gap-1">
                         <label className={`text-sm font-semibold ${calcTheme.text}`}>To Location Filter:</label>
                         <select
@@ -1496,7 +1522,6 @@ const PricingApp = () => {
                         </select>
                     </div>
 
-                    {/* Brand Filter */}
                     {calculatedData.length > 0 ? (
                         <div className="flex flex-col gap-1 border-t border-green-200 pt-3">
                             <label className={`text-sm font-semibold ${calcTheme.text}`}>Brand (Third Party):</label>
@@ -1519,7 +1544,6 @@ const PricingApp = () => {
 
             </div>
 
-            {/* --- SECTION 1: Allocation 3-Month Summary --- */}
             <div className="mb-10">
               <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Allocation: 3-Month Summary (Rate Cart)</h2>
               <div className="overflow-x-auto border rounded-lg shadow-sm">
@@ -1571,7 +1595,6 @@ const PricingApp = () => {
               </div>
             </div>
 
-            {/* --- SECTION 2: Calculated 3-Month Summary --- */}
             <div className="mb-10">
               <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Allocation: 3-Month Summary (Third Party)</h2>
               <div className="overflow-x-auto border rounded-lg shadow-sm">
@@ -1623,10 +1646,7 @@ const PricingApp = () => {
               </div>
             </div>
 
-            {/* --- TREND ANALYSIS SECTION (Side-by-Side) --- */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
-              
-              {/* --- SECTION 3: Allocation 12-Month Trend --- */}
               <div>
                 <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Allocation: 12-Month Trend Analysis (Rate Cart)</h2>
                 {isDashboardLoading ? (
@@ -1661,25 +1681,22 @@ const PricingApp = () => {
 
                                           return (
                                               <div key={tIdx} className="relative flex flex-col items-center group w-full h-full justify-end cursor-pointer">
-                                                  {/* Tooltip */}
                                                   <div className="absolute bottom-full mb-3 hidden group-hover:block z-50 bg-gray-800 text-white p-3 rounded-lg shadow-xl whitespace-nowrap min-w-[140px] text-center border border-gray-600">
                                                       <div className="font-bold text-sm border-b border-gray-600 pb-1 mb-2">{tData.month}</div>
                                                       <div className="text-blue-300 font-bold mb-1">Avg: {formatNumber(tData.avg_cost)} MMK</div>
                                                       <div className="text-gray-300 text-xs mt-2">Total Cost: {formatNumber(tData.total_cost)}</div>
                                                       <div className="text-gray-300 text-xs">Total Ctns: {formatNumber(tData.total_ctns)}</div>
                                                   </div>
-                                                  {/* Bar Segment */}
                                                   <div 
                                                       className={`w-full max-w-[60px] rounded-t-md transition-all duration-300 ${isCurrentMonth ? allocTheme.barCurrent : allocTheme.barOther}`}
                                                       style={{ height: `${Math.max(heightPct, 5)}%`, minHeight: '6px' }}
                                                   ></div>
-                                                  {/* X-axis label */}
                                                   <span className="text-xs sm:text-sm font-medium text-gray-500 absolute -bottom-8 w-full text-center truncate">{monthAbbr}</span>
                                               </div>
                                           );
                                       })}
                                   </div>
-                                  <div className="h-10"></div> {/* Spacer for x-axis labels */}
+                                  <div className="h-10"></div>
                               </div>
                           );
                       })()}
@@ -1687,7 +1704,6 @@ const PricingApp = () => {
                 )}
               </div>
 
-              {/* --- SECTION 4: Calculated 12-Month Trend --- */}
               <div>
                 <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Allocation: 12-Month Trend Analysis (Third Party)</h2>
                 {isDashboardLoading ? (
@@ -1722,25 +1738,22 @@ const PricingApp = () => {
 
                                           return (
                                               <div key={tIdx} className="relative flex flex-col items-center group w-full h-full justify-end cursor-pointer">
-                                                  {/* Tooltip */}
                                                   <div className="absolute bottom-full mb-3 hidden group-hover:block z-50 bg-gray-800 text-white p-3 rounded-lg shadow-xl whitespace-nowrap min-w-[140px] text-center border border-gray-600">
                                                       <div className="font-bold text-sm border-b border-gray-600 pb-1 mb-2">{tData.month}</div>
                                                       <div className="text-green-300 font-bold mb-1">Avg: {formatNumber(tData.avg_cost)} MMK</div>
                                                       <div className="text-gray-300 text-xs mt-2">Total Cost: {formatNumber(tData.total_cost)}</div>
                                                       <div className="text-gray-300 text-xs">Total Ctns: {formatNumber(tData.total_ctns)}</div>
                                                   </div>
-                                                  {/* Bar Segment */}
                                                   <div 
                                                       className={`w-full max-w-[60px] rounded-t-md transition-all duration-300 ${isCurrentMonth ? calcTheme.barCurrent : calcTheme.barOther}`}
                                                       style={{ height: `${Math.max(heightPct, 5)}%`, minHeight: '6px' }}
                                                   ></div>
-                                                  {/* X-axis label */}
                                                   <span className="text-xs sm:text-sm font-medium text-gray-500 absolute -bottom-8 w-full text-center truncate">{monthAbbr}</span>
                                               </div>
                                           );
                                       })}
                                   </div>
-                                  <div className="h-10"></div> {/* Spacer for x-axis labels */}
+                                  <div className="h-10"></div>
                               </div>
                           );
                       })()}
@@ -1885,8 +1898,27 @@ const PricingApp = () => {
         return matchBranch && matchDriver && matchTownship && matchCustomer && matchContactPerson && matchCtns && matchDriverTotal && matchBranchCost && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
       });
 
+      // Filter Logic for Submitted Allocation Tab
+      const filteredAllocation = submittedAllocationData.filter(row => {
+          const matchCalcId = String(row.calc_id || '').toLowerCase().includes(allocationFilters.calc_id.toLowerCase());
+          const matchSinNo = (row.sin_no || '').toLowerCase().includes(allocationFilters.sin_no.toLowerCase());
+          const matchGateName = (row.gate_name || '').toLowerCase().includes(allocationFilters.gate_name.toLowerCase());
+          const matchRoute = ((row.from_loc || '') + ' ' + (row.to_loc || '')).toLowerCase().includes(allocationFilters.route.toLowerCase());
+          const matchBu = (row.bu || '').toLowerCase().includes(allocationFilters.bu.toLowerCase());
+          const matchItemCode = (row.item_code || '').toLowerCase().includes(allocationFilters.item_code.toLowerCase());
+          const matchItemName = (row.item_name || '').toLowerCase().includes(allocationFilters.item_name.toLowerCase());
+          const matchPrincipal = (row.principal || '').toLowerCase().includes(allocationFilters.principal.toLowerCase());
+          const matchBrand = (row.brand || '').toLowerCase().includes(allocationFilters.brand.toLowerCase());
+          const matchCtns = String(row.ctns || '').toLowerCase().includes(allocationFilters.ctns.toLowerCase());
+          const matchUnitCost = String(row.unit_cost || '').toLowerCase().includes(allocationFilters.unit_cost.toLowerCase());
+          const matchTotalCost = String(row.total_cost || '').toLowerCase().includes(allocationFilters.total_cost.toLowerCase());
+
+          return matchCalcId && matchSinNo && matchGateName && matchRoute && matchBu && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchCtns && matchUnitCost && matchTotalCost;
+      });
+
       const displayedDailyItem = filteredDailyReportData.slice(0, visibleCounts.dailyItem);
       const displayedDailyTownship = filteredTownshipReportData.slice(0, visibleCounts.dailyTownship);
+      const displayedAllocation = filteredAllocation.slice(0, visibleCounts.allocation);
 
       return (
           <div className="min-h-screen bg-gray-50 p-6">
@@ -1897,56 +1929,87 @@ const PricingApp = () => {
                       <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 border-b pb-4">
                           <h1 className="text-3xl font-bold text-gray-800">Daily Allocation Report</h1>
                           
-                          <div className="flex flex-col items-end gap-2">
-                              <label className="flex items-center gap-2 cursor-pointer mr-auto md:mr-0 text-sm font-semibold text-gray-700">
-                                  <input 
-                                      type="checkbox" 
-                                      checked={isDateRange} 
-                                      onChange={(e) => setIsDateRange(e.target.checked)} 
-                                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                                  />
-                                  Use Date Range
-                              </label>
-                              
-                              <div className="flex flex-wrap gap-4 items-center">
-                                  {!isDateRange ? (
+                          {activeDailyTab !== 'submitted' ? (
+                              <div className="flex flex-col items-end gap-2">
+                                  <label className="flex items-center gap-2 cursor-pointer mr-auto md:mr-0 text-sm font-semibold text-gray-700">
                                       <input 
-                                          type="date" 
-                                          value={dailyReportDate} 
-                                          onChange={(e) => setDailyReportDate(e.target.value)}
-                                          className="border p-2 rounded"
+                                          type="checkbox" 
+                                          checked={isDateRange} 
+                                          onChange={(e) => setIsDateRange(e.target.checked)} 
+                                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                                       />
-                                  ) : (
+                                      Use Date Range
+                                  </label>
+                                  
+                                  <div className="flex flex-wrap gap-4 items-center">
+                                      {!isDateRange ? (
+                                          <input 
+                                              type="date" 
+                                              value={dailyReportDate} 
+                                              onChange={(e) => setDailyReportDate(e.target.value)}
+                                              className="border p-2 rounded"
+                                          />
+                                      ) : (
+                                          <div className="flex items-center gap-2">
+                                              <input 
+                                                  type="date" 
+                                                  value={dailyReportStartDate} 
+                                                  onChange={(e) => setDailyReportStartDate(e.target.value)}
+                                                  className="border p-2 rounded"
+                                              />
+                                              <span className="text-gray-500 font-semibold text-sm">to</span>
+                                              <input 
+                                                  type="date" 
+                                                  value={dailyReportEndDate} 
+                                                  onChange={(e) => setDailyReportEndDate(e.target.value)}
+                                                  className="border p-2 rounded"
+                                              />
+                                          </div>
+                                      )}
+                                      
+                                      <button 
+                                          onClick={() => fetchDailyReport(dailyReportDate, dailyReportStartDate, dailyReportEndDate, isDateRange)} 
+                                          disabled={isDailyReportLoading} 
+                                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 font-semibold"
+                                      >
+                                          {isDailyReportLoading ? 'Loading...' : 'Fetch Report'}
+                                      </button>
+                                  </div>
+                              </div>
+                          ) : (
+                              <div className="flex flex-col items-end gap-2">
+                                  <div className="flex items-center gap-2 mr-auto md:mr-0 text-sm font-semibold text-gray-700 h-5">
+                                      Filter by Action Date
+                                  </div>
+                                  <div className="flex flex-wrap gap-4 items-center">
                                       <div className="flex items-center gap-2">
                                           <input 
                                               type="date" 
-                                              value={dailyReportStartDate} 
-                                              onChange={(e) => setDailyReportStartDate(e.target.value)}
+                                              value={allocationStartDate} 
+                                              onChange={(e) => setAllocationStartDate(e.target.value)}
                                               className="border p-2 rounded"
                                           />
                                           <span className="text-gray-500 font-semibold text-sm">to</span>
                                           <input 
                                               type="date" 
-                                              value={dailyReportEndDate} 
-                                              onChange={(e) => setDailyReportEndDate(e.target.value)}
+                                              value={allocationEndDate} 
+                                              onChange={(e) => setAllocationEndDate(e.target.value)}
                                               className="border p-2 rounded"
                                           />
                                       </div>
-                                  )}
-                                  
-                                  <button 
-                                      onClick={() => fetchDailyReport(dailyReportDate, dailyReportStartDate, dailyReportEndDate, isDateRange)} 
-                                      disabled={isDailyReportLoading} 
-                                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 font-semibold"
-                                  >
-                                      {isDailyReportLoading ? 'Loading...' : 'Fetch Report'}
-                                  </button>
+                                      <button 
+                                          onClick={() => fetchSubmittedAllocation(allocationStartDate, allocationEndDate)} 
+                                          disabled={isAllocationLoading} 
+                                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 font-semibold"
+                                      >
+                                          {isAllocationLoading ? 'Loading...' : 'Fetch Report'}
+                                      </button>
+                                  </div>
                               </div>
-                          </div>
+                          )}
                       </div>
 
-                      {/* --- TAB NAVIGATION --- */}
-                      <div className="flex border-b mb-6 border-gray-200">
+                      <div className="flex flex-wrap border-b mb-6 border-gray-200">
                           <button
                               className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${
                                   activeDailyTab === 'item' 
@@ -1967,9 +2030,18 @@ const PricingApp = () => {
                           >
                               Allocation by Township & Customer
                           </button>
+                          <button
+                              className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${
+                                  activeDailyTab === 'submitted' 
+                                      ? 'border-blue-600 text-blue-600 bg-blue-50' 
+                                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                              }`}
+                              onClick={() => setActiveDailyTab('submitted')}
+                          >
+                              Submitted Calculation Report
+                          </button>
                       </div>
 
-                      {/* --- ITEM LEVEL TABLE TAB CONTENT --- */}
                       {activeDailyTab === 'item' && (
                           <div className="animation-fade-in">
                               <div className="overflow-x-auto border rounded mb-4">
@@ -2065,7 +2137,6 @@ const PricingApp = () => {
                           </div>
                       )}
 
-                      {/* --- TOWNSHIP LEVEL TABLE TAB CONTENT --- */}
                       {activeDailyTab === 'township' && (
                           <div className="animation-fade-in">
                               <div className="overflow-x-auto border rounded mb-4">
@@ -2160,6 +2231,99 @@ const PricingApp = () => {
                               )}
                           </div>
                       )}
+
+                      {/* --- TAB: SUBMITTED ALLOCATION REPORT --- */}
+                      {activeDailyTab === 'submitted' && (
+                          <div className="animation-fade-in">
+                              <div className="overflow-x-auto border rounded mb-4">
+                                  <table className="w-full border-collapse">
+                                      <thead className="bg-gray-100 sticky top-0">
+                                          <tr>
+                                              <th className="border p-2 text-left">
+                                                  <div>Calc ID</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.calc_id} onChange={(e) => setAllocationFilters({...allocationFilters, calc_id: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>SIN No</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.sin_no} onChange={(e) => setAllocationFilters({...allocationFilters, sin_no: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Gate Name</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.gate_name} onChange={(e) => setAllocationFilters({...allocationFilters, gate_name: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Route (From &rarr; To)</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.route} onChange={(e) => setAllocationFilters({...allocationFilters, route: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>BU</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.bu} onChange={(e) => setAllocationFilters({...allocationFilters, bu: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Item Code</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.item_code} onChange={(e) => setAllocationFilters({...allocationFilters, item_code: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Item Name</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.item_name} onChange={(e) => setAllocationFilters({...allocationFilters, item_name: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Principal</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.principal} onChange={(e) => setAllocationFilters({...allocationFilters, principal: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Brand</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.brand} onChange={(e) => setAllocationFilters({...allocationFilters, brand: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right">
+                                                  <div>Cartons</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={allocationFilters.ctns} onChange={(e) => setAllocationFilters({...allocationFilters, ctns: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right text-purple-700">
+                                                  <div>Unit Cost</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={allocationFilters.unit_cost} onChange={(e) => setAllocationFilters({...allocationFilters, unit_cost: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-right text-blue-700">
+                                                  <div>Total Cost</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={allocationFilters.total_cost} onChange={(e) => setAllocationFilters({...allocationFilters, total_cost: e.target.value})} />
+                                              </th>
+                                          </tr>
+                                      </thead>
+                                      <tbody>
+                                          {isAllocationLoading ? (
+                                              <tr><td colSpan="12" className="text-center p-8 text-gray-500 font-medium">Loading allocation data...</td></tr>
+                                          ) : displayedAllocation.length === 0 ? (
+                                              <tr><td colSpan="12" className="text-center p-8 text-gray-500 italic">No allocation data found matching filters.</td></tr>
+                                          ) : (
+                                              displayedAllocation.map((row, idx) => (
+                                                  <tr key={idx} className="hover:bg-gray-50 text-sm">
+                                                      <td className="border p-2 whitespace-nowrap text-gray-600 font-bold">#{row.calc_id}</td>
+                                                      <td className="border p-2 font-semibold">{row.sin_no}</td>
+                                                      <td className="border p-2 text-gray-700">{row.gate_name}</td>
+                                                      <td className="border p-2 text-gray-500">{row.from_loc} &rarr; {row.to_loc}</td>
+                                                      <td className="border p-2 font-bold text-gray-700">{row.bu}</td>
+                                                      <td className="border p-2">{row.item_code}</td>
+                                                      <td className="border p-2 max-w-[200px] truncate" title={row.item_name}>{row.item_name}</td>
+                                                      <td className="border p-2">{row.principal}</td>
+                                                      <td className="border p-2">{row.brand}</td>
+                                                      <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
+                                                      <td className="border p-2 text-right text-purple-700 font-bold">{formatNumber(row.unit_cost)}</td>
+                                                      <td className="border p-2 text-right text-blue-700 font-bold">{formatNumber(row.total_cost)}</td>
+                                                  </tr>
+                                              ))
+                                          )}
+                                      </tbody>
+                                  </table>
+                              </div>
+                              {visibleCounts.allocation < filteredAllocation.length && (
+                                  <div className="flex justify-center mb-6">
+                                      <button onClick={() => loadMore('allocation')} className="px-6 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
+                                          Load More ({filteredAllocation.length - visibleCounts.allocation} remaining)
+                                      </button>
+                                  </div>
+                              )}
+                          </div>
+                      )}
                   </div>
               </div>
           </div>
@@ -2176,7 +2340,6 @@ const PricingApp = () => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                     
-                    {/* Gates Locations */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-blue-700">Gate Locations</h2>
                         {permissions.includes('add_reference') && (
@@ -2195,7 +2358,6 @@ const PricingApp = () => {
                         </div>
                     </div>
 
-                    {/* Rate Cart Locations */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-emerald-700">Rate Cart Locations</h2>
                         {permissions.includes('add_reference') && (
@@ -2214,7 +2376,6 @@ const PricingApp = () => {
                         </div>
                     </div>
 
-                    {/* Units of Measure */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-purple-700">Units of Measure</h2>
                         {permissions.includes('add_reference') && (
@@ -2233,7 +2394,6 @@ const PricingApp = () => {
                         </div>
                     </div>
 
-                    {/* Channels */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-orange-700">Channels</h2>
                         {permissions.includes('add_reference') && (
@@ -2263,18 +2423,14 @@ const PricingApp = () => {
     const canClaim = permissions.includes('claim_calculation');
     const canDeleteHistory = permissions.includes('delete_history');
 
+    // Filter Logic for List
     const filteredHistory = historyData.filter(record => {
       const matchIdStatus = (String(record.id) + ' ' + (record.status || '')).toLowerCase().includes(historyFilters.id_status.toLowerCase());
       const matchDate = (record.created_at || '').toLowerCase().includes(historyFilters.date.toLowerCase());
       const matchRoute = ((record.gate_name || '') + ' ' + (record.from_loc || '') + ' ' + (record.to_loc || '')).toLowerCase().includes(historyFilters.route.toLowerCase());
       const matchDocNums = (record.doc_nums ? record.doc_nums.join(', ') : '').toLowerCase().includes(historyFilters.doc_nums.toLowerCase());
       const matchTotalCost = (String(record.final_total_cost) || '').toLowerCase().includes(historyFilters.total_cost.toLowerCase());
-      const matchAuthor = [record.created_by, record.submitted_by, record.claimed_by]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes((historyFilters.author || '').toLowerCase());
-
+      const matchAuthor = [record.created_by, record.submitted_by, record.claimed_by].filter(Boolean).join(' ').toLowerCase().includes((historyFilters.author || '').toLowerCase());
       return matchIdStatus && matchDate && matchRoute && matchDocNums && matchTotalCost && matchAuthor;
     });
 
@@ -2286,52 +2442,59 @@ const PricingApp = () => {
           {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Calculation History</h1>
-            <div className="overflow-x-auto mb-4">
-              <table className="w-full border-collapse border">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="border p-2 text-left"><div>ID / Status</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.id_status} onChange={(e) => setHistoryFilters({...historyFilters, id_status: e.target.value})} /></th>
-                    <th className="border p-2 text-left"><div>Date</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.date} onChange={(e) => setHistoryFilters({...historyFilters, date: e.target.value})} /></th>
-                    <th className="border p-2 text-left"><div>Route</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.route} onChange={(e) => setHistoryFilters({...historyFilters, route: e.target.value})} /></th>
-                    <th className="border p-2 text-left"><div>Doc Nums</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.doc_nums} onChange={(e) => setHistoryFilters({...historyFilters, doc_nums: e.target.value})} /></th>
-                    <th className="border p-2 text-left"><div>Total Cost (MMK)</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.total_cost} onChange={(e) => setHistoryFilters({...historyFilters, total_cost: e.target.value})} /></th>
-                    <th className="border p-2 text-left"><div>Author</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.author} onChange={(e) => setHistoryFilters({...historyFilters, author: e.target.value})} /></th>
-                    <th className="border p-2 text-center align-top">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>{displayedHistory.length === 0 ? (<tr><td colSpan="7" className="text-center p-4 text-gray-500">No matching calculations found.</td></tr>) : (displayedHistory.map((record) => (
-                    <tr key={record.id} className="hover:bg-gray-50">
-                        <td className="border p-3"><span className="text-sm text-gray-600 font-bold block mb-1">#{record.id}</span><span className={`px-2 py-1 rounded text-xs font-bold uppercase ${record.status === 'claimed' ? 'bg-blue-100 text-blue-700' : record.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{record.status}</span></td>
-                        <td className="border p-3 text-sm text-gray-600"><div className="font-semibold">{record.created_at}</div></td>
-                        <td className="border p-3"><span className="font-bold text-gray-700">{record.gate_name}</span> <br/><span className="text-xs text-gray-500">{record.from_loc} &rarr; {record.to_loc}</span></td>
-                        <td className="border p-3 text-sm">{record.doc_nums.length} Doc(s): {record.doc_nums.join(', ')}</td>
-                        <td className="border p-3 text-right font-bold text-blue-600">{formatNumber(record.final_total_cost)}</td>
-                        <td className="border p-3 text-sm">
-                            <div className="mb-1"><span className="text-gray-500 text-xs">Saved:</span> <span className="font-semibold text-gray-800">{record.created_by || 'unknown'}</span></div>
-                            {record.submitted_by && <div className="mb-1"><span className="text-gray-500 text-xs">Submitted:</span> <span className="font-semibold text-blue-600">{record.submitted_by}</span></div>}
-                            {record.claimed_by && <div><span className="text-gray-500 text-xs">Claimed:</span> <span className="font-semibold text-green-600">{record.claimed_by}</span></div>}
-                        </td>
-                        <td className="border p-3 text-center">
-                            <div className="flex justify-center gap-2">
-                                <button onClick={() => handleDownloadHistoryExcel(record)} className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1"><FileDown size={16} /></button>
-                                <button onClick={() => loadSavedCalculation(record)} className="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm font-semibold">Load</button>
-                                {canSubmit && record.status === 'saved' && (<button onClick={() => handleSubmitHistory(record.id)} className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold flex items-center gap-1" title="Submit"><CheckCircle size={16} /> Submit</button>)}
-                                {canClaim && record.status === 'submitted' && (<button onClick={() => handleClaimHistory(record.id)} className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-semibold flex items-center gap-1" title="Claim"><CheckCircle size={16} /> Claim</button>)}
-                                {canDeleteHistory && (<button onClick={() => deleteHistory(record.id)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 size={18} /></button>)}
-                            </div>
-                        </td>
-                    </tr>)))}
-                </tbody>
-              </table>
+            
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 border-b pb-4">
+                <h1 className="text-3xl font-bold text-gray-800">Saved Calculations</h1>
             </div>
-            {visibleCounts.history < filteredHistory.length && (
-                <div className="flex justify-center mb-2">
-                    <button onClick={() => loadMore('history')} className="px-6 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
-                        Load More ({filteredHistory.length - visibleCounts.history} remaining)
-                    </button>
+
+            <div className="animation-fade-in">
+                <div className="overflow-x-auto mb-4">
+                <table className="w-full border-collapse border">
+                    <thead className="bg-gray-100">
+                    <tr>
+                        <th className="border p-2 text-left"><div>ID / Status</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.id_status} onChange={(e) => setHistoryFilters({...historyFilters, id_status: e.target.value})} /></th>
+                        <th className="border p-2 text-left"><div>Date</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.date} onChange={(e) => setHistoryFilters({...historyFilters, date: e.target.value})} /></th>
+                        <th className="border p-2 text-left"><div>Route</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.route} onChange={(e) => setHistoryFilters({...historyFilters, route: e.target.value})} /></th>
+                        <th className="border p-2 text-left"><div>Doc Nums</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.doc_nums} onChange={(e) => setHistoryFilters({...historyFilters, doc_nums: e.target.value})} /></th>
+                        <th className="border p-2 text-left"><div>Total Cost (MMK)</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.total_cost} onChange={(e) => setHistoryFilters({...historyFilters, total_cost: e.target.value})} /></th>
+                        <th className="border p-2 text-left"><div>Author</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={historyFilters.author} onChange={(e) => setHistoryFilters({...historyFilters, author: e.target.value})} /></th>
+                        <th className="border p-2 text-center align-top">Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody>{displayedHistory.length === 0 ? (<tr><td colSpan="7" className="text-center p-4 text-gray-500">No matching calculations found.</td></tr>) : (displayedHistory.map((record) => (
+                        <tr key={record.id} className="hover:bg-gray-50">
+                            <td className="border p-3"><span className="text-sm text-gray-600 font-bold block mb-1">#{record.id}</span><span className={`px-2 py-1 rounded text-xs font-bold uppercase ${record.status === 'claimed' ? 'bg-blue-100 text-blue-700' : record.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{record.status}</span></td>
+                            <td className="border p-3 text-sm text-gray-600"><div className="font-semibold">{record.created_at}</div></td>
+                            <td className="border p-3"><span className="font-bold text-gray-700">{record.gate_name}</span> <br/><span className="text-xs text-gray-500">{record.from_loc} &rarr; {record.to_loc}</span></td>
+                            <td className="border p-3 text-sm">{record.doc_nums.length} Doc(s): {record.doc_nums.join(', ')}</td>
+                            <td className="border p-3 text-right font-bold text-blue-600">{formatNumber(record.final_total_cost)}</td>
+                            <td className="border p-3 text-sm">
+                                <div className="mb-1"><span className="text-gray-500 text-xs">Saved:</span> <span className="font-semibold text-gray-800">{record.created_by || 'unknown'}</span></div>
+                                {record.submitted_by && <div className="mb-1"><span className="text-gray-500 text-xs">Submitted:</span> <span className="font-semibold text-blue-600">{record.submitted_by}</span></div>}
+                                {record.claimed_by && <div><span className="text-gray-500 text-xs">Claimed:</span> <span className="font-semibold text-green-600">{record.claimed_by}</span></div>}
+                            </td>
+                            <td className="border p-3 text-center">
+                                <div className="flex justify-center gap-2">
+                                    <button onClick={() => handleDownloadHistoryExcel(record)} className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1"><FileDown size={16} /></button>
+                                    <button onClick={() => loadSavedCalculation(record)} className="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm font-semibold">Load</button>
+                                    {canSubmit && record.status === 'saved' && (<button onClick={() => handleSubmitHistory(record.id)} className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold flex items-center gap-1" title="Submit"><CheckCircle size={16} /> Submit</button>)}
+                                    {canClaim && record.status === 'submitted' && (<button onClick={() => handleClaimHistory(record.id)} className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-semibold flex items-center gap-1" title="Claim"><CheckCircle size={16} /> Claim</button>)}
+                                    {canDeleteHistory && (<button onClick={() => deleteHistory(record.id)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 size={18} /></button>)}
+                                </div>
+                            </td>
+                        </tr>)))}
+                    </tbody>
+                </table>
                 </div>
-            )}
+                {visibleCounts.history < filteredHistory.length && (
+                    <div className="flex justify-center mb-2">
+                        <button onClick={() => loadMore('history')} className="px-6 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
+                            Load More ({filteredHistory.length - visibleCounts.history} remaining)
+                        </button>
+                    </div>
+                )}
+            </div>
+            
           </div>
         </div>
       </div>

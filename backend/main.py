@@ -2576,6 +2576,124 @@ def get_products_by_doc_num(doc_num: str):
         conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    
+    
+# --- Submitted Calculation Allocation Report Endpoints ---
+
+@app.get("/account/submitted-allocation-report")
+def get_submitted_allocation_report(
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    user: dict = Depends(require_permission("view_daily_report"))
+):
+    """
+    Fetches and flattens calculated products from submitted or claimed calculation histories
+    to generate a comprehensive allocation report.
+    """
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+
+        # Query to fetch all submitted/claimed calculations
+        query = """
+            SELECT 
+                id, 
+                COALESCE(created_at, submitted_at) as action_date, 
+                gate_name, 
+                from_loc, 
+                to_loc, 
+                channel, 
+                calculated_products 
+            FROM Calculation_History 
+            WHERE status IN ('submitted', 'claimed')
+        """
+        params = []
+
+        # Apply date filters if provided
+        if start_date and end_date:
+            try:
+                # Validate date format implicitly
+                datetime.datetime.strptime(start_date, "%Y-%m-%d")
+                datetime.datetime.strptime(end_date, "%Y-%m-%d")
+                
+                query += " AND SUBSTR(COALESCE(submitted_at, created_at), 1, 10) BETWEEN ? AND ?"
+                params.extend([start_date, end_date])
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        
+        query += " ORDER BY action_date DESC"
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        conn.close()
+
+        allocation_data = []
+
+        # Flatten the calculated_products JSON into a tabular format
+        for row in rows:
+            calc_id = row[0]
+            action_date = row[1]
+            gate_name = row[2]
+            from_loc = row[3]
+            to_loc = row[4]
+            channel = row[5]
+            products_json = row[6]
+
+            if not products_json:
+                continue
+            
+            try:
+                products = json.loads(products_json)
+            except Exception as e:
+                logger.error(f"Failed to parse calculated_products for ID {calc_id}: {str(e)}")
+                continue
+            
+            for p in products:
+                ctns = float(p.get("ctns", 0) or 0)
+                cost = float(p.get("total_cost", 0) or 0)
+                weight = float(p.get("weight", 0) or 0)
+                
+                # Skip items with no cost or cartons to keep the report clean
+                if ctns <= 0 and cost <= 0:
+                    continue 
+                    
+                allocation_data.append({
+                    "calc_id": calc_id,
+                    "action_date": action_date,
+                    "doc_date": p.get("doc_date", ""),
+                    "sin_no": p.get("sin_no", ""),
+                    "gate_name": gate_name,
+                    "from_loc": from_loc,
+                    "to_loc": to_loc,
+                    "channel": channel,
+                    "bu": p.get("bu", ""),
+                    "item_code": p.get("code", ""),
+                    "item_name": p.get("name", ""),
+                    "principal": p.get("principal", ""),
+                    "brand": p.get("brand", ""),
+                    "b_code": p.get("b_code", ""),
+                    "b_name": p.get("b_name", ""),
+                    "b_desc": p.get("b_desc", ""),
+                    "s_dept": p.get("s_dept", ""),
+                    "s_principal": p.get("s_principal", ""),
+                    "ctns": ctns,
+                    "weight": weight,
+                    "total_cost": cost,
+                    "unit_cost": p.get("unit_cost", 0),
+                    "calculation_type": p.get("calculation_type", "")
+                })
+
+        return {
+            "status": "success", 
+            "total_records": len(allocation_data),
+            "data": allocation_data
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating submitted allocation report: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating submitted allocation report: {str(e)}")
 
 # --- Dashboard Helper Functions ---
 
