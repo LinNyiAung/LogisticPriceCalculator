@@ -33,7 +33,7 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'edit_rate_cart', label: 'Edit Rate Cart' },
   { id: 'delete_rate_cart', label: 'Delete Rate Cart' },
   { id: 'view_daily_report', label: 'View Daily Report' },
-  { id: 'view_activity_logs', label: 'View Activity Logs' } // NEW: Added Activity Logs Permission
+  { id: 'view_activity_logs', label: 'View Activity Logs' }
 ];
 
 // --- Login Component ---
@@ -109,6 +109,8 @@ const PricingApp = () => {
   };
   
   const [dashboardMonth, setDashboardMonth] = useState(getCurrentMonthString());
+  const [dashboardBranch, setDashboardBranch] = useState('');
+  const [dashboardBranches, setDashboardBranches] = useState([]);
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
   const [allocationData, setAllocationData] = useState([]);
   const [calculatedData, setCalculatedData] = useState([]);
@@ -217,7 +219,7 @@ const PricingApp = () => {
   // Change Password State
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
 
-  // --- NEW: System Activity Logs State ---
+  // System Activity Logs State
   const [activityLogsData, setActivityLogsData] = useState([]);
   const [activityLogsTotal, setActivityLogsTotal] = useState(0);
   const [activityLogsPage, setActivityLogsPage] = useState(0);
@@ -392,29 +394,38 @@ const PricingApp = () => {
   };
 
   // --- Unified Dashboard Fetch ---
-  const fetchCombinedDashboard = async (monthToFetch) => {
+  const fetchCombinedDashboard = async (monthToFetch, branchToFetch = '') => {
     setIsDashboardLoading(true);
     try {
-      const response = await authFetch(`${API_URL}/dashboard/combined?target_month=${encodeURIComponent(monthToFetch)}`);
+      let url = `${API_URL}/dashboard/combined?target_month=${encodeURIComponent(monthToFetch)}`;
+      if (branchToFetch) {
+          url += `&branch=${encodeURIComponent(branchToFetch)}`;
+      }
+      const response = await authFetch(url);
       if (response.ok) {
         const result = await response.json();
         
         setAllocationData(result.allocation_data || []);
         setCalculatedData(result.calculated_data || []);
+        setDashboardBranches(result.available_branches || []);
         
-        // Auto-select first brand for allocation
-        if (result.allocation_data && result.allocation_data.length > 0) {
-            setSelectedAllocBrand(result.allocation_data[0].brand);
-        } else {
-            setSelectedAllocBrand('');
-        }
+        // Smart sync for Allocation Brand: Keep current brand if it exists in new data, else default to first
+        setSelectedAllocBrand(currentBrand => {
+            if (result.allocation_data && result.allocation_data.length > 0) {
+                const brandExists = result.allocation_data.some(d => d.brand === currentBrand);
+                return brandExists ? currentBrand : result.allocation_data[0].brand;
+            }
+            return '';
+        });
         
-        // Auto-select first brand for calculated
-        if (result.calculated_data && result.calculated_data.length > 0) {
-            setSelectedCalcBrand(result.calculated_data[0].brand);
-        } else {
-            setSelectedCalcBrand('');
-        }
+        // Smart sync for Calculated Brand: Keep current brand if it exists in new data, else default to first
+        setSelectedCalcBrand(currentBrand => {
+            if (result.calculated_data && result.calculated_data.length > 0) {
+                const brandExists = result.calculated_data.some(d => d.brand === currentBrand);
+                return brandExists ? currentBrand : result.calculated_data[0].brand;
+            }
+            return '';
+        });
 
       } else {
         const error = await response.json();
@@ -447,7 +458,7 @@ const PricingApp = () => {
       finally { setIsDailyReportLoading(false); }
   };
 
-  // --- NEW: Activity Logs Fetch Function ---
+  // --- Activity Logs Fetch Function ---
 const fetchActivityLogs = async (page = 0) => {
     setIsActivityLogsLoading(true);
     try {
@@ -678,7 +689,7 @@ const fetchActivityLogs = async (page = 0) => {
     if (token && currentPage === 'references' && permissions.includes('view_references')) loadReferenceData();
     if (token && currentPage === 'rate_carts' && permissions.includes('view_rate_carts')) { loadRateCarts(); loadReferenceData(); }
     if (token && currentPage === 'daily_report' && permissions.includes('view_daily_report')) { fetchDailyReport(dailyReportDate); }
-    if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { fetchCombinedDashboard(dashboardMonth); }
+    if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { fetchCombinedDashboard(dashboardMonth, dashboardBranch); }
     if (token && currentPage === 'activity_logs' && permissions.includes('view_activity_logs')) { fetchActivityLogs(0); }
   }, [currentPage, token, permissions]); 
 
@@ -1252,8 +1263,6 @@ const fetchActivityLogs = async (page = 0) => {
                 <div className="bg-white rounded-lg shadow-md p-6">
                     <h1 className="text-3xl font-bold text-gray-800 mb-6">System Activity Logs</h1>
 
-                    
-
                     <div className="overflow-x-auto border rounded mb-4">
                         <table className="w-full border-collapse">
                             <thead className="bg-gray-100">
@@ -1365,61 +1374,92 @@ const fetchActivityLogs = async (page = 0) => {
             {/* Header Controls */}
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 pb-4 border-b">
               <h1 className="text-3xl font-bold text-gray-800">Logistic Cost Dashboard</h1>
-              <div className="flex items-center gap-2 mt-4 md:mt-0">
+              <div className="flex flex-wrap items-center gap-2 mt-4 md:mt-0">
                   <input 
                       type="month"
                       value={dashboardMonth}
                       onChange={(e) => {
                           setDashboardMonth(e.target.value);
-                          fetchCombinedDashboard(e.target.value);
+                          fetchCombinedDashboard(e.target.value, dashboardBranch);
                       }}
-                      className="border p-2 rounded-lg"
+                      className="border p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <button 
-                      onClick={() => fetchCombinedDashboard(dashboardMonth)} 
+                      onClick={() => fetchCombinedDashboard(dashboardMonth, dashboardBranch)} 
                       disabled={isDashboardLoading} 
-                      className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition disabled:bg-gray-400 bg-blue-600 hover:bg-blue-700`}
+                      className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition disabled:bg-gray-400 bg-blue-600 hover:bg-blue-700 font-semibold`}
                   >
                   {isDashboardLoading ? 'Refreshing...' : 'Refresh'}
                   </button>
               </div>
             </div>
 
-            {/* Brand Selectors */}
+            {/* Brand & Branch Selectors */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 border-b pb-6">
-                <div>
-                    {!isDashboardLoading && allocationData.length > 0 && (
-                        <div className={`flex flex-col gap-1 ${allocTheme.bg} p-3 rounded-lg border ${allocTheme.border}`}>
+                
+                {/* --- Rate Cart (Allocation) Selectors --- */}
+                <div className={`flex flex-col gap-4 ${allocTheme.bg} p-4 rounded-lg border ${allocTheme.border} h-full`}>
+                    {/* Branch Filter */}
+                    <div className="flex flex-col gap-1">
+                        <label className={`text-sm font-semibold ${allocTheme.text}`}>Branch Filter:</label>
+                        <select
+                            value={dashboardBranch}
+                            onChange={(e) => {
+                                setDashboardBranch(e.target.value);
+                                fetchCombinedDashboard(dashboardMonth, e.target.value);
+                            }}
+                            className={`p-2 bg-white/80 border ${allocTheme.border} rounded focus:outline-none ${allocTheme.selectText} cursor-pointer text-sm w-full md:w-2/3`}
+                        >
+                            <option value="">All Branches</option>
+                            {dashboardBranches.map(b => (
+                                <option key={b} value={b}>{b}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Brand Filter */}
+                    {allocationData.length > 0 ? (
+                        <div className="flex flex-col gap-1 border-t border-blue-200 pt-3">
                             <label className={`text-sm font-semibold ${allocTheme.text}`}>Brand (Rate Cart):</label>
                             <select
                                 value={selectedAllocBrand}
                                 onChange={(e) => setSelectedAllocBrand(e.target.value)}
-                                className={`p-1 bg-transparent focus:outline-none font-bold ${allocTheme.selectText} cursor-pointer text-lg`}
+                                className={`p-1 bg-transparent focus:outline-none font-bold ${allocTheme.selectText} cursor-pointer text-xl`}
                             >
                                 {allocationData.map(r => (
                                     <option key={r.brand} value={r.brand}>{r.brand}</option>
                                 ))}
                             </select>
                         </div>
+                    ) : (
+                        <div className={`text-sm italic mt-2 border-t border-blue-200 pt-3 ${allocTheme.text}`}>
+                            No allocation data for selected branch/month.
+                        </div>
                     )}
                 </div>
 
-                <div>
-                    {!isDashboardLoading && calculatedData.length > 0 && (
-                        <div className={`flex flex-col gap-1 ${calcTheme.bg} p-3 rounded-lg border ${calcTheme.border}`}>
+                {/* --- Third Party (Calculated) Selectors --- */}
+                <div className={`flex flex-col justify-end gap-1 ${calcTheme.bg} p-4 rounded-lg border ${calcTheme.border} h-full`}>
+                    {calculatedData.length > 0 ? (
+                        <div className="flex flex-col gap-1">
                             <label className={`text-sm font-semibold ${calcTheme.text}`}>Brand (Third Party):</label>
                             <select
                                 value={selectedCalcBrand}
                                 onChange={(e) => setSelectedCalcBrand(e.target.value)}
-                                className={`p-1 bg-transparent focus:outline-none font-bold ${calcTheme.selectText} cursor-pointer text-lg`}
+                                className={`p-1 bg-transparent focus:outline-none font-bold ${calcTheme.selectText} cursor-pointer text-xl`}
                             >
                                 {calculatedData.map(r => (
                                     <option key={r.brand} value={r.brand}>{r.brand}</option>
                                 ))}
                             </select>
                         </div>
+                    ) : (
+                        <div className={`text-sm italic mt-2 ${calcTheme.text}`}>
+                            No third-party data for selected month.
+                        </div>
                     )}
                 </div>
+
             </div>
 
             {/* --- SECTION 1: Allocation 3-Month Summary --- */}

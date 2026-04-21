@@ -2484,7 +2484,7 @@ def get_products_by_doc_num(doc_num: str):
 
 # --- Dashboard Helper Functions ---
 
-def _generate_allocation_data(target_month: str):
+def _generate_allocation_data(target_month: str, target_branch: Optional[str] = None):
     try:
         year, month = map(int, target_month.split('-'))
     except ValueError:
@@ -2520,6 +2520,7 @@ def _generate_allocation_data(target_month: str):
     conn.close()
 
     brands_data = {}
+    available_branches = set()
 
     for row in rows:
         target_date_str = row[0]
@@ -2535,6 +2536,14 @@ def _generate_allocation_data(target_month: str):
             
         for item in report_items:
             brand = item.get("brand", "").strip() or "UNKNOWN"
+            branch = item.get("branch", "").strip() or "UNKNOWN"
+            
+            # Collect unique branches for the frontend dropdown
+            available_branches.add(branch)
+            
+            # Apply branch filter if provided
+            if target_branch and target_branch.strip().lower() != branch.lower():
+                continue
             
             try:
                 ctns = float(item.get("ctns", 0) or 0)
@@ -2587,7 +2596,9 @@ def _generate_allocation_data(target_month: str):
         dashboard_results.append(result)
 
     dashboard_results.sort(key=lambda x: x["month_0_total_ctns"], reverse=True)
-    return dashboard_results, month0_label
+    
+    # Return the branches as well
+    return dashboard_results, month0_label, sorted(list(available_branches))
 
 
 def _generate_calculated_data(target_month: str):
@@ -2704,12 +2715,21 @@ def _generate_calculated_data(target_month: str):
 # --- Dashboard Endpoints ---
 
 @app.get("/dashboard/brand-allocation-cost")
-def get_brand_allocation_cost_dashboard(target_month: Optional[str] = None, user: dict = Depends(get_current_user)):
+def get_brand_allocation_cost_dashboard(
+    target_month: Optional[str] = None, 
+    branch: Optional[str] = Query(None, description="Filter by Branch"),
+    user: dict = Depends(get_current_user)
+):
     if not target_month:
         target_month = datetime.datetime.now().strftime("%Y-%m")
     try:
-        results, month = _generate_allocation_data(target_month)
-        return {"status": "success", "target_month": month, "data": results}
+        results, month, available_branches = _generate_allocation_data(target_month, target_branch=branch)
+        return {
+            "status": "success", 
+            "target_month": month, 
+            "data": results,
+            "available_branches": available_branches
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating dashboard data: {str(e)}")
     
@@ -2726,19 +2746,24 @@ def get_calculated_brand_cost_dashboard(target_month: Optional[str] = None, user
 
 
 @app.get("/dashboard/combined")
-def get_combined_dashboard(target_month: Optional[str] = None, user: dict = Depends(require_permission("view_dashboard"))):
+def get_combined_dashboard(
+    target_month: Optional[str] = None, 
+    branch: Optional[str] = Query(None, description="Filter by Branch"),
+    user: dict = Depends(require_permission("view_dashboard"))
+):
     if not target_month:
         target_month = datetime.datetime.now().strftime("%Y-%m")
         
     try:
-        alloc_data, month = _generate_allocation_data(target_month)
+        alloc_data, month, available_branches = _generate_allocation_data(target_month, target_branch=branch)
         calc_data, _ = _generate_calculated_data(target_month)
         
         return {
             "status": "success",
             "target_month": month,
             "allocation_data": alloc_data,
-            "calculated_data": calc_data
+            "calculated_data": calc_data,
+            "available_branches": available_branches
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating combined dashboard data: {str(e)}")
