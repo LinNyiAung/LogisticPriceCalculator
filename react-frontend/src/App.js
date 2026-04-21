@@ -1978,9 +1978,6 @@ const PricingApp = () => {
                               </div>
                           ) : (
                               <div className="flex flex-col items-end gap-2">
-                                  <div className="flex items-center gap-2 mr-auto md:mr-0 text-sm font-semibold text-gray-700 h-5">
-                                      Filter by Action Date
-                                  </div>
                                   <div className="flex flex-wrap gap-4 items-center">
                                       <div className="flex items-center gap-2">
                                           <input 
