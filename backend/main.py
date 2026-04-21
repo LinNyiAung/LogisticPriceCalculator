@@ -255,6 +255,7 @@ def startup_db():
         if cursor.fetchone()[0] == 0:
             default_roles = [
                 ('admin', json.dumps([
+                    'view_calculator', 'view_history',
                     'view_users', 'add_user', 'edit_user', 'delete_user',
                     'view_roles', 'add_role', 'edit_role', 'delete_role',
                     'view_gates', 'add_gate', 'edit_gate', 'delete_gate',
@@ -262,15 +263,16 @@ def startup_db():
                     'view_references', 'add_reference', 'delete_reference',
                     'view_all_history', 'delete_history', 'claim_calculation', 'submit_calculation',
                     'view_rate_carts', 'add_rate_cart', 'edit_rate_cart', 'delete_rate_cart',
-                    'view_daily_report', 'view_dashboard', 'view_activity_logs' # Added view_activity_logs
+                    'view_daily_report', 'view_dashboard', 'view_activity_logs' 
                 ])),
                 ('account', json.dumps([
+                    'view_calculator', 'view_history',
                     'view_gates', 'add_gate', 'edit_gate', 
                     'view_items', 'add_item', 'edit_item', 
                     'view_references', 'add_reference', 'delete_reference',
                     'claim_calculation', 'view_rate_carts', 'add_rate_cart', 'edit_rate_cart'
                 ])),
-                ('logistic', json.dumps(['submit_calculation', 'view_gates', 'view_items', 'view_references', 'view_rate_carts']))
+                ('logistic', json.dumps(['view_calculator', 'view_history', 'submit_calculation', 'view_gates', 'view_items', 'view_references', 'view_rate_carts']))
             ]
             cursor.executemany("INSERT INTO Roles (name, permissions) VALUES (?, ?)", default_roles)
 
@@ -382,23 +384,6 @@ def get_logistic_connection():
     conn = sqlite3.connect(db_path)
     return conn
 
-# --- Helper: Activity Logger ---
-def log_user_activity(username: str, action: str, details: str = ""):
-    """Inserts a new record into the User_Activity_Log table."""
-    try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute(
-            "INSERT INTO User_Activity_Log (username, action, details, timestamp) VALUES (?, ?, ?, ?)",
-            (username, action, details, now_str)
-        )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logger.error(f"Failed to log user activity: {str(e)}")
-        
-        
 # --- Helper: Activity Logger ---
 def log_user_activity(username: str, action: str, details: str = ""):
     """Inserts a new record into the User_Activity_Log table."""
@@ -1685,7 +1670,7 @@ def claim_history_item(record_id: int, user: dict = Depends(require_permission("
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error claiming record: {str(e)}")
 
 @app.get("/history/{record_id}")
-def get_history_record(record_id: int, user: dict = Depends(get_current_user)):
+def get_history_record(record_id: int, user: dict = Depends(require_permission("view_history"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -1704,7 +1689,7 @@ def get_history_record(record_id: int, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/history")
-def get_history(user: dict = Depends(get_current_user)):
+def get_history(user: dict = Depends(require_permission("view_history"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -1753,7 +1738,7 @@ def delete_history_item(record_id: int, user: dict = Depends(require_permission(
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting record: {str(e)}")
 
 @app.get("/history/{record_id}/download")
-def download_history_excel(record_id: int):
+def download_history_excel(record_id: int, user: dict = Depends(require_permission("view_history"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
@@ -2376,7 +2361,8 @@ def calculate_with_gate(
     to_loc: Optional[str] = Query(None),
     doc_nums: List[str] = Query(...),
     manual_total_cost: Optional[float] = None, 
-    additional_charges: Optional[float] = 0.0
+    additional_charges: Optional[float] = 0.0,
+    user: dict = Depends(require_permission("view_calculator"))
 ):
     try:
         if not doc_nums: raise HTTPException(status_code=400, detail="No Doc Nums provided")

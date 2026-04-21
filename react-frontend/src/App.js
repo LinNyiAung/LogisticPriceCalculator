@@ -4,6 +4,8 @@ import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, 
 const API_URL = 'http://localhost:8000';
 
 const AVAILABLE_PERMISSIONS = [
+  { id: 'view_calculator', label: 'View Calculator' },
+  { id: 'view_history', label: 'View History' },
   { id: 'view_dashboard', label: 'View Dashboard' },
   { id: 'view_users', label: 'View Users' },
   { id: 'add_user', label: 'Add User' },
@@ -279,11 +281,22 @@ const PricingApp = () => {
     setToken(data.access_token);
     setUserRole(data.role);
     setUsername(data.username);
-    setPermissions(data.permissions || []);
+    const perms = data.permissions || [];
+    setPermissions(perms);
     localStorage.setItem('token', data.access_token);
     localStorage.setItem('userRole', data.role);
     localStorage.setItem('username', data.username);
-    localStorage.setItem('permissions', JSON.stringify(data.permissions || []));
+    localStorage.setItem('permissions', JSON.stringify(perms));
+    
+    // Automatically redirect to the first available page if they don't have calculator access
+    if (!perms.includes('view_calculator')) {
+        if (perms.includes('view_history')) setCurrentPage('history');
+        else if (perms.includes('view_dashboard')) setCurrentPage('dashboard');
+        else if (perms.includes('view_gates')) setCurrentPage('gates');
+        else setCurrentPage(''); // Trigger fallback screen
+    } else {
+        setCurrentPage('calculator');
+    }
   };
 
   const handleLogout = () => {
@@ -409,7 +422,6 @@ const PricingApp = () => {
         setCalculatedData(result.calculated_data || []);
         setDashboardBranches(result.available_branches || []);
         
-        // Smart sync for Allocation Brand: Keep current brand if it exists in new data, else default to first
         setSelectedAllocBrand(currentBrand => {
             if (result.allocation_data && result.allocation_data.length > 0) {
                 const brandExists = result.allocation_data.some(d => d.brand === currentBrand);
@@ -418,7 +430,6 @@ const PricingApp = () => {
             return '';
         });
         
-        // Smart sync for Calculated Brand: Keep current brand if it exists in new data, else default to first
         setSelectedCalcBrand(currentBrand => {
             if (result.calculated_data && result.calculated_data.length > 0) {
                 const brandExists = result.calculated_data.some(d => d.brand === currentBrand);
@@ -459,7 +470,7 @@ const PricingApp = () => {
   };
 
   // --- Activity Logs Fetch Function ---
-const fetchActivityLogs = async (page = 0) => {
+  const fetchActivityLogs = async (page = 0) => {
     setIsActivityLogsLoading(true);
     try {
         const offset = page * ACTIVITY_LOGS_LIMIT;
@@ -683,7 +694,7 @@ const fetchActivityLogs = async (page = 0) => {
   }, [selectedGateForPricing, token]);
 
   useEffect(() => {
-    if (token && currentPage === 'history') loadHistory();
+    if (token && currentPage === 'history' && permissions.includes('view_history')) loadHistory();
     if (token && currentPage === 'users' && permissions.includes('view_users')) { loadUsers(); loadRoles(); }
     if (token && currentPage === 'roles' && permissions.includes('view_roles')) loadRoles();
     if (token && currentPage === 'references' && permissions.includes('view_references')) loadReferenceData();
@@ -1223,13 +1234,13 @@ const fetchActivityLogs = async (page = 0) => {
       <div className="bg-white shadow-md mb-6">
         <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => setCurrentPage('calculator')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'calculator' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calculator size={18} /> Calculator</button>
+            {permissions.includes('view_calculator') && <button onClick={() => setCurrentPage('calculator')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'calculator' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calculator size={18} /> Calculator</button>}
             {permissions.includes('view_gates') && <button onClick={() => setCurrentPage('gates')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Gates</button>}
             {permissions.includes('view_items') && <button onClick={() => setCurrentPage('items')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><FileText size={18} /> Items</button>}
             {permissions.includes('view_rate_carts') && <button onClick={() => setCurrentPage('rate_carts')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'rate_carts' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Percent size={18} /> Rate Carts</button>}
             {permissions.includes('view_daily_report') && <button onClick={() => setCurrentPage('daily_report')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'daily_report' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calendar size={18} /> Daily Report</button>}
             {permissions.includes('view_dashboard') && <button onClick={() => setCurrentPage('dashboard')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><BarChart2 size={18} /> Dashboard</button>}
-            <button onClick={() => setCurrentPage('history')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><History size={18} /> History</button>
+            {permissions.includes('view_history') && <button onClick={() => setCurrentPage('history')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><History size={18} /> History</button>}
             {permissions.includes('view_references') && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={18} /> References</button>)}
             {permissions.includes('view_users') && (<button onClick={() => setCurrentPage('users')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Users size={18} /> Users</button>)}
             {permissions.includes('view_roles') && (<button onClick={() => setCurrentPage('roles')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'roles' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Shield size={18} /> Roles</button>)}
@@ -2165,7 +2176,7 @@ const fetchActivityLogs = async (page = 0) => {
       );
   }
 
-  if (currentPage === 'history') {
+  if (currentPage === 'history' && permissions.includes('view_history')) {
     const canSubmit = permissions.includes('submit_calculation');
     const canClaim = permissions.includes('claim_calculation');
     const canDeleteHistory = permissions.includes('delete_history');
@@ -2420,191 +2431,208 @@ const fetchActivityLogs = async (page = 0) => {
     );
   }
 
-  // Calculator View (Default)
-  const hasCalculated = calculatedProducts.length > 0;
-  const rawTableData = hasCalculated ? calculatedProducts : products;
-  const hasDirectPricingItems = hasCalculated && calculatedProducts.some(p => p.system_rate !== undefined && p.system_rate !== null);
+  // Calculator View (Default - guarded by permissions)
+  if (currentPage === 'calculator' && permissions.includes('view_calculator')) {
+    const hasCalculated = calculatedProducts.length > 0;
+    const rawTableData = hasCalculated ? calculatedProducts : products;
+    const hasDirectPricingItems = hasCalculated && calculatedProducts.some(p => p.system_rate !== undefined && p.system_rate !== null);
 
-  const tableData = Object.values(rawTableData.reduce((acc, curr) => {
-    if (!acc[curr.code]) { acc[curr.code] = { ...curr }; } 
-    else {
-      acc[curr.code].ctns = (acc[curr.code].ctns || 0) + (curr.ctns || 0);
-      acc[curr.code].weight += curr.weight || 0;
-      if (curr.total_cost !== undefined) acc[curr.code].total_cost = (acc[curr.code].total_cost || 0) + curr.total_cost;
-    }
-    return acc;
-  }, {})).map(item => {
-    if (item.total_cost !== undefined && item.ctns > 0) item.display_calculated_rate = item.total_cost / item.ctns;
-    else item.display_calculated_rate = item.unit_cost; 
-    return item;
-  }).sort((a, b) => a.code.localeCompare(b.code));
+    const tableData = Object.values(rawTableData.reduce((acc, curr) => {
+      if (!acc[curr.code]) { acc[curr.code] = { ...curr }; } 
+      else {
+        acc[curr.code].ctns = (acc[curr.code].ctns || 0) + (curr.ctns || 0);
+        acc[curr.code].weight += curr.weight || 0;
+        if (curr.total_cost !== undefined) acc[curr.code].total_cost = (acc[curr.code].total_cost || 0) + curr.total_cost;
+      }
+      return acc;
+    }, {})).map(item => {
+      if (item.total_cost !== undefined && item.ctns > 0) item.display_calculated_rate = item.total_cost / item.ctns;
+      else item.display_calculated_rate = item.unit_cost; 
+      return item;
+    }).sort((a, b) => a.code.localeCompare(b.code));
 
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
+          {renderNavigation()}
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Logistic Cost Calculator</h1>
+            <div className="bg-white rounded-lg border p-6 mb-6">
+              <h2 className="text-xl font-bold mb-4">Select Doc Nums (Transfer IDs) <span className="text-red-500">*</span></h2>
+              <div className="relative mb-4">
+                <div className="relative">
+                  <input type="text" placeholder="Search and add a Doc Num (e.g. PG - 22##### or PDG - 12####)..." value={docNumSearchTerm} onChange={(e) => { setDocNumSearchTerm(e.target.value); setShowDocNumDropdown(true); }} onFocus={() => setShowDocNumDropdown(true)} onBlur={() => setTimeout(() => setShowDocNumDropdown(false), 200)} className="w-full p-3 pl-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                  <div className="absolute left-3 top-3 text-gray-400"><Search size={20} /></div>
+                </div>
+                {showDocNumDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                    {docNums.filter(doc => !selectedDocNums.includes(doc.doc_num)).filter(doc => `${doc.doc_num} ${doc.doc_date || ''}`.toLowerCase().includes(docNumSearchTerm.toLowerCase())).map((doc) => (
+                        <div key={doc.doc_num} className="p-3 hover:bg-blue-50 cursor-pointer border-b last:border-0" onMouseDown={(e) => { e.preventDefault(); handleAddDocNum(doc.doc_num); setDocNumSearchTerm(''); setShowDocNumDropdown(false); }}>
+                          <span className="font-semibold text-gray-800">{doc.doc_num}</span>{doc.doc_date && <span className="text-gray-500 ml-2">- {doc.doc_date}</span>}
+                        </div>
+                      ))}
+                    {docNums.filter(doc => !selectedDocNums.includes(doc.doc_num) && `${doc.doc_num} ${doc.doc_date || ''}`.toLowerCase().includes(docNumSearchTerm.toLowerCase())).length === 0 && (<div className="p-3 text-gray-500 italic">No matching Doc Nums found.</div>)}
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedDocNums.length === 0 && (<p className="text-gray-500 text-sm italic">No Doc Nums selected</p>)}
+                
+                {selectedDocNums.map(id => {
+                  const docObj = docNums.find(d => String(d.doc_num) === String(id));
+                  let displayDate = docObj ? docObj.doc_date : null;
+
+                  if (!displayDate && calculatedProducts && calculatedProducts.length > 0) {
+                      const matchedProd = calculatedProducts.find(p => {
+                          const baseSinNo = String(p.sin_no).split(' - ')[1] || String(p.sin_no); 
+                          const baseId = String(id).split(' - ')[1] || String(id);
+                          return baseSinNo.trim() === baseId.trim();
+                      });
+                      if (matchedProd && matchedProd.doc_date) {
+                          const dateStr = String(matchedProd.doc_date);
+                          displayDate = dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr;
+                      }
+                  }
+
+                  return (
+                      <div key={id} className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full border border-blue-200">
+                          <span className="font-semibold">{displayDate ? `${id} - ${displayDate}` : id}</span>
+                          <button onClick={() => handleRemoveDocNum(id)} className="hover:text-red-600 transition"><X size={16} /></button>
+                      </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            {products.length > 0 && (
+              <div className="flex flex-col gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select From <span className="text-red-500">*</span></h2><select value={selectedFrom} onChange={(e) => handleFromChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"><option value="">-- Select Origin --</option>{fromLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}</select></div>
+                  <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select To <span className="text-red-500">*</span></h2><select value={selectedTo} onChange={(e) => handleToChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed" disabled={!selectedFrom}><option value="">-- Select Destination --</option>{toLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}</select></div>
+                </div>
+                {(selectedFrom && selectedTo) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Gate <span className="text-red-500">*</span></h2><select value={selectedGate} onChange={(e) => handleGateChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"><option value="">-- Select a Gate --</option>{gates.filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo).map((gate) => (<option key={gate.gate_name} value={gate.gate_name}>{gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}</option>))}</select></div>
+                    <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Channel <span className="text-red-500">*</span></h2><select value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"><option value="">-- Select a Channel --</option>{refChannels.map((chan, i) => (<option key={i} value={chan}>{chan}</option>))}</select></div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {products.length > 0 && selectedGate && (() => {
+              const currentGate = gates.find(g => g.gate_name === selectedGate && g.from_loc === selectedFrom && g.to_loc === selectedTo);
+              return (
+                <div className="bg-blue-50 rounded-lg border-2 border-blue-300 p-6 mb-6">
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div><h3 className="text-lg font-semibold text-gray-800">Calculation Type</h3><p className="text-gray-600 mt-1">{calculationType === 'gate_pricing' ? 'Gate Pricing Calculation' : calculationType === 'direct_pricing' ? 'Direct Pricing Calculation' : 'Unknown Type'}</p></div>
+                    {currentGate && currentGate.cost !== null && (<div className="text-center"><p className="text-sm text-gray-600">Gate Cost</p><p className="text-xl font-bold text-green-600">{formatNumber(currentGate.cost)} MMK {currentGate.uom && <span className="text-sm font-medium text-gray-500 ml-1">/ {currentGate.unit || 1} {currentGate.uom}</span>}</p></div>)}
+                    <div className="text-right"><p className="text-sm text-gray-600">Route</p><p className="text-xl font-bold text-blue-600">{selectedFrom} &rarr; {selectedTo}</p></div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {products.length > 0 && (
+              <>
+                <div className="bg-white rounded-lg border p-6 mb-6">
+                  <h2 className="text-xl font-bold mb-4">{hasCalculated ? "Calculated Results" : "Product Details"}</h2>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="border p-2 text-left">BU</th>
+                          <th className="border p-2 text-left">Item Code</th>
+                          <th className="border p-2 text-left">Description</th>
+                          <th className="border p-2 text-left">Cartons</th>
+                          <th className="border p-2 text-left">Weight</th>
+                          <th className="border p-2 text-left">UOM</th>
+                          {hasDirectPricingItems && (<th className="border p-2 text-left">System Rate (Ctn)</th>)}
+                          {hasCalculated && (<th className="border p-2 text-left">Calculated Rate (Ctn)</th>)}
+                          {hasCalculated && (<th className="border p-2 text-left">Cost (MMK)</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tableData.map((product, index) => (
+                          <tr key={index}>
+                            <td className="border p-2 font-semibold text-gray-700">{product.bu || '-'}</td>
+                            <td className="border p-2">{product.code}</td>
+                            <td className="border p-2">{product.name}</td>
+                            <td className="border p-2">{product.ctns}</td>
+                            <td className="border p-2">{formatNumber(product.weight)}</td>
+                            <td className="border p-2">Kg</td>
+                            {hasDirectPricingItems && (<td className="border p-2">{product.system_rate !== undefined && product.system_rate !== null ? formatNumber(product.system_rate) : '-'}</td>)}
+                            {hasCalculated && (<td className="border p-2">{product.display_calculated_rate !== undefined && product.display_calculated_rate !== null ? formatNumber(product.display_calculated_rate) : '-'}</td>)}
+                            {hasCalculated && (<td className="border p-2 font-semibold">{product.total_cost !== undefined ? formatNumber(product.total_cost) : '-'}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-lg border p-6 mb-6">
+                  <h2 className="text-xl font-bold mb-4">Total Summary</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200 p-6 flex flex-col justify-center"><div className="flex justify-between items-center mb-2"><span className="text-lg font-semibold text-gray-700 mb-2">Total Weight</span><span className="text-3xl font-bold text-purple-600">{formatNumber(totalWeight)} Kg</span></div></div>
+                    {calculatedTotalCost !== null && (
+                      <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200 p-6 flex flex-col justify-center">
+                        <div className="flex justify-between items-center mb-2"><span className="text-lg font-semibold text-gray-700">Total Cost</span><span className="text-3xl font-bold text-blue-600">{formatNumber(calculatedTotalCost)} MMK</span></div>
+                        {additionalCharges && (
+                          <div className="mt-2 pt-2 border-t border-blue-200 text-sm text-gray-600 space-y-1">
+                            <div className="flex justify-between"><span>Subtotal (Transport):</span><span>{formatNumber(calculatedTotalCost - (parseFloat(additionalCharges) || 0))} MMK</span></div>
+                            <div className="flex justify-between"><span>Additional Charges:</span><span>{formatNumber(additionalCharges)} MMK</span></div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border p-6 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className={`block text-sm font-semibold mb-2 ${!isManualTotalCostEnabled ? 'text-gray-400' : 'text-gray-700'}`}>Total Cost (Manual Override)</label>
+                      <input type="number" value={manualTotalCost} onChange={(e) => setManualTotalCost(e.target.value)} placeholder={isManualTotalCostEnabled ? "Enter base transport amount..." : "Not applicable for selected items"} className={`w-full p-3 border rounded-lg ${!isManualTotalCostEnabled ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`} disabled={!isManualTotalCostEnabled} />
+                      <p className={`text-xs mt-1 ${!isManualTotalCostEnabled ? 'text-gray-400' : 'text-gray-500'}`}>{isManualTotalCostEnabled ? "Overrides calculated item costs." : "Only enabled if selected items have specific transport costs."}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Additional Charges (Optional)</label>
+                      <input type="number" value={additionalCharges} onChange={(e) => setAdditionalCharges(e.target.value)} placeholder="e.g. Labor, Toll fees..." className="w-full p-3 border rounded-lg" />
+                      <p className="text-xs text-gray-500 mt-1">Added to the final total.</p>
+                    </div>
+                    {estimatedTotalCost !== null && (manualTotalCost || additionalCharges) && (
+                      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col justify-center col-span-1 md:col-span-2">
+                        <span className="text-sm text-gray-600">Standard Estimated Total Cost (Inc. Extras):</span>
+                        <span className="text-xl font-bold text-gray-700">{formatNumber(estimatedTotalCost)} MMK</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                 <div className="flex gap-4 mb-6">
+                    <button onClick={calculateCosts} disabled={isLoading} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"><Calculator size={20} /> {isLoading ? 'Calculating...' : 'Calculate Costs'}</button>
+                    {calculatedTotalCost !== null && (<button onClick={() => handleSaveCalculation(false)} className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"><Save size={20} /> Save as New</button>)}
+                </div>
+                </>
+              )}
+          </div>
+          {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} />}
+        </div>
+      </div>
+    );
+  }
+
+  // --- Fallback View (If logged in but current page is inaccessible due to lacking permission) ---
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
         {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
         {renderNavigation()}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6">Logistic Cost Calculator</h1>
-          <div className="bg-white rounded-lg border p-6 mb-6">
-            <h2 className="text-xl font-bold mb-4">Select Doc Nums (Transfer IDs) <span className="text-red-500">*</span></h2>
-            <div className="relative mb-4">
-              <div className="relative">
-                <input type="text" placeholder="Search and add a Doc Num (e.g. PG - 22##### or PDG - 12####)..." value={docNumSearchTerm} onChange={(e) => { setDocNumSearchTerm(e.target.value); setShowDocNumDropdown(true); }} onFocus={() => setShowDocNumDropdown(true)} onBlur={() => setTimeout(() => setShowDocNumDropdown(false), 200)} className="w-full p-3 pl-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                <div className="absolute left-3 top-3 text-gray-400"><Search size={20} /></div>
-              </div>
-              {showDocNumDropdown && (
-                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                  {docNums.filter(doc => !selectedDocNums.includes(doc.doc_num)).filter(doc => `${doc.doc_num} ${doc.doc_date || ''}`.toLowerCase().includes(docNumSearchTerm.toLowerCase())).map((doc) => (
-                      <div key={doc.doc_num} className="p-3 hover:bg-blue-50 cursor-pointer border-b last:border-0" onMouseDown={(e) => { e.preventDefault(); handleAddDocNum(doc.doc_num); setDocNumSearchTerm(''); setShowDocNumDropdown(false); }}>
-                        <span className="font-semibold text-gray-800">{doc.doc_num}</span>{doc.doc_date && <span className="text-gray-500 ml-2">- {doc.doc_date}</span>}
-                      </div>
-                    ))}
-                  {docNums.filter(doc => !selectedDocNums.includes(doc.doc_num) && `${doc.doc_num} ${doc.doc_date || ''}`.toLowerCase().includes(docNumSearchTerm.toLowerCase())).length === 0 && (<div className="p-3 text-gray-500 italic">No matching Doc Nums found.</div>)}
-                </div>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {selectedDocNums.length === 0 && (<p className="text-gray-500 text-sm italic">No Doc Nums selected</p>)}
-              
-              {selectedDocNums.map(id => {
-                const docObj = docNums.find(d => String(d.doc_num) === String(id));
-                let displayDate = docObj ? docObj.doc_date : null;
-
-                if (!displayDate && calculatedProducts && calculatedProducts.length > 0) {
-                    const matchedProd = calculatedProducts.find(p => {
-                        const baseSinNo = String(p.sin_no).split(' - ')[1] || String(p.sin_no); 
-                        const baseId = String(id).split(' - ')[1] || String(id);
-                        return baseSinNo.trim() === baseId.trim();
-                    });
-                    if (matchedProd && matchedProd.doc_date) {
-                        const dateStr = String(matchedProd.doc_date);
-                        displayDate = dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr;
-                    }
-                }
-
-                return (
-                    <div key={id} className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full border border-blue-200">
-                        <span className="font-semibold">{displayDate ? `${id} - ${displayDate}` : id}</span>
-                        <button onClick={() => handleRemoveDocNum(id)} className="hover:text-red-600 transition"><X size={16} /></button>
-                    </div>
-                );
-              })}
-            </div>
-          </div>
-          
-          {products.length > 0 && (
-            <div className="flex flex-col gap-6 mb-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select From <span className="text-red-500">*</span></h2><select value={selectedFrom} onChange={(e) => handleFromChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"><option value="">-- Select Origin --</option>{fromLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}</select></div>
-                <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select To <span className="text-red-500">*</span></h2><select value={selectedTo} onChange={(e) => handleToChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed" disabled={!selectedFrom}><option value="">-- Select Destination --</option>{toLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}</select></div>
-              </div>
-              {(selectedFrom && selectedTo) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Gate <span className="text-red-500">*</span></h2><select value={selectedGate} onChange={(e) => handleGateChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"><option value="">-- Select a Gate --</option>{gates.filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo).map((gate) => (<option key={gate.gate_name} value={gate.gate_name}>{gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}</option>))}</select></div>
-                  <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Channel <span className="text-red-500">*</span></h2><select value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"><option value="">-- Select a Channel --</option>{refChannels.map((chan, i) => (<option key={i} value={chan}>{chan}</option>))}</select></div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {products.length > 0 && selectedGate && (() => {
-            const currentGate = gates.find(g => g.gate_name === selectedGate && g.from_loc === selectedFrom && g.to_loc === selectedTo);
-            return (
-              <div className="bg-blue-50 rounded-lg border-2 border-blue-300 p-6 mb-6">
-                <div className="flex items-center justify-between flex-wrap gap-4">
-                  <div><h3 className="text-lg font-semibold text-gray-800">Calculation Type</h3><p className="text-gray-600 mt-1">{calculationType === 'gate_pricing' ? 'Gate Pricing Calculation' : calculationType === 'direct_pricing' ? 'Direct Pricing Calculation' : 'Unknown Type'}</p></div>
-                  {currentGate && currentGate.cost !== null && (<div className="text-center"><p className="text-sm text-gray-600">Gate Cost</p><p className="text-xl font-bold text-green-600">{formatNumber(currentGate.cost)} MMK {currentGate.uom && <span className="text-sm font-medium text-gray-500 ml-1">/ {currentGate.unit || 1} {currentGate.uom}</span>}</p></div>)}
-                  <div className="text-right"><p className="text-sm text-gray-600">Route</p><p className="text-xl font-bold text-blue-600">{selectedFrom} &rarr; {selectedTo}</p></div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {products.length > 0 && (
-            <>
-              <div className="bg-white rounded-lg border p-6 mb-6">
-                <h2 className="text-xl font-bold mb-4">{hasCalculated ? "Calculated Results" : "Product Details"}</h2>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse border">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="border p-2 text-left">BU</th>
-                        <th className="border p-2 text-left">Item Code</th>
-                        <th className="border p-2 text-left">Description</th>
-                        <th className="border p-2 text-left">Cartons</th>
-                        <th className="border p-2 text-left">Weight</th>
-                        <th className="border p-2 text-left">UOM</th>
-                        {hasDirectPricingItems && (<th className="border p-2 text-left">System Rate (Ctn)</th>)}
-                        {hasCalculated && (<th className="border p-2 text-left">Calculated Rate (Ctn)</th>)}
-                        {hasCalculated && (<th className="border p-2 text-left">Cost (MMK)</th>)}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tableData.map((product, index) => (
-                        <tr key={index}>
-                          <td className="border p-2 font-semibold text-gray-700">{product.bu || '-'}</td>
-                          <td className="border p-2">{product.code}</td>
-                          <td className="border p-2">{product.name}</td>
-                          <td className="border p-2">{product.ctns}</td>
-                          <td className="border p-2">{formatNumber(product.weight)}</td>
-                          <td className="border p-2">Kg</td>
-                          {hasDirectPricingItems && (<td className="border p-2">{product.system_rate !== undefined && product.system_rate !== null ? formatNumber(product.system_rate) : '-'}</td>)}
-                          {hasCalculated && (<td className="border p-2">{product.display_calculated_rate !== undefined && product.display_calculated_rate !== null ? formatNumber(product.display_calculated_rate) : '-'}</td>)}
-                          {hasCalculated && (<td className="border p-2 font-semibold">{product.total_cost !== undefined ? formatNumber(product.total_cost) : '-'}</td>)}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-lg border p-6 mb-6">
-                <h2 className="text-xl font-bold mb-4">Total Summary</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200 p-6 flex flex-col justify-center"><div className="flex justify-between items-center mb-2"><span className="text-lg font-semibold text-gray-700 mb-2">Total Weight</span><span className="text-3xl font-bold text-purple-600">{formatNumber(totalWeight)} Kg</span></div></div>
-                  {calculatedTotalCost !== null && (
-                    <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200 p-6 flex flex-col justify-center">
-                      <div className="flex justify-between items-center mb-2"><span className="text-lg font-semibold text-gray-700">Total Cost</span><span className="text-3xl font-bold text-blue-600">{formatNumber(calculatedTotalCost)} MMK</span></div>
-                      {additionalCharges && (
-                        <div className="mt-2 pt-2 border-t border-blue-200 text-sm text-gray-600 space-y-1">
-                          <div className="flex justify-between"><span>Subtotal (Transport):</span><span>{formatNumber(calculatedTotalCost - (parseFloat(additionalCharges) || 0))} MMK</span></div>
-                          <div className="flex justify-between"><span>Additional Charges:</span><span>{formatNumber(additionalCharges)} MMK</span></div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg border p-6 mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className={`block text-sm font-semibold mb-2 ${!isManualTotalCostEnabled ? 'text-gray-400' : 'text-gray-700'}`}>Total Cost (Manual Override)</label>
-                    <input type="number" value={manualTotalCost} onChange={(e) => setManualTotalCost(e.target.value)} placeholder={isManualTotalCostEnabled ? "Enter base transport amount..." : "Not applicable for selected items"} className={`w-full p-3 border rounded-lg ${!isManualTotalCostEnabled ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`} disabled={!isManualTotalCostEnabled} />
-                    <p className={`text-xs mt-1 ${!isManualTotalCostEnabled ? 'text-gray-400' : 'text-gray-500'}`}>{isManualTotalCostEnabled ? "Overrides calculated item costs." : "Only enabled if selected items have specific transport costs."}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Additional Charges (Optional)</label>
-                    <input type="number" value={additionalCharges} onChange={(e) => setAdditionalCharges(e.target.value)} placeholder="e.g. Labor, Toll fees..." className="w-full p-3 border rounded-lg" />
-                    <p className="text-xs text-gray-500 mt-1">Added to the final total.</p>
-                  </div>
-                  {estimatedTotalCost !== null && (manualTotalCost || additionalCharges) && (
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col justify-center col-span-1 md:col-span-2">
-                      <span className="text-sm text-gray-600">Standard Estimated Total Cost (Inc. Extras):</span>
-                      <span className="text-xl font-bold text-gray-700">{formatNumber(estimatedTotalCost)} MMK</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-               <div className="flex gap-4 mb-6">
-                  <button onClick={calculateCosts} disabled={isLoading} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"><Calculator size={20} /> {isLoading ? 'Calculating...' : 'Calculate Costs'}</button>
-                  {calculatedTotalCost !== null && (<button onClick={() => handleSaveCalculation(false)} className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"><Save size={20} /> Save as New</button>)}
-              </div>
-              </>
-            )}
+        <div className="bg-white rounded-lg shadow-md p-6 flex flex-col items-center justify-center min-h-[50vh]">
+            <Activity size={64} className="text-gray-300 mb-4" />
+            <h2 className="text-2xl font-bold text-gray-700 mb-2">Welcome to Logistic App</h2>
+            <p className="text-gray-500">Please select a module from the navigation menu above to get started.</p>
         </div>
-        {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} />}
       </div>
     </div>
   );
