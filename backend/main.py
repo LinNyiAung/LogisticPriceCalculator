@@ -107,7 +107,7 @@ def startup_db():
             )
         """)
         
-        # --- NEW: User Activity Log Table ---
+        # User Activity Log Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS User_Activity_Log (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1372,31 +1372,140 @@ def daily_job_generator():
     logger.info(f"Running automated EOD report generation for {target_date}")
     generate_and_save_daily_report(target_date)
 
-@app.get("/account/daily-rate-cut-report")
-def get_daily_rate_cart_report(target_date: Optional[str] = None, user: dict = Depends(require_permission("view_daily_report"))):
-    if not target_date:
-        target_date = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-        
-    try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT item_report_json, township_report_json FROM Daily_Report_History WHERE target_date = ?", (target_date,))
-        row = cursor.fetchone()
-        conn.close()
+def get_or_generate_daily_report(target_date: str):
+    """Fetches daily report from local history DB, or generates it if not found."""
+    conn = get_logistic_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT item_report_json, township_report_json FROM Daily_Report_History WHERE target_date = ?", (target_date,))
+    row = cursor.fetchone()
+    conn.close()
 
-        if row:
+    if row:
+        return {
+            "item_report": json.loads(row[0]),
+            "township_report": json.loads(row[1])
+        }
+    else:
+        return _get_daily_report_data(target_date)
+
+def _aggregate_reports(daily_datas: List[dict]):
+    """Aggregates multiple daily reports into a single consolidated report for date ranges."""
+    item_report_dict = {}
+    township_report_dict = {}
+
+    for data in daily_datas:
+        
+        # --- 1. Fix Item Report Aggregation ---
+        for item in data.get("item_report", []):
+            i_key = (item.get("branch", ""), item.get("driver_name", ""), item.get("item_code", ""))
+            if i_key not in item_report_dict:
+                item_report_dict[i_key] = {
+                    "bu": item.get("bu", ""), "branch": item.get("branch", ""), "driver_name": item.get("driver_name", ""),
+                    "item_code": item.get("item_code", ""), "item_name": item.get("item_name", ""), 
+                    "principal": item.get("principal", ""), "brand": item.get("brand", ""),
+                    "ctns": 0.0, "allocated_cost": 0.0, "driver_total_ctns": 0.0, 
+                    "branch_cost": item.get("branch_cost", 0.0), "sales_amount": 0.0
+                }
+            else:
+                # FIX: Overwrite with the latest rate instead of summing
+                item_report_dict[i_key]["branch_cost"] = item.get("branch_cost", item_report_dict[i_key]["branch_cost"])
+
+            item_report_dict[i_key]["ctns"] += item.get("ctns", 0.0)
+            item_report_dict[i_key]["allocated_cost"] += item.get("allocated_cost", 0.0)
+            item_report_dict[i_key]["sales_amount"] += item.get("sales_amount", 0.0)
+            item_report_dict[i_key]["driver_total_ctns"] += item.get("driver_total_ctns", 0.0)
+            # REMOVED: item_report_dict[i_key]["branch_cost"] += item.get("branch_cost", 0.0)
+
+        # --- 2. Fix Township Report Aggregation ---
+        for tw in data.get("township_report", []):
+            t_key = (tw.get("branch", ""), tw.get("township", ""), tw.get("customer_code", ""), tw.get("driver_name", ""))
+            if t_key not in township_report_dict:
+                township_report_dict[t_key] = {
+                    "branch": tw.get("branch", ""), "driver_name": tw.get("driver_name", ""), 
+                    "township": tw.get("township", ""), "customer_code": tw.get("customer_code", ""), 
+                    "contact_person": tw.get("contact_person", ""), "ctns": 0.0, "allocated_cost": 0.0, 
+                    "driver_total_ctns": 0.0, "branch_cost": tw.get("branch_cost", 0.0), "total_drop_points": 0.0, "sales_amount": 0.0
+                }
+            else:
+                # FIX: Overwrite with the latest rate instead of summing
+                township_report_dict[t_key]["branch_cost"] = tw.get("branch_cost", township_report_dict[t_key]["branch_cost"])
+
+            township_report_dict[t_key]["ctns"] += tw.get("ctns", 0.0)
+            township_report_dict[t_key]["allocated_cost"] += tw.get("allocated_cost", 0.0)
+            township_report_dict[t_key]["sales_amount"] += tw.get("sales_amount", 0.0)
+            township_report_dict[t_key]["driver_total_ctns"] += tw.get("driver_total_ctns", 0.0)
+            # REMOVED: township_report_dict[t_key]["branch_cost"] += tw.get("branch_cost", 0.0)
+            township_report_dict[t_key]["total_drop_points"] += tw.get("total_drop_points", 0.0)
+
+    # Recalculate accurate averages across the whole period for items
+    item_report_list = list(item_report_dict.values())
+    for item in item_report_list:
+        item["cost_per_carton"] = item["allocated_cost"] / item["ctns"] if item["ctns"] > 0 else 0.0
+    item_report_list.sort(key=lambda x: (x["branch"], x["driver_name"], x["item_code"]))
+
+    # Recalculate accurate averages across the whole period for townships
+    township_report_list = list(township_report_dict.values())
+    for tw in township_report_list:
+        tw["cost_per_carton"] = tw["allocated_cost"] / tw["ctns"] if tw["ctns"] > 0 else 0.0
+        tw["cost_per_drop_point"] = tw["allocated_cost"] / tw["total_drop_points"] if tw["total_drop_points"] > 0 else 0.0
+    township_report_list.sort(key=lambda x: (x["branch"], x["driver_name"], x["township"], x["customer_code"]))
+
+    return {
+        "item_report": item_report_list,
+        "township_report": township_report_list
+    }
+
+@app.get("/account/daily-rate-cut-report")
+def get_daily_rate_cart_report(
+    target_date: Optional[str] = None, 
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    user: dict = Depends(require_permission("view_daily_report"))
+):
+    try:
+        # 1. Range Selection Logic
+        if start_date and end_date:
+            try:
+                start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d")
+                end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+            
+            if start_dt > end_dt:
+                raise HTTPException(status_code=400, detail="start_date cannot be after end_date")
+                
+            # Cap at 60 days to avoid massive accidental loads
+            if (end_dt - start_dt).days > 60:
+                 raise HTTPException(status_code=400, detail="Date range cannot exceed 60 days.")
+
+            daily_datas = []
+            current_dt = start_dt
+            while current_dt <= end_dt:
+                dt_str = current_dt.strftime("%Y-%m-%d")
+                daily_datas.append(get_or_generate_daily_report(dt_str))
+                current_dt += datetime.timedelta(days=1)
+            
+            aggregated = _aggregate_reports(daily_datas)
             return {
-                "target_date": target_date, 
-                "report": json.loads(row[0]), 
-                "township_report": json.loads(row[1])
+                "target_date": f"{start_date} to {end_date}",
+                "report": aggregated["item_report"],
+                "township_report": aggregated["township_report"]
             }
             
-        data = _get_daily_report_data(target_date)
-        return {
-            "target_date": target_date, 
-            "report": data["item_report"], 
-            "township_report": data["township_report"]
-        }
+        # 2. Single Day View (Default behavior)
+        else:
+            if not target_date:
+                target_date = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+                
+            data = get_or_generate_daily_report(target_date)
+            return {
+                "target_date": target_date, 
+                "report": data["item_report"], 
+                "township_report": data["township_report"]
+            }
+            
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing daily report: {str(e)}")
 
