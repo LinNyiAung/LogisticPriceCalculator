@@ -113,6 +113,8 @@ const PricingApp = () => {
   const [dashboardMonth, setDashboardMonth] = useState(getCurrentMonthString());
   const [dashboardBranch, setDashboardBranch] = useState('');
   const [dashboardBranches, setDashboardBranches] = useState([]);
+  const [dashboardToLoc, setDashboardToLoc] = useState(''); // NEW
+  const [dashboardToLocs, setDashboardToLocs] = useState([]); // NEW
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
   const [allocationData, setAllocationData] = useState([]);
   const [calculatedData, setCalculatedData] = useState([]);
@@ -407,12 +409,16 @@ const PricingApp = () => {
   };
 
   // --- Unified Dashboard Fetch ---
-  const fetchCombinedDashboard = async (monthToFetch, branchToFetch = '') => {
+  const fetchCombinedDashboard = async (monthToFetch, branchToFetch = '', toLocToFetch = '') => {
     setIsDashboardLoading(true);
     try {
       let url = `${API_URL}/dashboard/combined?target_month=${encodeURIComponent(monthToFetch)}`;
       if (branchToFetch) {
           url += `&branch=${encodeURIComponent(branchToFetch)}`;
+      }
+      // NEW: Add to_loc parameter
+      if (toLocToFetch) {
+          url += `&to_loc=${encodeURIComponent(toLocToFetch)}`;
       }
       const response = await authFetch(url);
       if (response.ok) {
@@ -421,6 +427,7 @@ const PricingApp = () => {
         setAllocationData(result.allocation_data || []);
         setCalculatedData(result.calculated_data || []);
         setDashboardBranches(result.available_branches || []);
+        setDashboardToLocs(result.available_to_locs || []); // NEW
         
         setSelectedAllocBrand(currentBrand => {
             if (result.allocation_data && result.allocation_data.length > 0) {
@@ -700,7 +707,7 @@ const PricingApp = () => {
     if (token && currentPage === 'references' && permissions.includes('view_references')) loadReferenceData();
     if (token && currentPage === 'rate_carts' && permissions.includes('view_rate_carts')) { loadRateCarts(); loadReferenceData(); }
     if (token && currentPage === 'daily_report' && permissions.includes('view_daily_report')) { fetchDailyReport(dailyReportDate); }
-    if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { fetchCombinedDashboard(dashboardMonth, dashboardBranch); }
+    if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc); }
     if (token && currentPage === 'activity_logs' && permissions.includes('view_activity_logs')) { fetchActivityLogs(0); }
   }, [currentPage, token, permissions]); 
 
@@ -1391,12 +1398,12 @@ const PricingApp = () => {
                       value={dashboardMonth}
                       onChange={(e) => {
                           setDashboardMonth(e.target.value);
-                          fetchCombinedDashboard(e.target.value, dashboardBranch);
+                          fetchCombinedDashboard(e.target.value, dashboardBranch, dashboardToLoc);
                       }}
                       className="border p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <button 
-                      onClick={() => fetchCombinedDashboard(dashboardMonth, dashboardBranch)} 
+                      onClick={() => fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc)}
                       disabled={isDashboardLoading} 
                       className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition disabled:bg-gray-400 bg-blue-600 hover:bg-blue-700 font-semibold`}
                   >
@@ -1417,7 +1424,7 @@ const PricingApp = () => {
                             value={dashboardBranch}
                             onChange={(e) => {
                                 setDashboardBranch(e.target.value);
-                                fetchCombinedDashboard(dashboardMonth, e.target.value);
+                                fetchCombinedDashboard(dashboardMonth, e.target.value, dashboardToLoc);
                             }}
                             className={`p-2 bg-white/80 border ${allocTheme.border} rounded focus:outline-none ${allocTheme.selectText} cursor-pointer text-sm w-full md:w-2/3`}
                         >
@@ -1450,9 +1457,29 @@ const PricingApp = () => {
                 </div>
 
                 {/* --- Third Party (Calculated) Selectors --- */}
-                <div className={`flex flex-col justify-end gap-1 ${calcTheme.bg} p-4 rounded-lg border ${calcTheme.border} h-full`}>
+                <div className={`flex flex-col gap-4 ${calcTheme.bg} p-4 rounded-lg border ${calcTheme.border} h-full`}>
+                    
+                    {/* NEW: To Location Filter */}
+                    <div className="flex flex-col gap-1">
+                        <label className={`text-sm font-semibold ${calcTheme.text}`}>To Location Filter:</label>
+                        <select
+                            value={dashboardToLoc}
+                            onChange={(e) => {
+                                setDashboardToLoc(e.target.value);
+                                fetchCombinedDashboard(dashboardMonth, dashboardBranch, e.target.value);
+                            }}
+                            className={`p-2 bg-white/80 border ${calcTheme.border} rounded focus:outline-none ${calcTheme.selectText} cursor-pointer text-sm w-full md:w-2/3`}
+                        >
+                            <option value="">All Locations</option>
+                            {dashboardToLocs.map(loc => (
+                                <option key={loc} value={loc}>{loc}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Brand Filter */}
                     {calculatedData.length > 0 ? (
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1 border-t border-green-200 pt-3">
                             <label className={`text-sm font-semibold ${calcTheme.text}`}>Brand (Third Party):</label>
                             <select
                                 value={selectedCalcBrand}
@@ -1465,8 +1492,8 @@ const PricingApp = () => {
                             </select>
                         </div>
                     ) : (
-                        <div className={`text-sm italic mt-2 ${calcTheme.text}`}>
-                            No third-party data for selected month.
+                        <div className={`text-sm italic mt-2 border-t border-green-200 pt-3 ${calcTheme.text}`}>
+                            No third-party data for selected month/location.
                         </div>
                     )}
                 </div>

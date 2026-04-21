@@ -2587,7 +2587,7 @@ def _generate_allocation_data(target_month: str, target_branch: Optional[str] = 
     return dashboard_results, month0_label, sorted(list(available_branches))
 
 
-def _generate_calculated_data(target_month: str):
+def _generate_calculated_data(target_month: str, target_to_loc: Optional[str] = None):
     try:
         year, month = map(int, target_month.split('-'))
     except ValueError:
@@ -2612,7 +2612,7 @@ def _generate_calculated_data(target_month: str):
     cursor = conn.cursor()
     
     cursor.execute("""
-        SELECT calculated_products, COALESCE(submitted_at, created_at) 
+        SELECT calculated_products, COALESCE(submitted_at, created_at), to_loc 
         FROM Calculation_History 
         WHERE status IN ('submitted', 'claimed')
     """)
@@ -2620,6 +2620,7 @@ def _generate_calculated_data(target_month: str):
     conn.close()
 
     brands_data = {}
+    available_to_locs = set()
 
     for row in rows:
         if not row[0]:
@@ -2631,6 +2632,14 @@ def _generate_calculated_data(target_month: str):
             continue
         
         fallback_date = row[1][:10] if row[1] else "" 
+        to_loc = row[2].strip() if row[2] else "UNKNOWN"
+        
+        # Collect unique locations for the frontend dropdown
+        available_to_locs.add(to_loc)
+
+        # Apply location filter if provided
+        if target_to_loc and target_to_loc.strip().lower() != to_loc.lower():
+            continue
         
         for p in products:
             brand = p.get("brand", "").strip() or "UNKNOWN"
@@ -2695,7 +2704,7 @@ def _generate_calculated_data(target_month: str):
         dashboard_results.append(result)
 
     dashboard_results.sort(key=lambda x: x["month_0_total_ctns"], reverse=True)
-    return dashboard_results, month0_label
+    return dashboard_results, month0_label, sorted(list(available_to_locs))
 
 
 # --- Dashboard Endpoints ---
@@ -2721,12 +2730,21 @@ def get_brand_allocation_cost_dashboard(
     
     
 @app.get("/dashboard/calculated-brand-cost")
-def get_calculated_brand_cost_dashboard(target_month: Optional[str] = None, user: dict = Depends(require_permission("view_dashboard"))):
+def get_calculated_brand_cost_dashboard(
+    target_month: Optional[str] = None, 
+    to_loc: Optional[str] = Query(None, description="Filter by To Location"),
+    user: dict = Depends(require_permission("view_dashboard"))
+):
     if not target_month:
         target_month = datetime.datetime.now().strftime("%Y-%m")
     try:
-        results, month = _generate_calculated_data(target_month)
-        return {"status": "success", "target_month": month, "data": results}
+        results, month, available_to_locs = _generate_calculated_data(target_month, target_to_loc=to_loc)
+        return {
+            "status": "success", 
+            "target_month": month, 
+            "data": results,
+            "available_to_locs": available_to_locs
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating calculated dashboard data: {str(e)}")
 
@@ -2735,6 +2753,7 @@ def get_calculated_brand_cost_dashboard(target_month: Optional[str] = None, user
 def get_combined_dashboard(
     target_month: Optional[str] = None, 
     branch: Optional[str] = Query(None, description="Filter by Branch"),
+    to_loc: Optional[str] = Query(None, description="Filter by To Location"),
     user: dict = Depends(require_permission("view_dashboard"))
 ):
     if not target_month:
@@ -2742,14 +2761,15 @@ def get_combined_dashboard(
         
     try:
         alloc_data, month, available_branches = _generate_allocation_data(target_month, target_branch=branch)
-        calc_data, _ = _generate_calculated_data(target_month)
+        calc_data, _, available_to_locs = _generate_calculated_data(target_month, target_to_loc=to_loc)
         
         return {
             "status": "success",
             "target_month": month,
             "allocation_data": alloc_data,
             "calculated_data": calc_data,
-            "available_branches": available_branches
+            "available_branches": available_branches,
+            "available_to_locs": available_to_locs
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating combined dashboard data: {str(e)}")
