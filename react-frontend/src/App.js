@@ -111,6 +111,7 @@ const PricingApp = () => {
   };
 
   // --- Dashboard State ---
+  const [activeDashboardTab, setActiveDashboardTab] = useState('rate_cart'); // New Tab State
   const [dashboardMonth, setDashboardMonth] = useState(getCurrentMonthString());
   const [dashboardBranch, setDashboardBranch] = useState('');
   const [dashboardBranches, setDashboardBranches] = useState([]);
@@ -1443,7 +1444,7 @@ const PricingApp = () => {
           
           <div className="bg-white rounded-lg shadow-md p-6">
             
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 pb-4 border-b">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 pb-4 border-b">
               <h1 className="text-3xl font-bold text-gray-800">Logistic Cost Dashboard</h1>
               <div className="flex flex-wrap items-center gap-2 mt-4 md:mt-0">
                   <input 
@@ -1465,303 +1466,335 @@ const PricingApp = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 border-b pb-6">
-                <div className={`flex flex-col gap-4 ${allocTheme.bg} p-4 rounded-lg border ${allocTheme.border} h-full`}>
-                    <div className="flex flex-col gap-1">
-                        <label className={`text-sm font-semibold ${allocTheme.text}`}>Branch Filter:</label>
-                        <select
-                            value={dashboardBranch}
-                            onChange={(e) => {
-                                setDashboardBranch(e.target.value);
-                                fetchCombinedDashboard(dashboardMonth, e.target.value, dashboardToLoc);
-                            }}
-                            className={`p-2 bg-white/80 border ${allocTheme.border} rounded focus:outline-none ${allocTheme.selectText} cursor-pointer text-sm w-full md:w-2/3`}
-                        >
-                            <option value="">All Branches</option>
-                            {dashboardBranches.map(b => (
-                                <option key={b} value={b}>{b}</option>
-                            ))}
-                        </select>
+            {/* --- DASHBOARD TABS --- */}
+            <div className="flex flex-wrap border-b mb-8 border-gray-200">
+                <button
+                    className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${
+                        activeDashboardTab === 'rate_cart' 
+                            ? 'border-blue-600 text-blue-600 bg-blue-50' 
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    }`}
+                    onClick={() => setActiveDashboardTab('rate_cart')}
+                >
+                    Rate Cart (Branch Allocation)
+                </button>
+                <button
+                    className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${
+                        activeDashboardTab === 'third_party' 
+                            ? 'border-green-600 text-green-600 bg-green-50' 
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    }`}
+                    onClick={() => setActiveDashboardTab('third_party')}
+                >
+                    Third Party (Calculated Cost)
+                </button>
+            </div>
+
+            {/* --- RATE CART TAB CONTENT --- */}
+            {activeDashboardTab === 'rate_cart' && (
+                <div className="animation-fade-in">
+                    <div className="mb-8 border-b pb-6">
+                        <div className={`flex flex-col gap-4 ${allocTheme.bg} p-4 rounded-lg border ${allocTheme.border} h-full`}>
+                            <div className="flex flex-col gap-1">
+                                <label className={`text-sm font-semibold ${allocTheme.text}`}>Branch Filter:</label>
+                                <select
+                                    value={dashboardBranch}
+                                    onChange={(e) => {
+                                        setDashboardBranch(e.target.value);
+                                        fetchCombinedDashboard(dashboardMonth, e.target.value, dashboardToLoc);
+                                    }}
+                                    className={`p-2 bg-white/80 border ${allocTheme.border} rounded focus:outline-none ${allocTheme.selectText} cursor-pointer text-sm w-full md:w-1/3`}
+                                >
+                                    <option value="">All Branches</option>
+                                    {dashboardBranches.map(b => (
+                                        <option key={b} value={b}>{b}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {allocationData.length > 0 ? (
+                                <div className="flex flex-col gap-1 border-t border-blue-200 pt-3">
+                                    <label className={`text-sm font-semibold ${allocTheme.text}`}>Brand (Rate Cart):</label>
+                                    <select
+                                        value={selectedAllocBrand}
+                                        onChange={(e) => setSelectedAllocBrand(e.target.value)}
+                                        className={`p-1 bg-transparent focus:outline-none font-bold ${allocTheme.selectText} cursor-pointer text-xl w-full md:w-1/3`}
+                                    >
+                                        {allocationData.map(r => (
+                                            <option key={r.brand} value={r.brand}>{r.brand}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ) : (
+                                <div className={`text-sm italic mt-2 border-t border-blue-200 pt-3 ${allocTheme.text}`}>
+                                    No allocation data for selected branch/month.
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    {allocationData.length > 0 ? (
-                        <div className="flex flex-col gap-1 border-t border-blue-200 pt-3">
-                            <label className={`text-sm font-semibold ${allocTheme.text}`}>Brand (Rate Cart):</label>
-                            <select
-                                value={selectedAllocBrand}
-                                onChange={(e) => setSelectedAllocBrand(e.target.value)}
-                                className={`p-1 bg-transparent focus:outline-none font-bold ${allocTheme.selectText} cursor-pointer text-xl`}
-                            >
-                                {allocationData.map(r => (
-                                    <option key={r.brand} value={r.brand}>{r.brand}</option>
-                                ))}
-                            </select>
-                        </div>
-                    ) : (
-                        <div className={`text-sm italic mt-2 border-t border-blue-200 pt-3 ${allocTheme.text}`}>
-                            No allocation data for selected branch/month.
-                        </div>
-                    )}
-                </div>
-
-                <div className={`flex flex-col gap-4 ${calcTheme.bg} p-4 rounded-lg border ${calcTheme.border} h-full`}>
-                    <div className="flex flex-col gap-1">
-                        <label className={`text-sm font-semibold ${calcTheme.text}`}>To Location Filter:</label>
-                        <select
-                            value={dashboardToLoc}
-                            onChange={(e) => {
-                                setDashboardToLoc(e.target.value);
-                                fetchCombinedDashboard(dashboardMonth, dashboardBranch, e.target.value);
-                            }}
-                            className={`p-2 bg-white/80 border ${calcTheme.border} rounded focus:outline-none ${calcTheme.selectText} cursor-pointer text-sm w-full md:w-2/3`}
-                        >
-                            <option value="">All Locations</option>
-                            {dashboardToLocs.map(loc => (
-                                <option key={loc} value={loc}>{loc}</option>
-                            ))}
-                        </select>
+                    <div className="mb-10">
+                    <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Allocation: 3-Month Summary (Rate Cart)</h2>
+                    <div className="overflow-x-auto border rounded-lg shadow-sm">
+                        <table className="w-full border-collapse">
+                        <thead className="bg-gray-100">
+                            <tr>
+                            <th className="border p-4 text-left font-bold text-gray-600 uppercase text-sm tracking-wider">Brand</th>
+                            <th className="border p-4 text-right">
+                                <div className="text-orange-700 font-bold">{month2Label}</div>
+                                <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
+                            </th>
+                            <th className="border p-4 text-right">
+                                <div className="text-purple-700 font-bold">{month1Label}</div>
+                                <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
+                            </th>
+                            <th className="border p-4 text-right">
+                                <div className="text-blue-700 font-bold">{month0Label}</div>
+                                <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
+                            </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {isDashboardLoading ? (
+                            <tr><td colSpan="4" className="text-center p-8 text-gray-500 font-semibold">Loading data...</td></tr>
+                            ) : !selectedAllocRow ? (
+                            <tr><td colSpan="4" className="text-center p-6 text-gray-500 italic">No allocation data available for this period.</td></tr>
+                            ) : (
+                            <tr className="bg-white hover:bg-gray-50 transition-colors">
+                                <td className="border p-4 font-black text-gray-800 text-xl">{selectedAllocRow.brand}</td>
+                                <td className="border p-4 text-right">
+                                <span className="font-bold text-xl text-orange-700">{formatNumber(selectedAllocRow['month_2_avg_cost'])}</span>
+                                <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedAllocRow['month_2_total_ctns'])}</span></div>
+                                <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedAllocRow['month_2_total_cost'])}</span> mmk</div>
+                                </td>
+                                <td className="border p-4 text-right">
+                                <span className="font-bold text-xl text-purple-700">{formatNumber(selectedAllocRow['month_1_avg_cost'])}</span>
+                                <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedAllocRow['month_1_total_ctns'])}</span></div>
+                                <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedAllocRow['month_1_total_cost'])}</span> mmk</div>
+                                </td>
+                                <td className="border p-4 text-right">
+                                <span className="font-black text-2xl text-blue-700">{formatNumber(selectedAllocRow['month_0_avg_cost'])}</span>
+                                <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedAllocRow['month_0_total_ctns'])}</span></div>
+                                <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedAllocRow['month_0_total_cost'])}</span> mmk</div>
+                                </td>
+                            </tr>
+                            )}
+                        </tbody>
+                        </table>
+                    </div>
                     </div>
 
-                    {calculatedData.length > 0 ? (
-                        <div className="flex flex-col gap-1 border-t border-green-200 pt-3">
-                            <label className={`text-sm font-semibold ${calcTheme.text}`}>Brand (Third Party):</label>
-                            <select
-                                value={selectedCalcBrand}
-                                onChange={(e) => setSelectedCalcBrand(e.target.value)}
-                                className={`p-1 bg-transparent focus:outline-none font-bold ${calcTheme.selectText} cursor-pointer text-xl`}
-                            >
-                                {calculatedData.map(r => (
-                                    <option key={r.brand} value={r.brand}>{r.brand}</option>
-                                ))}
-                            </select>
+                    <div className="mb-10 w-full">
+                        <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Allocation: 12-Month Trend Analysis (Rate Cart)</h2>
+                        {isDashboardLoading ? (
+                        <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center">Loading trends...</div>
+                        ) : !selectedAllocRow ? (
+                        <div className="text-center p-6 text-gray-500 italic border rounded-lg flex items-center justify-center">No trend data available.</div>
+                        ) : (
+                        <div className="bg-white border rounded-lg p-6 shadow-sm">
+                            {(() => {
+                                if (!selectedAllocRow.trend || selectedAllocRow.trend.length === 0) {
+                                    return <div className="text-center p-8 text-gray-500">No trend data available for {selectedAllocRow.brand}.</div>;
+                                }
+
+                                const maxVal = Math.max(...selectedAllocRow.trend.map(d => d.avg_cost));
+
+                                return (
+                                    <div className="w-full">
+                                        <div className="flex justify-between items-center mb-8">
+                                            <h3 className={`font-bold text-2xl ${allocTheme.text}`}>{selectedAllocRow.brand} Trend</h3>
+                                        </div>
+                                        
+                                        <div className="flex items-end justify-between h-72 w-full gap-2 sm:gap-4 border-b-2 border-gray-200 pb-2 relative px-2">
+                                            {selectedAllocRow.trend.map((tData, tIdx) => {
+                                                const heightPct = maxVal > 0 ? (tData.avg_cost / maxVal) * 100 : 0;
+                                                const isCurrentMonth = tIdx === selectedAllocRow.trend.length - 1;
+                                                
+                                                let monthAbbr = tData.month;
+                                                try {
+                                                    const dateObj = new Date(tData.month + "-01T00:00:00");
+                                                    monthAbbr = dateObj.toLocaleString('default', { month: 'short', year: '2-digit' });
+                                                } catch(e) {}
+
+                                                return (
+                                                    <div key={tIdx} className="relative flex flex-col items-center group w-full h-full justify-end cursor-pointer">
+                                                        <div className="absolute bottom-full mb-3 hidden group-hover:block z-50 bg-gray-800 text-white p-3 rounded-lg shadow-xl whitespace-nowrap min-w-[140px] text-center border border-gray-600">
+                                                            <div className="font-bold text-sm border-b border-gray-600 pb-1 mb-2">{tData.month}</div>
+                                                            <div className="text-blue-300 font-bold mb-1">Avg: {formatNumber(tData.avg_cost)} MMK</div>
+                                                            <div className="text-gray-300 text-xs mt-2">Total Cost: {formatNumber(tData.total_cost)}</div>
+                                                            <div className="text-gray-300 text-xs">Total Ctns: {formatNumber(tData.total_ctns)}</div>
+                                                        </div>
+                                                        <div 
+                                                            className={`w-full max-w-[60px] rounded-t-md transition-all duration-300 ${isCurrentMonth ? allocTheme.barCurrent : allocTheme.barOther}`}
+                                                            style={{ height: `${Math.max(heightPct, 5)}%`, minHeight: '6px' }}
+                                                        ></div>
+                                                        <span className="text-xs sm:text-sm font-medium text-gray-500 absolute -bottom-8 w-full text-center truncate">{monthAbbr}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="h-10"></div>
+                                    </div>
+                                );
+                            })()}
                         </div>
-                    ) : (
-                        <div className={`text-sm italic mt-2 border-t border-green-200 pt-3 ${calcTheme.text}`}>
-                            No third-party data for selected month/location.
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
+            )}
 
-            </div>
+            {/* --- THIRD PARTY TAB CONTENT --- */}
+            {activeDashboardTab === 'third_party' && (
+                <div className="animation-fade-in">
+                    <div className="mb-8 border-b pb-6">
+                        <div className={`flex flex-col gap-4 ${calcTheme.bg} p-4 rounded-lg border ${calcTheme.border} h-full`}>
+                            <div className="flex flex-col gap-1">
+                                <label className={`text-sm font-semibold ${calcTheme.text}`}>To Location Filter:</label>
+                                <select
+                                    value={dashboardToLoc}
+                                    onChange={(e) => {
+                                        setDashboardToLoc(e.target.value);
+                                        fetchCombinedDashboard(dashboardMonth, dashboardBranch, e.target.value);
+                                    }}
+                                    className={`p-2 bg-white/80 border ${calcTheme.border} rounded focus:outline-none ${calcTheme.selectText} cursor-pointer text-sm w-full md:w-1/3`}
+                                >
+                                    <option value="">All Locations</option>
+                                    {dashboardToLocs.map(loc => (
+                                        <option key={loc} value={loc}>{loc}</option>
+                                    ))}
+                                </select>
+                            </div>
 
-            <div className="mb-10">
-              <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Allocation: 3-Month Summary (Rate Cart)</h2>
-              <div className="overflow-x-auto border rounded-lg shadow-sm">
-                <table className="w-full border-collapse">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="border p-4 text-left font-bold text-gray-600 uppercase text-sm tracking-wider">Brand</th>
-                      <th className="border p-4 text-right">
-                        <div className="text-orange-700 font-bold">{month2Label}</div>
-                        <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
-                      </th>
-                      <th className="border p-4 text-right">
-                        <div className="text-purple-700 font-bold">{month1Label}</div>
-                        <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
-                      </th>
-                      <th className="border p-4 text-right">
-                        <div className="text-blue-700 font-bold">{month0Label}</div>
-                        <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {isDashboardLoading ? (
-                      <tr><td colSpan="4" className="text-center p-8 text-gray-500 font-semibold">Loading data...</td></tr>
-                    ) : !selectedAllocRow ? (
-                      <tr><td colSpan="4" className="text-center p-6 text-gray-500 italic">No allocation data available for this period.</td></tr>
-                    ) : (
-                      <tr className="bg-white hover:bg-gray-50 transition-colors">
-                        <td className="border p-4 font-black text-gray-800 text-xl">{selectedAllocRow.brand}</td>
-                        <td className="border p-4 text-right">
-                          <span className="font-bold text-xl text-orange-700">{formatNumber(selectedAllocRow['month_2_avg_cost'])}</span>
-                          <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedAllocRow['month_2_total_ctns'])}</span></div>
-                          <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedAllocRow['month_2_total_cost'])}</span> mmk</div>
-                        </td>
-                        <td className="border p-4 text-right">
-                          <span className="font-bold text-xl text-purple-700">{formatNumber(selectedAllocRow['month_1_avg_cost'])}</span>
-                          <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedAllocRow['month_1_total_ctns'])}</span></div>
-                          <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedAllocRow['month_1_total_cost'])}</span> mmk</div>
-                        </td>
-                        <td className="border p-4 text-right">
-                          <span className="font-black text-2xl text-blue-700">{formatNumber(selectedAllocRow['month_0_avg_cost'])}</span>
-                          <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedAllocRow['month_0_total_ctns'])}</span></div>
-                          <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedAllocRow['month_0_total_cost'])}</span> mmk</div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                            {calculatedData.length > 0 ? (
+                                <div className="flex flex-col gap-1 border-t border-green-200 pt-3">
+                                    <label className={`text-sm font-semibold ${calcTheme.text}`}>Brand (Third Party):</label>
+                                    <select
+                                        value={selectedCalcBrand}
+                                        onChange={(e) => setSelectedCalcBrand(e.target.value)}
+                                        className={`p-1 bg-transparent focus:outline-none font-bold ${calcTheme.selectText} cursor-pointer text-xl w-full md:w-1/3`}
+                                    >
+                                        {calculatedData.map(r => (
+                                            <option key={r.brand} value={r.brand}>{r.brand}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ) : (
+                                <div className={`text-sm italic mt-2 border-t border-green-200 pt-3 ${calcTheme.text}`}>
+                                    No third-party data for selected month/location.
+                                </div>
+                            )}
+                        </div>
+                    </div>
 
-            <div className="mb-10">
-              <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Allocation: 3-Month Summary (Third Party)</h2>
-              <div className="overflow-x-auto border rounded-lg shadow-sm">
-                <table className="w-full border-collapse">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="border p-4 text-left font-bold text-gray-600 uppercase text-sm tracking-wider">Brand</th>
-                      <th className="border p-4 text-right">
-                        <div className="text-orange-700 font-bold">{month2Label}</div>
-                        <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
-                      </th>
-                      <th className="border p-4 text-right">
-                        <div className="text-purple-700 font-bold">{month1Label}</div>
-                        <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
-                      </th>
-                      <th className="border p-4 text-right">
-                        <div className="text-blue-700 font-bold">{month0Label}</div>
-                        <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {isDashboardLoading ? (
-                      <tr><td colSpan="4" className="text-center p-8 text-gray-500 font-semibold">Loading data...</td></tr>
-                    ) : !selectedCalcRow ? (
-                      <tr><td colSpan="4" className="text-center p-6 text-gray-500 italic">No calculated data available for this period.</td></tr>
-                    ) : (
-                      <tr className="bg-white hover:bg-gray-50 transition-colors">
-                        <td className="border p-4 font-black text-gray-800 text-xl">{selectedCalcRow.brand}</td>
-                        <td className="border p-4 text-right">
-                          <span className="font-bold text-xl text-orange-700">{formatNumber(selectedCalcRow['month_2_avg_cost'])}</span>
-                          <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedCalcRow['month_2_total_ctns'])}</span></div>
-                          <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedCalcRow['month_2_total_cost'])}</span> mmk</div>
-                        </td>
-                        <td className="border p-4 text-right">
-                          <span className="font-bold text-xl text-purple-700">{formatNumber(selectedCalcRow['month_1_avg_cost'])}</span>
-                          <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedCalcRow['month_1_total_ctns'])}</span></div>
-                          <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedCalcRow['month_1_total_cost'])}</span> mmk</div>
-                        </td>
-                        <td className="border p-4 text-right">
-                          <span className="font-black text-2xl text-blue-700">{formatNumber(selectedCalcRow['month_0_avg_cost'])}</span>
-                          <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedCalcRow['month_0_total_ctns'])}</span></div>
-                          <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedCalcRow['month_0_total_cost'])}</span> mmk</div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                    <div className="mb-10">
+                    <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Allocation: 3-Month Summary (Third Party)</h2>
+                    <div className="overflow-x-auto border rounded-lg shadow-sm">
+                        <table className="w-full border-collapse">
+                        <thead className="bg-gray-100">
+                            <tr>
+                            <th className="border p-4 text-left font-bold text-gray-600 uppercase text-sm tracking-wider">Brand</th>
+                            <th className="border p-4 text-right">
+                                <div className="text-orange-700 font-bold">{month2Label}</div>
+                                <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
+                            </th>
+                            <th className="border p-4 text-right">
+                                <div className="text-purple-700 font-bold">{month1Label}</div>
+                                <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
+                            </th>
+                            <th className="border p-4 text-right">
+                                <div className="text-blue-700 font-bold">{month0Label}</div>
+                                <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
+                            </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {isDashboardLoading ? (
+                            <tr><td colSpan="4" className="text-center p-8 text-gray-500 font-semibold">Loading data...</td></tr>
+                            ) : !selectedCalcRow ? (
+                            <tr><td colSpan="4" className="text-center p-6 text-gray-500 italic">No calculated data available for this period.</td></tr>
+                            ) : (
+                            <tr className="bg-white hover:bg-gray-50 transition-colors">
+                                <td className="border p-4 font-black text-gray-800 text-xl">{selectedCalcRow.brand}</td>
+                                <td className="border p-4 text-right">
+                                <span className="font-bold text-xl text-orange-700">{formatNumber(selectedCalcRow['month_2_avg_cost'])}</span>
+                                <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedCalcRow['month_2_total_ctns'])}</span></div>
+                                <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedCalcRow['month_2_total_cost'])}</span> mmk</div>
+                                </td>
+                                <td className="border p-4 text-right">
+                                <span className="font-bold text-xl text-purple-700">{formatNumber(selectedCalcRow['month_1_avg_cost'])}</span>
+                                <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedCalcRow['month_1_total_ctns'])}</span></div>
+                                <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedCalcRow['month_1_total_cost'])}</span> mmk</div>
+                                </td>
+                                <td className="border p-4 text-right">
+                                <span className="font-black text-2xl text-blue-700">{formatNumber(selectedCalcRow['month_0_avg_cost'])}</span>
+                                <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedCalcRow['month_0_total_ctns'])}</span></div>
+                                <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedCalcRow['month_0_total_cost'])}</span> mmk</div>
+                                </td>
+                            </tr>
+                            )}
+                        </tbody>
+                        </table>
+                    </div>
+                    </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
-              <div>
-                <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Allocation: 12-Month Trend Analysis (Rate Cart)</h2>
-                {isDashboardLoading ? (
-                   <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center">Loading trends...</div>
-                ) : !selectedAllocRow ? (
-                   <div className="text-center p-6 text-gray-500 italic border rounded-lg flex items-center justify-center">No trend data available.</div>
-                ) : (
-                   <div className="bg-white border rounded-lg p-6 shadow-sm">
-                      {(() => {
-                          if (!selectedAllocRow.trend || selectedAllocRow.trend.length === 0) {
-                              return <div className="text-center p-8 text-gray-500">No trend data available for {selectedAllocRow.brand}.</div>;
-                          }
+                    <div className="mb-10 w-full">
+                        <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Allocation: 12-Month Trend Analysis (Third Party)</h2>
+                        {isDashboardLoading ? (
+                        <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center">Loading trends...</div>
+                        ) : !selectedCalcRow ? (
+                        <div className="text-center p-6 text-gray-500 italic border rounded-lg flex items-center justify-center">No trend data available.</div>
+                        ) : (
+                        <div className="bg-white border rounded-lg p-6 shadow-sm">
+                            {(() => {
+                                if (!selectedCalcRow.trend || selectedCalcRow.trend.length === 0) {
+                                    return <div className="text-center p-8 text-gray-500">No trend data available for {selectedCalcRow.brand}.</div>;
+                                }
 
-                          const maxVal = Math.max(...selectedAllocRow.trend.map(d => d.avg_cost));
+                                const maxVal = Math.max(...selectedCalcRow.trend.map(d => d.avg_cost));
 
-                          return (
-                              <div className="w-full">
-                                  <div className="flex justify-between items-center mb-8">
-                                      <h3 className={`font-bold text-2xl ${allocTheme.text}`}>{selectedAllocRow.brand} Trend</h3>
-                                  </div>
-                                  
-                                  <div className="flex items-end justify-between h-72 w-full gap-2 sm:gap-4 border-b-2 border-gray-200 pb-2 relative px-2">
-                                      {selectedAllocRow.trend.map((tData, tIdx) => {
-                                          const heightPct = maxVal > 0 ? (tData.avg_cost / maxVal) * 100 : 0;
-                                          const isCurrentMonth = tIdx === selectedAllocRow.trend.length - 1;
-                                          
-                                          let monthAbbr = tData.month;
-                                          try {
-                                              const dateObj = new Date(tData.month + "-01T00:00:00");
-                                              monthAbbr = dateObj.toLocaleString('default', { month: 'short', year: '2-digit' });
-                                          } catch(e) {}
+                                return (
+                                    <div className="w-full">
+                                        <div className="flex justify-between items-center mb-8">
+                                            <h3 className={`font-bold text-2xl ${calcTheme.text}`}>{selectedCalcRow.brand} Trend</h3>
+                                        </div>
+                                        
+                                        <div className="flex items-end justify-between h-72 w-full gap-2 sm:gap-4 border-b-2 border-gray-200 pb-2 relative px-2">
+                                            {selectedCalcRow.trend.map((tData, tIdx) => {
+                                                const heightPct = maxVal > 0 ? (tData.avg_cost / maxVal) * 100 : 0;
+                                                const isCurrentMonth = tIdx === selectedCalcRow.trend.length - 1;
+                                                
+                                                let monthAbbr = tData.month;
+                                                try {
+                                                    const dateObj = new Date(tData.month + "-01T00:00:00");
+                                                    monthAbbr = dateObj.toLocaleString('default', { month: 'short', year: '2-digit' });
+                                                } catch(e) {}
 
-                                          return (
-                                              <div key={tIdx} className="relative flex flex-col items-center group w-full h-full justify-end cursor-pointer">
-                                                  <div className="absolute bottom-full mb-3 hidden group-hover:block z-50 bg-gray-800 text-white p-3 rounded-lg shadow-xl whitespace-nowrap min-w-[140px] text-center border border-gray-600">
-                                                      <div className="font-bold text-sm border-b border-gray-600 pb-1 mb-2">{tData.month}</div>
-                                                      <div className="text-blue-300 font-bold mb-1">Avg: {formatNumber(tData.avg_cost)} MMK</div>
-                                                      <div className="text-gray-300 text-xs mt-2">Total Cost: {formatNumber(tData.total_cost)}</div>
-                                                      <div className="text-gray-300 text-xs">Total Ctns: {formatNumber(tData.total_ctns)}</div>
-                                                  </div>
-                                                  <div 
-                                                      className={`w-full max-w-[60px] rounded-t-md transition-all duration-300 ${isCurrentMonth ? allocTheme.barCurrent : allocTheme.barOther}`}
-                                                      style={{ height: `${Math.max(heightPct, 5)}%`, minHeight: '6px' }}
-                                                  ></div>
-                                                  <span className="text-xs sm:text-sm font-medium text-gray-500 absolute -bottom-8 w-full text-center truncate">{monthAbbr}</span>
-                                              </div>
-                                          );
-                                      })}
-                                  </div>
-                                  <div className="h-10"></div>
-                              </div>
-                          );
-                      })()}
-                   </div>
-                )}
-              </div>
-
-              <div>
-                <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Allocation: 12-Month Trend Analysis (Third Party)</h2>
-                {isDashboardLoading ? (
-                   <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center">Loading trends...</div>
-                ) : !selectedCalcRow ? (
-                   <div className="text-center p-6 text-gray-500 italic border rounded-lg flex items-center justify-center">No trend data available.</div>
-                ) : (
-                   <div className="bg-white border rounded-lg p-6 shadow-sm">
-                      {(() => {
-                          if (!selectedCalcRow.trend || selectedCalcRow.trend.length === 0) {
-                              return <div className="text-center p-8 text-gray-500">No trend data available for {selectedCalcRow.brand}.</div>;
-                          }
-
-                          const maxVal = Math.max(...selectedCalcRow.trend.map(d => d.avg_cost));
-
-                          return (
-                              <div className="w-full">
-                                  <div className="flex justify-between items-center mb-8">
-                                      <h3 className={`font-bold text-2xl ${calcTheme.text}`}>{selectedCalcRow.brand} Trend</h3>
-                                  </div>
-                                  
-                                  <div className="flex items-end justify-between h-72 w-full gap-2 sm:gap-4 border-b-2 border-gray-200 pb-2 relative px-2">
-                                      {selectedCalcRow.trend.map((tData, tIdx) => {
-                                          const heightPct = maxVal > 0 ? (tData.avg_cost / maxVal) * 100 : 0;
-                                          const isCurrentMonth = tIdx === selectedCalcRow.trend.length - 1;
-                                          
-                                          let monthAbbr = tData.month;
-                                          try {
-                                              const dateObj = new Date(tData.month + "-01T00:00:00");
-                                              monthAbbr = dateObj.toLocaleString('default', { month: 'short', year: '2-digit' });
-                                          } catch(e) {}
-
-                                          return (
-                                              <div key={tIdx} className="relative flex flex-col items-center group w-full h-full justify-end cursor-pointer">
-                                                  <div className="absolute bottom-full mb-3 hidden group-hover:block z-50 bg-gray-800 text-white p-3 rounded-lg shadow-xl whitespace-nowrap min-w-[140px] text-center border border-gray-600">
-                                                      <div className="font-bold text-sm border-b border-gray-600 pb-1 mb-2">{tData.month}</div>
-                                                      <div className="text-green-300 font-bold mb-1">Avg: {formatNumber(tData.avg_cost)} MMK</div>
-                                                      <div className="text-gray-300 text-xs mt-2">Total Cost: {formatNumber(tData.total_cost)}</div>
-                                                      <div className="text-gray-300 text-xs">Total Ctns: {formatNumber(tData.total_ctns)}</div>
-                                                  </div>
-                                                  <div 
-                                                      className={`w-full max-w-[60px] rounded-t-md transition-all duration-300 ${isCurrentMonth ? calcTheme.barCurrent : calcTheme.barOther}`}
-                                                      style={{ height: `${Math.max(heightPct, 5)}%`, minHeight: '6px' }}
-                                                  ></div>
-                                                  <span className="text-xs sm:text-sm font-medium text-gray-500 absolute -bottom-8 w-full text-center truncate">{monthAbbr}</span>
-                                              </div>
-                                          );
-                                      })}
-                                  </div>
-                                  <div className="h-10"></div>
-                              </div>
-                          );
-                      })()}
-                   </div>
-                )}
-              </div>
-            </div>
-
+                                                return (
+                                                    <div key={tIdx} className="relative flex flex-col items-center group w-full h-full justify-end cursor-pointer">
+                                                        <div className="absolute bottom-full mb-3 hidden group-hover:block z-50 bg-gray-800 text-white p-3 rounded-lg shadow-xl whitespace-nowrap min-w-[140px] text-center border border-gray-600">
+                                                            <div className="font-bold text-sm border-b border-gray-600 pb-1 mb-2">{tData.month}</div>
+                                                            <div className="text-green-300 font-bold mb-1">Avg: {formatNumber(tData.avg_cost)} MMK</div>
+                                                            <div className="text-gray-300 text-xs mt-2">Total Cost: {formatNumber(tData.total_cost)}</div>
+                                                            <div className="text-gray-300 text-xs">Total Ctns: {formatNumber(tData.total_ctns)}</div>
+                                                        </div>
+                                                        <div 
+                                                            className={`w-full max-w-[60px] rounded-t-md transition-all duration-300 ${isCurrentMonth ? calcTheme.barCurrent : calcTheme.barOther}`}
+                                                            style={{ height: `${Math.max(heightPct, 5)}%`, minHeight: '6px' }}
+                                                        ></div>
+                                                        <span className="text-xs sm:text-sm font-medium text-gray-500 absolute -bottom-8 w-full text-center truncate">{monthAbbr}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="h-10"></div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                        )}
+                    </div>
+                </div>
+            )}
           </div>
         </div>
       </div>
