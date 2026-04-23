@@ -402,6 +402,100 @@ const PricingApp = () => {
     }
   };
 
+
+  const handleDownloadDailyReportExcel = async (reportType) => {
+    try {
+        showNotification('Generating Excel file...', 'info');
+        
+        // Base URL
+        let url = `${API_URL}/account/daily-rate-cut-report/export?report_type=${reportType}`;
+        const params = new URLSearchParams();
+        
+        // Append Dates
+        if (isDateRange) {
+            if (dailyReportStartDate) params.append('start_date', dailyReportStartDate);
+            if (dailyReportEndDate) params.append('end_date', dailyReportEndDate);
+        } else {
+            if (dailyReportDate) params.append('target_date', dailyReportDate);
+        }
+
+        // Attach Active Frontend Filters
+        const activeFilters = reportType === 'item' ? dailyReportFilters : townshipFilters;
+        Object.entries(activeFilters).forEach(([key, value]) => {
+            if (value && String(value).trim() !== '') {
+                params.append(key, String(value).trim());
+            }
+        });
+
+        // Finalize URL
+        const queryString = params.toString();
+        if (queryString) url += `&${queryString}`;
+
+        const response = await authFetch(url);
+        if (response.ok) {
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a'); 
+            a.href = downloadUrl; 
+            a.download = `${reportType}_allocation_report.xlsx`;
+            document.body.appendChild(a); 
+            a.click(); 
+            window.URL.revokeObjectURL(downloadUrl); 
+            document.body.removeChild(a);
+            showNotification('Excel file downloaded successfully', 'success');
+        } else {
+            const error = await response.json(); 
+            showNotification(getErrorMessage(error), 'error');
+        }
+    } catch (error) {
+        showNotification(`Error downloading file: ${error.message}`, 'error');
+    }
+  };
+
+  const handleDownloadSubmittedAllocationExcel = async () => {
+    try {
+        showNotification('Generating Excel file...', 'info');
+        
+        // Base URL
+        let url = `${API_URL}/account/submitted-allocation-report/export`;
+        const params = new URLSearchParams();
+        
+        // Append Dates
+        if (allocationStartDate) params.append('start_date', allocationStartDate);
+        if (allocationEndDate) params.append('end_date', allocationEndDate);
+        
+        // Attach Active Frontend Filters
+        Object.entries(allocationFilters).forEach(([key, value]) => {
+            if (value && String(value).trim() !== '') {
+                params.append(key, String(value).trim());
+            }
+        });
+
+        // Finalize URL
+        const queryString = params.toString();
+        if (queryString) url += `?${queryString}`;
+
+        const response = await authFetch(url);
+        if (response.ok) {
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a'); 
+            a.href = downloadUrl; 
+            a.download = `submitted_allocation_report.xlsx`;
+            document.body.appendChild(a); 
+            a.click(); 
+            window.URL.revokeObjectURL(downloadUrl); 
+            document.body.removeChild(a);
+            showNotification('Excel file downloaded successfully', 'success');
+        } else {
+            const error = await response.json(); 
+            showNotification(getErrorMessage(error), 'error');
+        }
+    } catch (error) {
+        showNotification(`Error downloading file: ${error.message}`, 'error');
+    }
+  };
+
   const loadUsers = async () => {
     try {
         const response = await authFetch(`${API_URL}/users`);
@@ -2110,6 +2204,15 @@ const PricingApp = () => {
                                       >
                                           {isDailyReportLoading ? 'Loading...' : 'Fetch Report'}
                                       </button>
+
+                                      {/* --- NEW DOWNLOAD EXCEL BUTTON --- */}
+                                      <button 
+                                          onClick={() => handleDownloadDailyReportExcel(activeDailyTab)} 
+                                          disabled={isDailyReportLoading || (activeDailyTab === 'item' ? dailyReportData.length === 0 : dailyTownshipReportData.length === 0)} 
+                                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:bg-gray-400 font-semibold"
+                                      >
+                                          <Download size={18} /> Download Excel
+                                      </button>
                                   </div>
                               </div>
                           ) : (
@@ -2136,6 +2239,15 @@ const PricingApp = () => {
                                           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 font-semibold"
                                       >
                                           {isAllocationLoading ? 'Loading...' : 'Fetch Report'}
+                                      </button>
+
+                                      {/* --- NEW DOWNLOAD EXCEL BUTTON --- */}
+                                      <button 
+                                          onClick={handleDownloadSubmittedAllocationExcel} 
+                                          disabled={isAllocationLoading || submittedAllocationData.length === 0} 
+                                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:bg-gray-400 font-semibold"
+                                      >
+                                          <Download size={18} /> Download Excel
                                       </button>
                                   </div>
                               </div>

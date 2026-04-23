@@ -20,6 +20,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from apscheduler.schedulers.background import BackgroundScheduler
+from fastapi import Request 
 
 # --- Auth Configuration ---
 SECRET_KEY = "CHANGE_THIS_TO_A_SUPER_SECRET_KEY"  # IMPORTANT: Change this!
@@ -3122,6 +3123,245 @@ def get_principal_brand_allocation(user: dict = Depends(require_permission("view
     except Exception as e:
         logger.error(f"Error generating principal brand allocation hierarchy: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating hierarchy data: {str(e)}")
+    
+    
+# --- Daily Report Excel Export Endpoints ---
+
+@app.get("/account/daily-rate-cut-report/export")
+def export_daily_rate_cut_report(
+    request: Request,
+    report_type: str = Query(..., description="'item' or 'township'"),
+    target_date: Optional[str] = None, 
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    user: dict = Depends(require_permission("view_daily_report"))
+):
+    try:
+        # 1. Fetch Data
+        if start_date and end_date:
+            start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d")
+            if start_dt > end_dt: 
+                raise HTTPException(status_code=400, detail="start_date cannot be after end_date")
+            if (end_dt - start_dt).days > 60: 
+                raise HTTPException(status_code=400, detail="Date range cannot exceed 60 days.")
+            
+            daily_datas = []
+            current_dt = start_dt
+            while current_dt <= end_dt:
+                daily_datas.append(get_or_generate_daily_report(current_dt.strftime("%Y-%m-%d")))
+                current_dt += datetime.timedelta(days=1)
+            
+            aggregated = _aggregate_reports(daily_datas)
+            report_data = aggregated["item_report"] if report_type == 'item' else aggregated["township_report"]
+            date_str = f"{start_date}_to_{end_date}"
+        else:
+            if not target_date: 
+                target_date = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+            
+            data = get_or_generate_daily_report(target_date)
+            report_data = data["item_report"] if report_type == 'item' else data["township_report"]
+            date_str = target_date
+
+        # --- NEW: Apply Dynamic Filters ---
+        filters = dict(request.query_params)
+        for k in ['report_type', 'target_date', 'start_date', 'end_date']:
+            filters.pop(k, None) # Remove standard params so we only have search filters left
+            
+        if filters:
+            filtered_data = []
+            for row in report_data:
+                match = True
+                for key, val in filters.items():
+                    row_val = str(row.get(key, '')).lower()
+                    if val.lower() not in row_val:
+                        match = False
+                        break
+                if match:
+                    filtered_data.append(row)
+            report_data = filtered_data
+        # ----------------------------------
+
+        # 2. Build Excel Workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Item Allocation" if report_type == 'item' else "Township Allocation"
+        
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        border_style = Side(border_style="thin", color="000000")
+        border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
+
+        # 3. Define Headers
+        if report_type == 'item':
+            headers = [
+                "BU", "Branch", "Driver Name", "Principal", "Brand", "Item Code", "Item Name", 
+                "Cartons", "Driver Total (Ctns)", "Branch Rate Cost", "Cost per Carton", 
+                "Allocated Cost", "Sales Amount"
+            ]
+        else:
+            headers = [
+                "Branch", "Driver Name", "Township", "Customer Code", "Contact Person", 
+                "Customer Total (Ctns)", "Driver Total (Ctns)", "Branch Rate Cost", "Total Drop Points", 
+                "Cost per Drop Point", "Cost per Carton", "Allocated Cost", "Sales Amount"
+            ]
+
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = border
+
+        # 4. Write Rows
+        for idx, row in enumerate(report_data, 2):
+            if report_type == 'item':
+                row_data = [
+                    row.get("bu", "-"), row.get("branch", ""), row.get("driver_name", ""),
+                    row.get("principal", ""), row.get("brand", ""), row.get("item_code", ""),
+                    row.get("item_name", ""), row.get("ctns", 0), row.get("driver_total_ctns", 0),
+                    row.get("branch_cost", 0), row.get("cost_per_carton", 0), row.get("allocated_cost", 0),
+                    row.get("sales_amount", 0)
+                ]
+            else:
+                row_data = [
+                    row.get("branch", ""), row.get("driver_name", ""), row.get("township", ""),
+                    row.get("customer_code", ""), row.get("contact_person", ""), row.get("ctns", 0),
+                    row.get("driver_total_ctns", 0), row.get("branch_cost", 0), row.get("total_drop_points", 0),
+                    row.get("cost_per_drop_point", 0), row.get("cost_per_carton", 0), row.get("allocated_cost", 0),
+                    row.get("sales_amount", 0)
+                ]
+            
+            for col_num, val in enumerate(row_data, 1):
+                cell = ws.cell(row=idx, column=col_num, value=val)
+                cell.border = border
+                if isinstance(val, (int, float)):
+                    cell.number_format = '#,##0.00'
+
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    if len(str(cell.value)) > max_length: 
+                        max_length = len(str(cell.value))
+                except: 
+                    pass
+            ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        filename = f"{report_type}_allocation_{date_str}.xlsx"
+        
+        return StreamingResponse(
+            output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error exporting daily report: {str(e)}")
+
+
+@app.get("/account/submitted-allocation-report/export")
+def export_submitted_allocation_report(
+    request: Request,
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    user: dict = Depends(require_permission("view_daily_report"))
+):
+    try:
+        report_response = get_submitted_allocation_report(start_date, end_date, user)
+        allocation_data = report_response["data"]
+
+        # --- NEW: Apply Dynamic Filters ---
+        filters = dict(request.query_params)
+        for k in ['start_date', 'end_date']:
+            filters.pop(k, None)
+            
+        if filters:
+            filtered_data = []
+            for row in allocation_data:
+                match = True
+                for key, val in filters.items():
+                    # Map the frontend route filter to from_loc and to_loc
+                    if key == 'route':
+                        route_str = f"{row.get('from_loc', '')} {row.get('to_loc', '')}".lower()
+                        if val.lower() not in route_str:
+                            match = False
+                            break
+                    else:
+                        row_val = str(row.get(key, '')).lower()
+                        if val.lower() not in row_val:
+                            match = False
+                            break
+                if match:
+                    filtered_data.append(row)
+            allocation_data = filtered_data
+        # ----------------------------------
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Submitted Allocations"
+        
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        border_style = Side(border_style="thin", color="000000")
+        border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
+
+        headers = [
+            "Calc ID", "Action Date", "Doc Date", "SIN No", "Gate Name", "From Loc", "To Loc", "Channel",
+            "BU", "Item Code", "Item Name", "Principal", "Brand", "B-Code", "B-Name", "B-Desc", "S-Dept", 
+            "S-Principal", "Cartons", "Weight", "Unit Cost", "Total Cost", "Calculation Type"
+        ]
+
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = border
+
+        for idx, row in enumerate(allocation_data, 2):
+            row_data = [
+                row.get("calc_id", ""), row.get("action_date", ""), row.get("doc_date", ""),
+                row.get("sin_no", ""), row.get("gate_name", ""), row.get("from_loc", ""),
+                row.get("to_loc", ""), row.get("channel", ""), row.get("bu", ""),
+                row.get("item_code", ""), row.get("item_name", ""), row.get("principal", ""),
+                row.get("brand", ""), row.get("b_code", ""), row.get("b_name", ""),
+                row.get("b_desc", ""), row.get("s_dept", ""), row.get("s_principal", ""),
+                row.get("ctns", 0), row.get("weight", 0), row.get("unit_cost", 0),
+                row.get("total_cost", 0), row.get("calculation_type", "")
+            ]
+            
+            for col_num, val in enumerate(row_data, 1):
+                cell = ws.cell(row=idx, column=col_num, value=val)
+                cell.border = border
+                if isinstance(val, (int, float)):
+                    cell.number_format = '#,##0.00'
+
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    if len(str(cell.value)) > max_length: 
+                        max_length = len(str(cell.value))
+                except: 
+                    pass
+            ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+
+        date_str = f"{start_date}_to_{end_date}" if start_date and end_date else "all_time"
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        filename = f"submitted_allocation_report_{date_str}.xlsx"
+        
+        return StreamingResponse(
+            output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error exporting submitted report: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
