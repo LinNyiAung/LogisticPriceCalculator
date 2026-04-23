@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Calendar, Percent, BarChart2, Key, Activity } from 'lucide-react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Calendar, Percent, BarChart2, Key, Activity, ChevronRight, ChevronDown } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -33,7 +33,6 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'view_rate_carts', label: 'View Rate Carts' },
   { id: 'add_rate_cart', label: 'Add Rate Cart' },
   { id: 'edit_rate_cart', label: 'Edit Rate Cart' },
-  { id: 'delete_rate_cart', label: 'Delete Rate Cart' },
   { id: 'view_daily_report', label: 'View Daily Report' },
   { id: 'view_activity_logs', label: 'View Activity Logs' }
 ];
@@ -92,26 +91,23 @@ const LoginScreen = ({ onLogin }) => {
 
 // --- Main Application Component ---
 const PricingApp = () => {
-  // --- Global UI Zoom Effect ---
   useEffect(() => {
     document.documentElement.style.fontSize = '14px';
     return () => { document.documentElement.style.fontSize = ''; };
   }, []);
 
-  // Auth State
   const [token, setToken] = useState(localStorage.getItem('token') || null);
   const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || null);
   const [username, setUsername] = useState(localStorage.getItem('username') || '');
   const [permissions, setPermissions] = useState(JSON.parse(localStorage.getItem('permissions')) || []);
 
-  // --- Date Helpers ---
   const getCurrentMonthString = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   };
 
-  // --- Dashboard State ---
-  const [activeDashboardTab, setActiveDashboardTab] = useState('rate_cart'); // New Tab State
+  // Dashboard State
+  const [activeDashboardTab, setActiveDashboardTab] = useState('rate_cart'); 
   const [dashboardMonth, setDashboardMonth] = useState(getCurrentMonthString());
   const [dashboardBranch, setDashboardBranch] = useState('');
   const [dashboardBranches, setDashboardBranches] = useState([]);
@@ -122,6 +118,11 @@ const PricingApp = () => {
   const [calculatedData, setCalculatedData] = useState([]);
   const [selectedAllocBrand, setSelectedAllocBrand] = useState(''); 
   const [selectedCalcBrand, setSelectedCalcBrand] = useState('');
+  
+  // Independent Principal/Brand Table State
+  const [principalAllocationData, setPrincipalAllocationData] = useState([]);
+  const [isPrincipalAllocationLoading, setIsPrincipalAllocationLoading] = useState(false);
+  const [expandedAllocRows, setExpandedAllocRows] = useState({});
 
   // App State
   const [currentPage, setCurrentPage] = useState('calculator');
@@ -167,17 +168,14 @@ const PricingApp = () => {
   const [additionalCharges, setAdditionalCharges] = useState('');
   const [estimatedTotalCost, setEstimatedTotalCost] = useState(null);
 
-  // History State
   const [historyData, setHistoryData] = useState([]);
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
   const [historyFilters, setHistoryFilters] = useState({ id_status: '', date: '', route: '', doc_nums: '', total_cost: '', author: '' });
   
-  // Rate Cart State
   const [rateCarts, setRateCarts] = useState([]);
   const [showRateCartModal, setShowRateCartModal] = useState(false);
   const [editingRateCart, setEditingRateCart] = useState(null);
 
-  // Daily Report State
   const [dailyReportDate, setDailyReportDate] = useState('');
   const [dailyReportStartDate, setDailyReportStartDate] = useState(''); 
   const [dailyReportEndDate, setDailyReportEndDate] = useState('');
@@ -196,7 +194,6 @@ const PricingApp = () => {
     branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', driver_total_ctns: '', branch_cost: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: '' 
   });
 
-  // Submitted Allocation State
   const [submittedAllocationData, setSubmittedAllocationData] = useState([]);
   const [isAllocationLoading, setIsAllocationLoading] = useState(false);
   const [allocationStartDate, setAllocationStartDate] = useState('');
@@ -205,7 +202,6 @@ const PricingApp = () => {
     calc_id: '', sin_no: '', gate_name: '', route: '', bu: '', item_code: '', item_name: '', principal: '', brand: '', ctns: '', unit_cost: '', total_cost: '' 
   });
 
-  // User & Role Management State
   const [usersList, setUsersList] = useState([]);
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -214,7 +210,6 @@ const PricingApp = () => {
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
 
-  // Reference Management State
   const [refLocations, setRefLocations] = useState([]);
   const [refRateCartLocations, setRefRateCartLocations] = useState([]); 
   const [refUOMs, setRefUOMs] = useState([]);
@@ -222,7 +217,6 @@ const PricingApp = () => {
   const [selectedChannel, setSelectedChannel] = useState(''); 
   const [newRefValue, setNewRefValue] = useState('');
 
-  // Log Modal States
   const [showLogModal, setShowLogModal] = useState(false);
   const [logsData, setLogsData] = useState([]);
   const [currentLogGateName, setCurrentLogGateName] = useState('');
@@ -235,10 +229,8 @@ const PricingApp = () => {
   const [rateCartLogsData, setRateCartLogsData] = useState([]);
   const [currentLogRateCartLocation, setCurrentLogRateCartLocation] = useState('');
 
-  // Change Password State
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
 
-  // System Activity Logs State
   const [activityLogsData, setActivityLogsData] = useState([]);
   const [activityLogsTotal, setActivityLogsTotal] = useState(0);
   const [activityLogsPage, setActivityLogsPage] = useState(0);
@@ -246,7 +238,6 @@ const PricingApp = () => {
   const [isActivityLogsLoading, setIsActivityLogsLoading] = useState(false);
   const ACTIVITY_LOGS_LIMIT = 50;
 
-  // --- Pagination (Load More) State ---
   const INITIAL_LOAD_COUNT = 50;
   const [visibleCounts, setVisibleCounts] = useState({
     history: INITIAL_LOAD_COUNT,
@@ -266,7 +257,6 @@ const PricingApp = () => {
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, dailyItem: INITIAL_LOAD_COUNT })); }, [dailyReportFilters]);
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, dailyTownship: INITIAL_LOAD_COUNT })); }, [townshipFilters]);
 
-  // --- Formatting & UI Helpers ---
   const formatNumber = (num) => {
     if (num === null || num === undefined || num === '') return '-';
     if (isNaN(num)) return num;
@@ -295,7 +285,6 @@ const PricingApp = () => {
     return String(error.detail);
   };
 
-  // --- Auth Helpers ---
   const handleLogin = (data) => {
     setToken(data.access_token);
     setUserRole(data.role);
@@ -340,7 +329,6 @@ const PricingApp = () => {
     return response;
   };
 
-  // --- Data Loading Functions ---
   const loadDocNums = async () => {
     try {
       const response = await authFetch(`${API_URL}/doc-nums`);
@@ -451,6 +439,28 @@ const PricingApp = () => {
       } catch (error) { showNotification(`Error loading rate carts: ${error.message}`, 'error'); }
   };
 
+  const fetchPrincipalAllocation = async () => {
+      setIsPrincipalAllocationLoading(true);
+      try {
+          const response = await authFetch(`${API_URL}/dashboard/principal-brand-allocation`);
+          if (response.ok) {
+              const result = await response.json();
+              setPrincipalAllocationData(result.data || []);
+              
+              // Automatically expand the first (newest) month row if data exists
+              if (result.data && result.data.length > 0) {
+                  setExpandedAllocRows({ [`M-${result.data[0].month}`]: true });
+              }
+          } else {
+              console.error("Failed to load principal allocation table");
+          }
+      } catch (error) {
+          console.error("Error fetching independent table:", error);
+      } finally {
+          setIsPrincipalAllocationLoading(false);
+      }
+  };
+
   const fetchCombinedDashboard = async (monthToFetch, branchToFetch = '', toLocToFetch = '') => {
     setIsDashboardLoading(true);
     try {
@@ -556,7 +566,6 @@ const PricingApp = () => {
     }
   };
 
-  // --- API Actions ---
   const addReference = async (type, value) => {
       if(!value.trim()) return;
       try {
@@ -741,7 +750,6 @@ const PricingApp = () => {
       } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
-  // --- Effects ---
   useEffect(() => {
     if (token) { loadDocNums(); loadGates(); loadFromLocations(); loadReferenceData(); }
   }, [token]);
@@ -765,7 +773,10 @@ const PricingApp = () => {
             fetchSubmittedAllocation();
         }
     }
-    if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc); }
+    if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { 
+        fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc); 
+        fetchPrincipalAllocation(); 
+    }
     if (token && currentPage === 'activity_logs' && permissions.includes('view_activity_logs')) { fetchActivityLogs(0); }
   }, [currentPage, token, permissions, activeDailyTab]); 
 
@@ -793,7 +804,6 @@ const PricingApp = () => {
     checkManualCostStatus();
   }, [selectedGate, calculationType, products, gates, token, currentPage]);
 
-  // --- Utility Fetch/Calculations Functions ---
   const calculateCosts = async () => {
     if (selectedDocNums.length === 0 || !selectedFrom || !selectedTo || !selectedGate || !selectedChannel) { showNotification('Please select Doc Num(s), From, To, Gate, and Channel', 'error'); return; }
     setIsLoading(true);
@@ -825,7 +835,6 @@ const PricingApp = () => {
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
-  // --- Event Handlers ---
   const handleAddDocNum = (docNum) => {
     if (!docNum) return;
     if (selectedDocNums.includes(docNum)) { showNotification('Doc Num already selected', 'info'); return; }
@@ -847,6 +856,10 @@ const PricingApp = () => {
     setSelectedGate(gateName); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost('');
     const gateInfo = gates.find(g => g.gate_name === gateName && g.from_loc === selectedFrom && g.to_loc === selectedTo);
     if (gateInfo) setCalculationType(gateInfo.calculation_type);
+  };
+  
+  const toggleAllocRow = (rowKey) => {
+      setExpandedAllocRows(prev => ({ ...prev, [rowKey]: !prev[rowKey] }));
   };
 
   const loadSavedCalculation = async (record) => {
@@ -1002,7 +1015,6 @@ const PricingApp = () => {
       } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
-  // --- Sub-Components ---
   const GateModal = ({ gate, onSave, onClose }) => {
     const [formData, setFormData] = useState(gate || { gate_name: '', from_loc: '', to_loc: '', uom: '', unit: '', cost: '' });
     return (
@@ -1457,11 +1469,14 @@ const PricingApp = () => {
                       className="border p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <button 
-                      onClick={() => fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc)}
-                      disabled={isDashboardLoading} 
+                      onClick={() => {
+                          fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc);
+                          fetchPrincipalAllocation();
+                      }}
+                      disabled={isDashboardLoading || isPrincipalAllocationLoading} 
                       className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition disabled:bg-gray-400 bg-blue-600 hover:bg-blue-700 font-semibold`}
                   >
-                  {isDashboardLoading ? 'Refreshing...' : 'Refresh'}
+                  {(isDashboardLoading || isPrincipalAllocationLoading) ? 'Refreshing...' : 'Refresh'}
                   </button>
               </div>
             </div>
@@ -1493,6 +1508,94 @@ const PricingApp = () => {
             {/* --- RATE CART TAB CONTENT --- */}
             {activeDashboardTab === 'rate_cart' && (
                 <div className="animation-fade-in">
+                    
+                    {/* INDEPENDENT PRINCIPAL/BRAND ALLOCATION TABLE */}
+                    <div className="mb-10 bg-white border rounded-lg shadow-sm">
+                        <div className="p-4 border-b bg-gray-50 flex justify-between items-center rounded-t-lg">
+                            <h2 className="text-xl font-bold text-gray-800">Principal & Brand Allocation Overview</h2>
+                            <button 
+                                onClick={fetchPrincipalAllocation} 
+                                disabled={isPrincipalAllocationLoading}
+                                className="text-sm px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded font-semibold transition"
+                            >
+                                {isPrincipalAllocationLoading ? 'Loading...' : 'Refresh Table'}
+                            </button>
+                        </div>
+                        <div className="max-h-96 overflow-y-auto">
+                            <table className="w-full border-collapse">
+                                <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
+                                    <tr>
+                                        <th className="p-3 text-left border-b font-bold text-gray-700 uppercase text-sm tracking-wider">(Month-Year &rarr; Branch &rarr; Principal &rarr; Brand)</th>
+                                        <th className="p-3 text-right border-b font-bold text-gray-700 uppercase text-sm tracking-wider">Avg Cost / Ctn</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {principalAllocationData.length === 0 ? (
+                                        <tr><td colSpan="2" className="text-center p-6 text-gray-500 italic">No principal allocation data available.</td></tr>
+                                    ) : (
+                                        principalAllocationData.map(mData => (
+                                            <React.Fragment key={mData.month}>
+                                                {/* Parent Row: Month-Year */}
+                                                <tr 
+                                                    className="bg-gray-200 cursor-pointer border-b hover:bg-gray-300 transition-colors"
+                                                    onClick={() => toggleAllocRow(`M-${mData.month}`)}
+                                                >
+                                                    <td className="p-3 font-bold text-gray-900 flex items-center gap-2 select-none" colSpan="2">
+                                                        {expandedAllocRows[`M-${mData.month}`] ? <ChevronDown size={18}/> : <ChevronRight size={18}/>}
+                                                        {mData.month}
+                                                    </td>
+                                                </tr>
+
+                                                {/* Child Rows: Branch */}
+                                                {expandedAllocRows[`M-${mData.month}`] && mData.branches.map(b => (
+                                                    <React.Fragment key={`${mData.month}-${b.branch}`}>
+                                                        <tr 
+                                                            className={`cursor-pointer hover:bg-gray-200 transition-colors border-b ${expandedAllocRows[`B-${mData.month}-${b.branch}`] ? 'bg-gray-100' : 'bg-gray-50'}`}
+                                                            onClick={() => toggleAllocRow(`B-${mData.month}-${b.branch}`)}
+                                                        >
+                                                            <td className="p-3 pl-8 font-bold text-blue-900 flex items-center gap-2 select-none border-l-4 border-transparent hover:border-blue-400">
+                                                                {expandedAllocRows[`B-${mData.month}-${b.branch}`] ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
+                                                                {b.branch}
+                                                            </td>
+                                                            <td className="p-3 text-right font-bold text-gray-800">{formatNumber(b.avg_cost)}</td>
+                                                        </tr>
+                                                        
+                                                        {/* Grandchild Rows: Principal */}
+                                                        {expandedAllocRows[`B-${mData.month}-${b.branch}`] && b.principals.map(p => (
+                                                            <React.Fragment key={`${mData.month}-${b.branch}-${p.principal}`}>
+                                                                <tr 
+                                                                    className={`cursor-pointer hover:bg-blue-50 transition-colors border-b ${expandedAllocRows[`P-${mData.month}-${b.branch}-${p.principal}`] ? 'bg-blue-50' : 'bg-white'}`}
+                                                                    onClick={() => toggleAllocRow(`P-${mData.month}-${b.branch}-${p.principal}`)}
+                                                                >
+                                                                    <td className="p-3 pl-14 font-semibold text-blue-700 flex items-center gap-2 select-none border-l-4 border-transparent hover:border-blue-400">
+                                                                        {p.brands.length > 0 ? (expandedAllocRows[`P-${mData.month}-${b.branch}-${p.principal}`] ? <ChevronDown size={14}/> : <ChevronRight size={14}/>) : <span className="w-[14px]"></span>}
+                                                                        {p.principal}
+                                                                    </td>
+                                                                    <td className="p-3 text-right font-semibold text-gray-700">{formatNumber(p.avg_cost)}</td>
+                                                                </tr>
+
+                                                                {/* Great-Grandchild Rows: Brand */}
+                                                                {expandedAllocRows[`P-${mData.month}-${b.branch}-${p.principal}`] && p.brands.map(brand => (
+                                                                    <tr key={`${mData.month}-${b.branch}-${p.principal}-${brand.brand}`} className="bg-gray-50 hover:bg-gray-100 transition-colors border-b">
+                                                                        <td className="p-3 pl-20 text-gray-600 text-sm border-l-4 border-transparent">
+                                                                            <span className="flex items-center gap-2"><span className="text-gray-400">↳</span> {brand.brand}</span>
+                                                                        </td>
+                                                                        <td className="p-3 text-right font-medium text-sm text-gray-600">{formatNumber(brand.avg_cost)}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </React.Fragment>
+                                                        ))}
+                                                    </React.Fragment>
+                                                ))}
+                                            </React.Fragment>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {/* END INDEPENDENT TABLE */}
+
                     <div className="mb-8 border-b pb-6">
                         <div className={`flex flex-col gap-4 ${allocTheme.bg} p-4 rounded-lg border ${allocTheme.border} h-full`}>
                             <div className="flex flex-col gap-1">
@@ -1514,7 +1617,7 @@ const PricingApp = () => {
 
                             {allocationData.length > 0 ? (
                                 <div className="flex flex-col gap-1 border-t border-blue-200 pt-3">
-                                    <label className={`text-sm font-semibold ${allocTheme.text}`}>Brand (Rate Cart):</label>
+                                    <label className={`text-sm font-semibold ${allocTheme.text}`}>Brand (Rate Cart Dashboard):</label>
                                     <select
                                         value={selectedAllocBrand}
                                         onChange={(e) => setSelectedAllocBrand(e.target.value)}
@@ -1534,7 +1637,7 @@ const PricingApp = () => {
                     </div>
 
                     <div className="mb-10">
-                    <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Allocation: 3-Month Summary (Rate Cart)</h2>
+                    <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Dashboard: 3-Month Summary (Rate Cart)</h2>
                     <div className="overflow-x-auto border rounded-lg shadow-sm">
                         <table className="w-full border-collapse">
                         <thead className="bg-gray-100">
@@ -1585,7 +1688,7 @@ const PricingApp = () => {
                     </div>
 
                     <div className="mb-10 w-full">
-                        <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Allocation: 12-Month Trend Analysis (Rate Cart)</h2>
+                        <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Dashboard: 12-Month Trend Analysis (Rate Cart)</h2>
                         {isDashboardLoading ? (
                         <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center">Loading trends...</div>
                         ) : !selectedAllocRow ? (
@@ -1667,7 +1770,7 @@ const PricingApp = () => {
 
                             {calculatedData.length > 0 ? (
                                 <div className="flex flex-col gap-1 border-t border-green-200 pt-3">
-                                    <label className={`text-sm font-semibold ${calcTheme.text}`}>Brand (Third Party):</label>
+                                    <label className={`text-sm font-semibold ${calcTheme.text}`}>Brand (Third Party Dashboard):</label>
                                     <select
                                         value={selectedCalcBrand}
                                         onChange={(e) => setSelectedCalcBrand(e.target.value)}
@@ -1687,7 +1790,7 @@ const PricingApp = () => {
                     </div>
 
                     <div className="mb-10">
-                    <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Allocation: 3-Month Summary (Third Party)</h2>
+                    <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Dashboard: 3-Month Summary (Third Party)</h2>
                     <div className="overflow-x-auto border rounded-lg shadow-sm">
                         <table className="w-full border-collapse">
                         <thead className="bg-gray-100">
@@ -1738,7 +1841,7 @@ const PricingApp = () => {
                     </div>
 
                     <div className="mb-10 w-full">
-                        <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Allocation: 12-Month Trend Analysis (Third Party)</h2>
+                        <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Dashboard: 12-Month Trend Analysis (Third Party)</h2>
                         {isDashboardLoading ? (
                         <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center">Loading trends...</div>
                         ) : !selectedCalcRow ? (
@@ -2453,7 +2556,6 @@ const PricingApp = () => {
     const canClaim = permissions.includes('claim_calculation');
     const canDeleteHistory = permissions.includes('delete_history');
 
-    // Filter Logic for List
     const filteredHistory = historyData.filter(record => {
       const matchIdStatus = (String(record.id) + ' ' + (record.status || '')).toLowerCase().includes(historyFilters.id_status.toLowerCase());
       const matchDate = (record.created_at || '').toLowerCase().includes(historyFilters.date.toLowerCase());
@@ -2706,7 +2808,7 @@ const PricingApp = () => {
     );
   }
 
-  // Calculator View (Default - guarded by permissions)
+  // Calculator View
   if (currentPage === 'calculator' && permissions.includes('view_calculator')) {
     const hasCalculated = calculatedProducts.length > 0;
     const rawTableData = hasCalculated ? calculatedProducts : products;

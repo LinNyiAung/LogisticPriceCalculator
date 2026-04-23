@@ -3002,6 +3002,127 @@ def get_combined_dashboard(
         raise HTTPException(status_code=500, detail=f"Error generating combined dashboard data: {str(e)}")
 
 
+@app.get("/dashboard/principal-brand-allocation")
+def get_principal_brand_allocation(user: dict = Depends(require_permission("view_dashboard"))):
+    """
+    Independent endpoint that fetches all available historical data 
+    and groups it by Month-Year -> Branch -> Principal -> Brand.
+    """
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        # Fetch all daily reports for the comprehensive overarching table
+        cursor.execute("SELECT target_date, item_report_json FROM Daily_Report_History")
+        rows = cursor.fetchall()
+        conn.close()
+
+        hierarchy = {}
+
+        for row in rows:
+            target_date = row[0]
+            if not target_date or len(target_date) < 7:
+                continue
+            
+            month_str = target_date[:7] # Format: YYYY-MM
+            
+            try:
+                items = json.loads(row[1])
+            except Exception:
+                continue
+
+            for item in items:
+                principal = str(item.get("principal", "")).strip() or "UNKNOWN"
+                brand = str(item.get("brand", "")).strip() or "UNKNOWN"
+                branch = str(item.get("branch", "")).strip() or "UNKNOWN"
+
+                try:
+                    ctns = float(item.get("ctns", 0) or 0)
+                    cost = float(item.get("allocated_cost", 0) or 0)
+                except ValueError:
+                    continue
+
+                if ctns <= 0:
+                    continue
+
+                # Group by Month -> Branch -> Principal -> Brand
+                if month_str not in hierarchy:
+                    hierarchy[month_str] = {}
+                if branch not in hierarchy[month_str]:
+                    hierarchy[month_str][branch] = {}
+                if principal not in hierarchy[month_str][branch]:
+                    hierarchy[month_str][branch][principal] = {"ctns": 0.0, "cost": 0.0, "brands": {}}
+                
+                hierarchy[month_str][branch][principal]["ctns"] += ctns
+                hierarchy[month_str][branch][principal]["cost"] += cost
+
+                if brand not in hierarchy[month_str][branch][principal]["brands"]:
+                    hierarchy[month_str][branch][principal]["brands"][brand] = {"ctns": 0.0, "cost": 0.0}
+                
+                hierarchy[month_str][branch][principal]["brands"][brand]["ctns"] += ctns
+                hierarchy[month_str][branch][principal]["brands"][brand]["cost"] += cost
+
+        result = []
+        
+        for month, b_data in hierarchy.items():
+            month_branches = []
+            for branch, p_data in b_data.items():
+                branch_principals = []
+                
+                # Calculate Branch Totals
+                b_total_cost = 0.0
+                b_total_ctns = 0.0
+                
+                for principal, vals in p_data.items():
+                    b_total_cost += vals["cost"]
+                    b_total_ctns += vals["ctns"]
+                    
+                    avg_cost = vals["cost"] / vals["ctns"] if vals["ctns"] > 0 else 0
+                    
+                    brands_list = []
+                    for brand, b_vals in vals["brands"].items():
+                        b_avg_cost = b_vals["cost"] / b_vals["ctns"] if b_vals["ctns"] > 0 else 0
+                        brands_list.append({
+                            "brand": brand,
+                            "avg_cost": round(b_avg_cost, 2)
+                        })
+                    
+                    # Sort brands alphabetically
+                    brands_list.sort(key=lambda x: x["brand"])
+                    
+                    branch_principals.append({
+                        "principal": principal,
+                        "avg_cost": round(avg_cost, 2),
+                        "brands": brands_list
+                    })
+                
+                # Sort principals alphabetically
+                branch_principals.sort(key=lambda x: x["principal"])
+                
+                b_avg_cost = b_total_cost / b_total_ctns if b_total_ctns > 0 else 0
+                
+                month_branches.append({
+                    "branch": branch,
+                    "avg_cost": round(b_avg_cost, 2),
+                    "principals": branch_principals
+                })
+            
+            # Sort branches alphabetically
+            month_branches.sort(key=lambda x: x["branch"])
+            
+            result.append({
+                "month": month,
+                "branches": month_branches
+            })
+
+        # Sort months descending (newest first)
+        result.sort(key=lambda x: x["month"], reverse=True)
+
+        return {"status": "success", "data": result}
+
+    except Exception as e:
+        logger.error(f"Error generating principal brand allocation hierarchy: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating hierarchy data: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
