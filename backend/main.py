@@ -3003,7 +3003,7 @@ def get_combined_dashboard(
 def get_principal_brand_allocation(user: dict = Depends(require_permission("view_dashboard"))):
     """
     Independent endpoint that fetches all available historical data 
-    and groups it by Month-Year -> Branch -> Principal -> Brand.
+    and groups it by Month-Year -> BU -> Branch -> Principal -> Brand.
     """
     try:
         conn = get_logistic_connection()
@@ -3028,6 +3028,8 @@ def get_principal_brand_allocation(user: dict = Depends(require_permission("view
                 continue
 
             for item in items:
+                # Extract BU alongside other identifiers
+                bu = str(item.get("bu", "")).strip() or "UNKNOWN"
                 principal = str(item.get("principal", "")).strip() or "UNKNOWN"
                 brand = str(item.get("brand", "")).strip() or "UNKNOWN"
                 branch = str(item.get("branch", "")).strip() or "UNKNOWN"
@@ -3041,74 +3043,98 @@ def get_principal_brand_allocation(user: dict = Depends(require_permission("view
                 if ctns <= 0:
                     continue
 
-                # Group by Month -> Branch -> Principal -> Brand
+                # Group by Month -> BU -> Branch -> Principal -> Brand
                 if month_str not in hierarchy:
                     hierarchy[month_str] = {}
-                if branch not in hierarchy[month_str]:
-                    hierarchy[month_str][branch] = {}
-                if principal not in hierarchy[month_str][branch]:
-                    hierarchy[month_str][branch][principal] = {"ctns": 0.0, "cost": 0.0, "brands": {}}
+                if bu not in hierarchy[month_str]:
+                    hierarchy[month_str][bu] = {}
+                if branch not in hierarchy[month_str][bu]:
+                    hierarchy[month_str][bu][branch] = {}
+                if principal not in hierarchy[month_str][bu][branch]:
+                    hierarchy[month_str][bu][branch][principal] = {"ctns": 0.0, "cost": 0.0, "brands": {}}
                 
-                hierarchy[month_str][branch][principal]["ctns"] += ctns
-                hierarchy[month_str][branch][principal]["cost"] += cost
+                hierarchy[month_str][bu][branch][principal]["ctns"] += ctns
+                hierarchy[month_str][bu][branch][principal]["cost"] += cost
 
-                if brand not in hierarchy[month_str][branch][principal]["brands"]:
-                    hierarchy[month_str][branch][principal]["brands"][brand] = {"ctns": 0.0, "cost": 0.0}
+                if brand not in hierarchy[month_str][bu][branch][principal]["brands"]:
+                    hierarchy[month_str][bu][branch][principal]["brands"][brand] = {"ctns": 0.0, "cost": 0.0}
                 
-                hierarchy[month_str][branch][principal]["brands"][brand]["ctns"] += ctns
-                hierarchy[month_str][branch][principal]["brands"][brand]["cost"] += cost
+                hierarchy[month_str][bu][branch][principal]["brands"][brand]["ctns"] += ctns
+                hierarchy[month_str][bu][branch][principal]["brands"][brand]["cost"] += cost
 
         result = []
         
-        for month, b_data in hierarchy.items():
-            month_branches = []
-            for branch, p_data in b_data.items():
-                branch_principals = []
+        for month, bu_data in hierarchy.items():
+            month_bus = []
+            
+            for bu, b_data in bu_data.items():
+                bu_branches = []
                 
-                # Calculate Branch Totals
-                b_total_cost = 0.0
-                b_total_ctns = 0.0
-                
-                for principal, vals in p_data.items():
-                    b_total_cost += vals["cost"]
-                    b_total_ctns += vals["ctns"]
+                # Calculate BU Totals
+                bu_total_cost = 0.0
+                bu_total_ctns = 0.0
+
+                for branch, p_data in b_data.items():
+                    branch_principals = []
                     
-                    avg_cost = vals["cost"] / vals["ctns"] if vals["ctns"] > 0 else 0
+                    # Calculate Branch Totals
+                    b_total_cost = 0.0
+                    b_total_ctns = 0.0
                     
-                    brands_list = []
-                    for brand, b_vals in vals["brands"].items():
-                        b_avg_cost = b_vals["cost"] / b_vals["ctns"] if b_vals["ctns"] > 0 else 0
-                        brands_list.append({
-                            "brand": brand,
-                            "avg_cost": round(b_avg_cost, 2)
+                    for principal, vals in p_data.items():
+                        b_total_cost += vals["cost"]
+                        b_total_ctns += vals["ctns"]
+                        
+                        avg_cost = vals["cost"] / vals["ctns"] if vals["ctns"] > 0 else 0
+                        
+                        brands_list = []
+                        for brand, b_vals in vals["brands"].items():
+                            b_avg_cost = b_vals["cost"] / b_vals["ctns"] if b_vals["ctns"] > 0 else 0
+                            brands_list.append({
+                                "brand": brand,
+                                "avg_cost": round(b_avg_cost, 2)
+                            })
+                        
+                        # Sort brands alphabetically
+                        brands_list.sort(key=lambda x: x["brand"])
+                        
+                        branch_principals.append({
+                            "principal": principal,
+                            "avg_cost": round(avg_cost, 2),
+                            "brands": brands_list
                         })
                     
-                    # Sort brands alphabetically
-                    brands_list.sort(key=lambda x: x["brand"])
+                    # Sort principals alphabetically
+                    branch_principals.sort(key=lambda x: x["principal"])
                     
-                    branch_principals.append({
-                        "principal": principal,
-                        "avg_cost": round(avg_cost, 2),
-                        "brands": brands_list
+                    b_avg_cost = b_total_cost / b_total_ctns if b_total_ctns > 0 else 0
+                    
+                    bu_total_cost += b_total_cost
+                    bu_total_ctns += b_total_ctns
+
+                    bu_branches.append({
+                        "branch": branch,
+                        "avg_cost": round(b_avg_cost, 2),
+                        "principals": branch_principals
                     })
                 
-                # Sort principals alphabetically
-                branch_principals.sort(key=lambda x: x["principal"])
+                # Sort branches alphabetically
+                bu_branches.sort(key=lambda x: x["branch"])
                 
-                b_avg_cost = b_total_cost / b_total_ctns if b_total_ctns > 0 else 0
-                
-                month_branches.append({
-                    "branch": branch,
-                    "avg_cost": round(b_avg_cost, 2),
-                    "principals": branch_principals
+                bu_avg_cost = bu_total_cost / bu_total_ctns if bu_total_ctns > 0 else 0
+
+                month_bus.append({
+                    "bu": bu,
+                    "avg_cost": round(bu_avg_cost, 2),
+                    "branches": bu_branches
                 })
             
-            # Sort branches alphabetically
-            month_branches.sort(key=lambda x: x["branch"])
-            
+            # Sort BUs alphabetically
+            month_bus.sort(key=lambda x: x["bu"])
+
             result.append({
                 "month": month,
-                "branches": month_branches
+                "bus": month_bus
             })
 
         # Sort months descending (newest first)

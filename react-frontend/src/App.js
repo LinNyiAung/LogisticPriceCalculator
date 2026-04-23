@@ -119,10 +119,30 @@ const PricingApp = () => {
   const [selectedAllocBrand, setSelectedAllocBrand] = useState(''); 
   const [selectedCalcBrand, setSelectedCalcBrand] = useState('');
   
-  // Independent Principal/Brand Table State
+  // Independent Principal/Brand Tree Table State
   const [principalAllocationData, setPrincipalAllocationData] = useState([]);
   const [isPrincipalAllocationLoading, setIsPrincipalAllocationLoading] = useState(false);
-  const [expandedAllocRows, setExpandedAllocRows] = useState({});
+  const [expandedNodes, setExpandedNodes] = useState({});
+
+  const toggleNode = (nodeId) => {
+    setExpandedNodes(prev => {
+      const isExpanded = prev[nodeId];
+      if (isExpanded) {
+        // When closing a node, recursively close all of its children 
+        // to correctly reset the dynamic column count.
+        const nextState = { ...prev };
+        Object.keys(nextState).forEach(key => {
+          if (key === nodeId || key.startsWith(nodeId + '::')) {
+            nextState[key] = false;
+          }
+        });
+        return nextState;
+      } else {
+        // When opening a node, simply set it to true
+        return { ...prev, [nodeId]: true };
+      }
+    });
+  };
 
   // App State
   const [currentPage, setCurrentPage] = useState('calculator');
@@ -402,7 +422,6 @@ const PricingApp = () => {
     }
   };
 
-
   const handleDownloadDailyReportExcel = async (reportType) => {
     try {
         showNotification('Generating Excel file...', 'info');
@@ -541,10 +560,8 @@ const PricingApp = () => {
               const result = await response.json();
               setPrincipalAllocationData(result.data || []);
               
-              // Automatically expand the first (newest) month row if data exists
-              if (result.data && result.data.length > 0) {
-                  setExpandedAllocRows({ [`M-${result.data[0].month}`]: true });
-              }
+              // Kept intentionally empty to ensure columns are invisible at first
+              setExpandedNodes({});
           } else {
               console.error("Failed to load principal allocation table");
           }
@@ -952,10 +969,6 @@ const PricingApp = () => {
     if (gateInfo) setCalculationType(gateInfo.calculation_type);
   };
   
-  const toggleAllocRow = (rowKey) => {
-      setExpandedAllocRows(prev => ({ ...prev, [rowKey]: !prev[rowKey] }));
-  };
-
   const loadSavedCalculation = async (record) => {
     try {
       setCurrentPage('calculator');
@@ -1542,6 +1555,109 @@ const PricingApp = () => {
     const selectedAllocRow = allocationData.find(r => r.brand === selectedAllocBrand) || allocationData[0];
     const selectedCalcRow = calculatedData.find(r => r.brand === selectedCalcBrand) || calculatedData[0];
 
+    // Calculate max depth for dynamic columns to hide unnecessary ones at first
+    let maxDepth = 1;
+    Object.keys(expandedNodes).forEach(key => {
+        if (expandedNodes[key]) {
+            const parts = key.split('::');
+            maxDepth = Math.max(maxDepth, parts.length + 1);
+        }
+    });
+
+    // Build flattened table rows taking into account Expanded State and rowSpans
+    const visibleRows = [];
+    
+    if (activeDashboardTab === 'rate_cart') {
+        principalAllocationData.forEach(mData => {
+            const monthId = mData.month;
+            const isMonthExpanded = !!expandedNodes[monthId];
+            
+            if (!isMonthExpanded || !mData.bus || mData.bus.length === 0) {
+                visibleRows.push({
+                    key: monthId,
+                    monthCell: { id: monthId, label: mData.month, isExpanded: false, rowSpan: 1 },
+                    buCell: { isPadding: true },
+                    branchCell: { isPadding: true },
+                    principalCell: { isPadding: true },
+                    brandCell: { isPadding: true },
+                    avgCost: null
+                });
+            } else {
+                const monthStartIdx = visibleRows.length;
+                mData.bus.forEach(buData => {
+                    const buId = `${monthId}::${buData.bu}`;
+                    const isBuExpanded = !!expandedNodes[buId];
+
+                    if (!isBuExpanded || !buData.branches || buData.branches.length === 0) {
+                        visibleRows.push({
+                            key: buId,
+                            monthCell: { isSkip: true },
+                            buCell: { id: buId, label: buData.bu, isExpanded: false, rowSpan: 1 },
+                            branchCell: { isPadding: true },
+                            principalCell: { isPadding: true },
+                            brandCell: { isPadding: true },
+                            avgCost: buData.avg_cost
+                        });
+                    } else {
+                        const buStartIdx = visibleRows.length;
+                        buData.branches.forEach(bData => {
+                            const branchId = `${buId}::${bData.branch}`;
+                            const isBranchExpanded = !!expandedNodes[branchId];
+
+                            if (!isBranchExpanded || !bData.principals || bData.principals.length === 0) {
+                                visibleRows.push({
+                                    key: branchId,
+                                    monthCell: { isSkip: true }, 
+                                    buCell: { isSkip: true },
+                                    branchCell: { id: branchId, label: bData.branch, isExpanded: false, rowSpan: 1 },
+                                    principalCell: { isPadding: true },
+                                    brandCell: { isPadding: true },
+                                    avgCost: bData.avg_cost
+                                });
+                            } else {
+                                const branchStartIdx = visibleRows.length;
+                                bData.principals.forEach(pData => {
+                                    const prinId = `${branchId}::${pData.principal}`;
+                                    const isPrinExpanded = !!expandedNodes[prinId];
+
+                                    if (!isPrinExpanded || !pData.brands || pData.brands.length === 0) {
+                                        visibleRows.push({
+                                            key: prinId,
+                                            monthCell: { isSkip: true },
+                                            buCell: { isSkip: true },
+                                            branchCell: { isSkip: true },
+                                            principalCell: { id: prinId, label: pData.principal, isExpanded: false, rowSpan: 1 },
+                                            brandCell: { isPadding: true },
+                                            avgCost: pData.avg_cost
+                                        });
+                                    } else {
+                                        const prinStartIdx = visibleRows.length;
+                                        pData.brands.forEach(brData => {
+                                            const brandId = `${prinId}::${brData.brand}`;
+                                            visibleRows.push({
+                                                key: brandId,
+                                                monthCell: { isSkip: true },
+                                                buCell: { isSkip: true },
+                                                branchCell: { isSkip: true },
+                                                principalCell: { isSkip: true },
+                                                brandCell: { id: brandId, label: brData.brand, rowSpan: 1 },
+                                                avgCost: brData.avg_cost
+                                            });
+                                        });
+                                        visibleRows[prinStartIdx].principalCell = { id: prinId, label: pData.principal, isExpanded: true, rowSpan: visibleRows.length - prinStartIdx };
+                                    }
+                                });
+                                visibleRows[branchStartIdx].branchCell = { id: branchId, label: bData.branch, isExpanded: true, rowSpan: visibleRows.length - branchStartIdx };
+                            }
+                        });
+                        visibleRows[buStartIdx].buCell = { id: buId, label: buData.bu, isExpanded: true, rowSpan: visibleRows.length - buStartIdx };
+                    }
+                });
+                visibleRows[monthStartIdx].monthCell = { id: monthId, label: mData.month, isExpanded: true, rowSpan: visibleRows.length - monthStartIdx };
+            }
+        });
+    }
+
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
@@ -1603,7 +1719,7 @@ const PricingApp = () => {
             {activeDashboardTab === 'rate_cart' && (
                 <div className="animation-fade-in">
                     
-                    {/* INDEPENDENT PRINCIPAL/BRAND ALLOCATION TABLE */}
+                    {/* INDEPENDENT PRINCIPAL/BRAND ROWSPAN TREE TABLE */}
                     <div className="mb-10 bg-white border rounded-lg shadow-sm">
                         <div className="p-4 border-b bg-gray-50 flex justify-between items-center rounded-t-lg">
                             <h2 className="text-xl font-bold text-gray-800">Principal & Brand Allocation Overview</h2>
@@ -1612,83 +1728,100 @@ const PricingApp = () => {
                                 disabled={isPrincipalAllocationLoading}
                                 className="text-sm px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded font-semibold transition"
                             >
-                                {isPrincipalAllocationLoading ? 'Loading...' : 'Refresh Table'}
+                                {isPrincipalAllocationLoading ? 'Loading...' : 'Refresh Data'}
                             </button>
                         </div>
-                        <div className="max-h-96 overflow-y-auto">
-                            <table className="w-full border-collapse">
-                                <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
-                                    <tr>
-                                        <th className="p-3 text-left border-b font-bold text-gray-700 uppercase text-sm tracking-wider">(Month-Year &rarr; Branch &rarr; Principal &rarr; Brand)</th>
-                                        <th className="p-3 text-right border-b font-bold text-gray-700 uppercase text-sm tracking-wider">Avg Cost / Ctn</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {principalAllocationData.length === 0 ? (
-                                        <tr><td colSpan="2" className="text-center p-6 text-gray-500 italic">No principal allocation data available.</td></tr>
-                                    ) : (
-                                        principalAllocationData.map(mData => (
-                                            <React.Fragment key={mData.month}>
-                                                {/* Parent Row: Month-Year */}
-                                                <tr 
-                                                    className="bg-gray-200 cursor-pointer border-b hover:bg-gray-300 transition-colors"
-                                                    onClick={() => toggleAllocRow(`M-${mData.month}`)}
-                                                >
-                                                    <td className="p-3 font-bold text-gray-900 flex items-center gap-2 select-none" colSpan="2">
-                                                        {expandedAllocRows[`M-${mData.month}`] ? <ChevronDown size={18}/> : <ChevronRight size={18}/>}
-                                                        {mData.month}
-                                                    </td>
-                                                </tr>
+                        
+                        <div className="overflow-x-auto">
+                            {principalAllocationData.length === 0 ? (
+                                <div className="text-center p-6 text-gray-500 italic">No principal allocation data available.</div>
+                            ) : (
+                                <table className="w-full border-collapse text-xs">
+                                    <thead className="bg-gray-100 border-b-2 border-gray-200">
+                                        <tr>
+                                            <th className="px-2 py-1 text-left font-bold text-gray-700 border">Month-Year</th>
+                                            {maxDepth >= 2 && <th className="px-2 py-1 text-left font-bold text-teal-900 border transition-all duration-300">BU</th>}
+                                            {maxDepth >= 3 && <th className="px-2 py-1 text-left font-bold text-blue-900 border transition-all duration-300">Branch</th>}
+                                            {maxDepth >= 4 && <th className="px-2 py-1 text-left font-bold text-indigo-900 border transition-all duration-300">Principal</th>}
+                                            {maxDepth >= 5 && <th className="px-2 py-1 text-left font-bold text-purple-900 border transition-all duration-300">Brand</th>}
+                                            <th className="px-2 py-1 text-right font-bold text-gray-700 border w-24">Avg Cost</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {visibleRows.map((row) => (
+                                            <tr key={row.key} className="hover:bg-gray-50 border-b transition-colors">
+                                                
+                                                {/* Month Column */}
+                                                {!row.monthCell.isSkip && (
+                                                    row.monthCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                                        <td rowSpan={row.monthCell.rowSpan} onClick={() => toggleNode(row.monthCell.id)} className="border px-2 py-1 font-bold text-gray-800 cursor-pointer align-top bg-white">
+                                                            <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                                {row.monthCell.isExpanded ? <ChevronDown size={14} className="text-gray-500 shrink-0"/> : <ChevronRight size={14} className="text-gray-500 shrink-0"/>}
+                                                                <span>{row.monthCell.label}</span>
+                                                            </div>
+                                                        </td>
+                                                    )
+                                                )}
 
-                                                {/* Child Rows: Branch */}
-                                                {expandedAllocRows[`M-${mData.month}`] && mData.branches.map(b => (
-                                                    <React.Fragment key={`${mData.month}-${b.branch}`}>
-                                                        <tr 
-                                                            className={`cursor-pointer hover:bg-gray-200 transition-colors border-b ${expandedAllocRows[`B-${mData.month}-${b.branch}`] ? 'bg-gray-100' : 'bg-gray-50'}`}
-                                                            onClick={() => toggleAllocRow(`B-${mData.month}-${b.branch}`)}
-                                                        >
-                                                            <td className="p-3 pl-8 font-bold text-blue-900 flex items-center gap-2 select-none border-l-4 border-transparent hover:border-blue-400">
-                                                                {expandedAllocRows[`B-${mData.month}-${b.branch}`] ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
-                                                                {b.branch}
-                                                            </td>
-                                                            <td className="p-3 text-right font-bold text-gray-800">{formatNumber(b.avg_cost)}</td>
-                                                        </tr>
-                                                        
-                                                        {/* Grandchild Rows: Principal */}
-                                                        {expandedAllocRows[`B-${mData.month}-${b.branch}`] && b.principals.map(p => (
-                                                            <React.Fragment key={`${mData.month}-${b.branch}-${p.principal}`}>
-                                                                <tr 
-                                                                    className={`cursor-pointer hover:bg-blue-50 transition-colors border-b ${expandedAllocRows[`P-${mData.month}-${b.branch}-${p.principal}`] ? 'bg-blue-50' : 'bg-white'}`}
-                                                                    onClick={() => toggleAllocRow(`P-${mData.month}-${b.branch}-${p.principal}`)}
-                                                                >
-                                                                    <td className="p-3 pl-14 font-semibold text-blue-700 flex items-center gap-2 select-none border-l-4 border-transparent hover:border-blue-400">
-                                                                        {p.brands.length > 0 ? (expandedAllocRows[`P-${mData.month}-${b.branch}-${p.principal}`] ? <ChevronDown size={14}/> : <ChevronRight size={14}/>) : <span className="w-[14px]"></span>}
-                                                                        {p.principal}
-                                                                    </td>
-                                                                    <td className="p-3 text-right font-semibold text-gray-700">{formatNumber(p.avg_cost)}</td>
-                                                                </tr>
+                                                {/* BU Column */}
+                                                {maxDepth >= 2 && !row.buCell.isSkip && (
+                                                    row.buCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                                        <td rowSpan={row.buCell.rowSpan} onClick={() => toggleNode(row.buCell.id)} className="border px-2 py-1 font-semibold text-teal-800 cursor-pointer align-top bg-teal-50/30">
+                                                            <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                                {row.buCell.isExpanded ? <ChevronDown size={14} className="text-teal-500 shrink-0"/> : <ChevronRight size={14} className="text-teal-500 shrink-0"/>}
+                                                                <span>{row.buCell.label}</span>
+                                                            </div>
+                                                        </td>
+                                                    )
+                                                )}
+                                                
+                                                {/* Branch Column */}
+                                                {maxDepth >= 3 && !row.branchCell.isSkip && (
+                                                    row.branchCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                                        <td rowSpan={row.branchCell.rowSpan} onClick={() => toggleNode(row.branchCell.id)} className="border px-2 py-1 font-semibold text-blue-800 cursor-pointer align-top bg-blue-50/30">
+                                                            <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                                {row.branchCell.isExpanded ? <ChevronDown size={14} className="text-blue-500 shrink-0"/> : <ChevronRight size={14} className="text-blue-500 shrink-0"/>}
+                                                                <span>{row.branchCell.label}</span>
+                                                            </div>
+                                                        </td>
+                                                    )
+                                                )}
 
-                                                                {/* Great-Grandchild Rows: Brand */}
-                                                                {expandedAllocRows[`P-${mData.month}-${b.branch}-${p.principal}`] && p.brands.map(brand => (
-                                                                    <tr key={`${mData.month}-${b.branch}-${p.principal}-${brand.brand}`} className="bg-gray-50 hover:bg-gray-100 transition-colors border-b">
-                                                                        <td className="p-3 pl-20 text-gray-600 text-sm border-l-4 border-transparent">
-                                                                            <span className="flex items-center gap-2"><span className="text-gray-400">↳</span> {brand.brand}</span>
-                                                                        </td>
-                                                                        <td className="p-3 text-right font-medium text-sm text-gray-600">{formatNumber(brand.avg_cost)}</td>
-                                                                    </tr>
-                                                                ))}
-                                                            </React.Fragment>
-                                                        ))}
-                                                    </React.Fragment>
-                                                ))}
-                                            </React.Fragment>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
+                                                {/* Principal Column */}
+                                                {maxDepth >= 4 && !row.principalCell.isSkip && (
+                                                    row.principalCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                                        <td rowSpan={row.principalCell.rowSpan} onClick={() => toggleNode(row.principalCell.id)} className="border px-2 py-1 font-semibold text-indigo-800 cursor-pointer align-top bg-indigo-50/30">
+                                                            <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                                {row.principalCell.isExpanded ? <ChevronDown size={14} className="text-indigo-500 shrink-0"/> : <ChevronRight size={14} className="text-indigo-500 shrink-0"/>}
+                                                                <span>{row.principalCell.label}</span>
+                                                            </div>
+                                                        </td>
+                                                    )
+                                                )}
+
+                                                {/* Brand Column */}
+                                                {maxDepth >= 5 && !row.brandCell.isSkip && (
+                                                    row.brandCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                                        <td rowSpan={row.brandCell.rowSpan} className="border px-2 py-1 text-purple-900 font-medium align-top bg-purple-50/30">
+                                                            <div className="whitespace-nowrap mt-0.5 ml-4">
+                                                                {row.brandCell.label}
+                                                            </div>
+                                                        </td>
+                                                    )
+                                                )}
+
+                                                {/* Cost Column */}
+                                                <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
+                                                    <div className="mt-0.5">{row.avgCost !== null && row.avgCost !== undefined ? formatNumber(row.avgCost) : '-'}</div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
                         </div>
                     </div>
-                    {/* END INDEPENDENT TABLE */}
+                    {/* END INDEPENDENT TREE TABLE */}
 
                     <div className="mb-8 border-b pb-6">
                         <div className={`flex flex-col gap-4 ${allocTheme.bg} p-4 rounded-lg border ${allocTheme.border} h-full`}>
