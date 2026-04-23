@@ -1732,19 +1732,19 @@ const PricingApp = () => {
                             </button>
                         </div>
                         
-                        <div className="overflow-x-auto">
+                        <div className="overflow-auto max-h-[550px]">
                             {principalAllocationData.length === 0 ? (
                                 <div className="text-center p-6 text-gray-500 italic">No principal allocation data available.</div>
                             ) : (
-                                <table className="w-full border-collapse text-xs">
-                                    <thead className="bg-gray-100 border-b-2 border-gray-200">
+                                <table className="w-full border-collapse text-xs relative">
+                                    <thead className="bg-gray-100 border-b-2 border-gray-200 sticky top-0 z-10">
                                         <tr>
-                                            <th className="px-2 py-1 text-left font-bold text-gray-700 border">Month-Year</th>
-                                            {maxDepth >= 2 && <th className="px-2 py-1 text-left font-bold text-teal-900 border transition-all duration-300">BU</th>}
-                                            {maxDepth >= 3 && <th className="px-2 py-1 text-left font-bold text-blue-900 border transition-all duration-300">Branch</th>}
-                                            {maxDepth >= 4 && <th className="px-2 py-1 text-left font-bold text-indigo-900 border transition-all duration-300">Principal</th>}
-                                            {maxDepth >= 5 && <th className="px-2 py-1 text-left font-bold text-purple-900 border transition-all duration-300">Brand</th>}
-                                            <th className="px-2 py-1 text-right font-bold text-gray-700 border w-24">Avg Cost</th>
+                                            <th className="px-2 py-1 text-left font-bold text-gray-700 border bg-gray-100">Month-Year</th>
+                                            {maxDepth >= 2 && <th className="px-2 py-1 text-left font-bold text-teal-900 border bg-gray-100 transition-all duration-300">BU</th>}
+                                            {maxDepth >= 3 && <th className="px-2 py-1 text-left font-bold text-blue-900 border bg-gray-100 transition-all duration-300">Branch</th>}
+                                            {maxDepth >= 4 && <th className="px-2 py-1 text-left font-bold text-indigo-900 border bg-gray-100 transition-all duration-300">Principal</th>}
+                                            {maxDepth >= 5 && <th className="px-2 py-1 text-left font-bold text-purple-900 border bg-gray-100 transition-all duration-300">Brand</th>}
+                                            <th className="px-2 py-1 text-right font-bold text-gray-700 border bg-gray-100 w-24">Avg Cost</th>
                                         </tr>
                                     </thead>
                                     <tbody>
