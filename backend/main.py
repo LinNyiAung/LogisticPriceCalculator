@@ -1474,10 +1474,6 @@ def get_daily_rate_cart_report(
             
             if start_dt > end_dt:
                 raise HTTPException(status_code=400, detail="start_date cannot be after end_date")
-                
-            # Cap at 60 days to avoid massive accidental loads
-            if (end_dt - start_dt).days > 60:
-                 raise HTTPException(status_code=400, detail="Date range cannot exceed 60 days.")
 
             daily_datas = []
             current_dt = start_dt
@@ -3143,8 +3139,6 @@ def export_daily_rate_cut_report(
             end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d")
             if start_dt > end_dt: 
                 raise HTTPException(status_code=400, detail="start_date cannot be after end_date")
-            if (end_dt - start_dt).days > 60: 
-                raise HTTPException(status_code=400, detail="Date range cannot exceed 60 days.")
             
             daily_datas = []
             current_dt = start_dt
