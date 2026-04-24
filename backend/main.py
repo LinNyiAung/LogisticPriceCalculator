@@ -2604,11 +2604,11 @@ def get_submitted_allocation_report(
         conn = get_logistic_connection()
         cursor = conn.cursor()
 
-        # Query to fetch all submitted/claimed calculations
+        # Query to fetch all submitted/claimed calculations with explicit submitted_at
         query = """
             SELECT 
                 id, 
-                COALESCE(created_at, submitted_at) as action_date, 
+                submitted_at, 
                 gate_name, 
                 from_loc, 
                 to_loc, 
@@ -2626,12 +2626,12 @@ def get_submitted_allocation_report(
                 datetime.datetime.strptime(start_date, "%Y-%m-%d")
                 datetime.datetime.strptime(end_date, "%Y-%m-%d")
                 
-                query += " AND SUBSTR(COALESCE(submitted_at, created_at), 1, 10) BETWEEN ? AND ?"
+                query += " AND SUBSTR(submitted_at, 1, 10) BETWEEN ? AND ?"
                 params.extend([start_date, end_date])
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
         
-        query += " ORDER BY action_date DESC"
+        query += " ORDER BY submitted_at DESC"
         
         cursor.execute(query, params)
         rows = cursor.fetchall()
@@ -2642,7 +2642,7 @@ def get_submitted_allocation_report(
         # Flatten the calculated_products JSON into a tabular format
         for row in rows:
             calc_id = row[0]
-            action_date = row[1]
+            submitted_at = row[1]
             gate_name = row[2]
             from_loc = row[3]
             to_loc = row[4]
@@ -2669,7 +2669,7 @@ def get_submitted_allocation_report(
                     
                 allocation_data.append({
                     "calc_id": calc_id,
-                    "action_date": action_date,
+                    "submitted_at": submitted_at,
                     "doc_date": p.get("doc_date", ""),
                     "sin_no": p.get("sin_no", ""),
                     "gate_name": gate_name,
@@ -2704,7 +2704,8 @@ def get_submitted_allocation_report(
     except Exception as e:
         logger.error(f"Error generating submitted allocation report: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating submitted allocation report: {str(e)}")
-
+    
+    
 # --- Dashboard Helper Functions ---
 
 def _generate_allocation_data(target_month: str, target_branch: Optional[str] = None):
@@ -3320,14 +3321,21 @@ def export_submitted_allocation_report(
             for row in allocation_data:
                 match = True
                 for key, val in filters.items():
-                    # Map the frontend route filter to from_loc and to_loc
-                    if key == 'route':
+                    # Map the frontend text search filter to actual data key
+                    actual_key = 'submitted_at' if key == 'date_filter' else key
+                    
+                    if actual_key == 'route':
                         route_str = f"{row.get('from_loc', '')} {row.get('to_loc', '')}".lower()
                         if val.lower() not in route_str:
                             match = False
                             break
                     else:
-                        row_val = str(row.get(key, '')).lower()
+                        row_val = str(row.get(actual_key, '')).lower()
+                        
+                        # Only match against the date part so time doesn't break the filter
+                        if actual_key == 'submitted_at':
+                            row_val = row_val[:10]
+                            
                         if val.lower() not in row_val:
                             match = False
                             break
@@ -3346,7 +3354,7 @@ def export_submitted_allocation_report(
         border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
 
         headers = [
-            "Calc ID", "Action Date", "Doc Date", "SIN No", "Gate Name", "From Loc", "To Loc", "Channel",
+            "Calc ID", "Date", "Doc Date", "SIN No", "Gate Name", "From Loc", "To Loc", "Channel",
             "BU", "Item Code", "Item Name", "Principal", "Brand", "B-Code", "B-Name", "B-Desc", "S-Dept", 
             "S-Principal", "Cartons", "Weight", "Unit Cost", "Total Cost", "Calculation Type"
         ]
@@ -3359,8 +3367,13 @@ def export_submitted_allocation_report(
             cell.border = border
 
         for idx, row in enumerate(allocation_data, 2):
+            
+            # Extract just the Date (YYYY-MM-DD) from the full timestamp
+            raw_date = row.get("submitted_at", "")
+            formatted_date = raw_date[:10] if raw_date else ""
+
             row_data = [
-                row.get("calc_id", ""), row.get("action_date", ""), row.get("doc_date", ""),
+                row.get("calc_id", ""), formatted_date, row.get("doc_date", ""),
                 row.get("sin_no", ""), row.get("gate_name", ""), row.get("from_loc", ""),
                 row.get("to_loc", ""), row.get("channel", ""), row.get("bu", ""),
                 row.get("item_code", ""), row.get("item_name", ""), row.get("principal", ""),

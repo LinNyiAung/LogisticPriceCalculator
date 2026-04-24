@@ -219,7 +219,7 @@ const PricingApp = () => {
   const [allocationStartDate, setAllocationStartDate] = useState('');
   const [allocationEndDate, setAllocationEndDate] = useState('');
   const [allocationFilters, setAllocationFilters] = useState({ 
-    calc_id: '', sin_no: '', gate_name: '', route: '', bu: '', item_code: '', item_name: '', principal: '', brand: '', ctns: '', unit_cost: '', total_cost: '' 
+    calc_id: '', date_filter: '', sin_no: '', gate_name: '', route: '', bu: '', item_code: '', item_name: '', principal: '', brand: '', ctns: '', unit_cost: '', total_cost: '' 
   });
 
   const [usersList, setUsersList] = useState([]);
@@ -2266,6 +2266,7 @@ const PricingApp = () => {
       // Filter Logic for Submitted Allocation Tab
       const filteredAllocation = submittedAllocationData.filter(row => {
           const matchCalcId = String(row.calc_id || '').toLowerCase().includes(allocationFilters.calc_id.toLowerCase());
+          const matchDate = (row.submitted_at || '').toLowerCase().includes((allocationFilters.date_filter || '').toLowerCase());
           const matchSinNo = (row.sin_no || '').toLowerCase().includes(allocationFilters.sin_no.toLowerCase());
           const matchGateName = (row.gate_name || '').toLowerCase().includes(allocationFilters.gate_name.toLowerCase());
           const matchRoute = ((row.from_loc || '') + ' ' + (row.to_loc || '')).toLowerCase().includes(allocationFilters.route.toLowerCase());
@@ -2278,7 +2279,7 @@ const PricingApp = () => {
           const matchUnitCost = String(row.unit_cost || '').toLowerCase().includes(allocationFilters.unit_cost.toLowerCase());
           const matchTotalCost = String(row.total_cost || '').toLowerCase().includes(allocationFilters.total_cost.toLowerCase());
 
-          return matchCalcId && matchSinNo && matchGateName && matchRoute && matchBu && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchCtns && matchUnitCost && matchTotalCost;
+          return matchCalcId && matchDate && matchSinNo && matchGateName && matchRoute && matchBu && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchCtns && matchUnitCost && matchTotalCost;
       });
 
       const displayedDailyItem = filteredDailyReportData.slice(0, visibleCounts.dailyItem);
@@ -2629,6 +2630,7 @@ const PricingApp = () => {
                       )}
 
                       {/* --- TAB: SUBMITTED ALLOCATION REPORT --- */}
+                      {/* --- TAB: SUBMITTED ALLOCATION REPORT --- */}
                       {activeDailyTab === 'submitted' && (
                           <div className="animation-fade-in">
                               <div className="overflow-x-auto border rounded mb-4">
@@ -2638,6 +2640,10 @@ const PricingApp = () => {
                                               <th className="border p-2 text-left">
                                                   <div>Calc ID</div>
                                                   <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.calc_id} onChange={(e) => setAllocationFilters({...allocationFilters, calc_id: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
+                                                  <div>Date</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.date_filter || ''} onChange={(e) => setAllocationFilters({...allocationFilters, date_filter: e.target.value})} />
                                               </th>
                                               <th className="border p-2 text-left">
                                                   <div>SIN No</div>
@@ -2687,13 +2693,14 @@ const PricingApp = () => {
                                       </thead>
                                       <tbody>
                                           {isAllocationLoading ? (
-                                              <tr><td colSpan="12" className="text-center p-8 text-gray-500 font-medium">Loading allocation data...</td></tr>
+                                              <tr><td colSpan="13" className="text-center p-8 text-gray-500 font-medium">Loading allocation data...</td></tr>
                                           ) : displayedAllocation.length === 0 ? (
-                                              <tr><td colSpan="12" className="text-center p-8 text-gray-500 italic">No allocation data found matching filters.</td></tr>
+                                              <tr><td colSpan="13" className="text-center p-8 text-gray-500 italic">No allocation data found matching filters.</td></tr>
                                           ) : (
                                               displayedAllocation.map((row, idx) => (
                                                   <tr key={idx} className="hover:bg-gray-50 text-sm">
                                                       <td className="border p-2 whitespace-nowrap text-gray-600 font-bold">#{row.calc_id}</td>
+                                                      <td className="border p-2 text-gray-600 whitespace-nowrap">{row.submitted_at ? row.submitted_at.substring(0, 10) : '-'}</td>
                                                       <td className="border p-2 font-semibold">{row.sin_no}</td>
                                                       <td className="border p-2 text-gray-700">{row.gate_name}</td>
                                                       <td className="border p-2 text-gray-500">{row.from_loc} &rarr; {row.to_loc}</td>
