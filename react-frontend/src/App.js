@@ -1568,92 +1568,107 @@ const PricingApp = () => {
     const visibleRows = [];
     
     if (activeDashboardTab === 'rate_cart') {
-        principalAllocationData.forEach(mData => {
-            const monthId = mData.month;
-            const isMonthExpanded = !!expandedNodes[monthId];
-            
-            if (!isMonthExpanded || !mData.bus || mData.bus.length === 0) {
+        principalAllocationData.forEach(buData => {
+            const buId = buData.bu;
+            const isBuExpanded = !!expandedNodes[buId];
+
+            if (!isBuExpanded || !buData.branches || buData.branches.length === 0) {
                 visibleRows.push({
-                    key: monthId,
-                    monthCell: { id: monthId, label: mData.month, isExpanded: false, rowSpan: 1 },
-                    buCell: { isPadding: true },
+                    key: buId,
+                    buCell: { id: buId, label: buData.bu, isExpanded: false, rowSpan: 1 },
                     branchCell: { isPadding: true },
                     principalCell: { isPadding: true },
                     brandCell: { isPadding: true },
-                    avgCost: null
+                    itemCell: { isPadding: true },
+                    dateCell: { isPadding: true },
+                    avgCost: buData.avg_cost
                 });
             } else {
-                const monthStartIdx = visibleRows.length;
-                mData.bus.forEach(buData => {
-                    const buId = `${monthId}::${buData.bu}`;
-                    const isBuExpanded = !!expandedNodes[buId];
+                const buStartIdx = visibleRows.length;
+                buData.branches.forEach(bData => {
+                    const branchId = `${buId}::${bData.branch}`;
+                    const isBranchExpanded = !!expandedNodes[branchId];
 
-                    if (!isBuExpanded || !buData.branches || buData.branches.length === 0) {
+                    if (!isBranchExpanded || !bData.principals || bData.principals.length === 0) {
                         visibleRows.push({
-                            key: buId,
-                            monthCell: { isSkip: true },
-                            buCell: { id: buId, label: buData.bu, isExpanded: false, rowSpan: 1 },
-                            branchCell: { isPadding: true },
+                            key: branchId,
+                            buCell: { isSkip: true },
+                            branchCell: { id: branchId, label: bData.branch, isExpanded: false, rowSpan: 1 },
                             principalCell: { isPadding: true },
                             brandCell: { isPadding: true },
-                            avgCost: buData.avg_cost
+                            itemCell: { isPadding: true },
+                            dateCell: { isPadding: true },
+                            avgCost: bData.avg_cost
                         });
                     } else {
-                        const buStartIdx = visibleRows.length;
-                        buData.branches.forEach(bData => {
-                            const branchId = `${buId}::${bData.branch}`;
-                            const isBranchExpanded = !!expandedNodes[branchId];
+                        const branchStartIdx = visibleRows.length;
+                        bData.principals.forEach(pData => {
+                            const prinId = `${branchId}::${pData.principal}`;
+                            const isPrinExpanded = !!expandedNodes[prinId];
 
-                            if (!isBranchExpanded || !bData.principals || bData.principals.length === 0) {
+                            if (!isPrinExpanded || !pData.brands || pData.brands.length === 0) {
                                 visibleRows.push({
-                                    key: branchId,
-                                    monthCell: { isSkip: true }, 
-                                    buCell: { isSkip: true },
-                                    branchCell: { id: branchId, label: bData.branch, isExpanded: false, rowSpan: 1 },
-                                    principalCell: { isPadding: true },
+                                    key: prinId,
+                                    buCell: { isSkip: true }, branchCell: { isSkip: true },
+                                    principalCell: { id: prinId, label: pData.principal, isExpanded: false, rowSpan: 1 },
                                     brandCell: { isPadding: true },
-                                    avgCost: bData.avg_cost
+                                    itemCell: { isPadding: true },
+                                    dateCell: { isPadding: true },
+                                    avgCost: pData.avg_cost
                                 });
                             } else {
-                                const branchStartIdx = visibleRows.length;
-                                bData.principals.forEach(pData => {
-                                    const prinId = `${branchId}::${pData.principal}`;
-                                    const isPrinExpanded = !!expandedNodes[prinId];
+                                const prinStartIdx = visibleRows.length;
+                                pData.brands.forEach(brData => {
+                                    const brandId = `${prinId}::${brData.brand}`;
+                                    const isBrandExpanded = !!expandedNodes[brandId];
 
-                                    if (!isPrinExpanded || !pData.brands || pData.brands.length === 0) {
+                                    if (!isBrandExpanded || !brData.items || brData.items.length === 0) {
                                         visibleRows.push({
-                                            key: prinId,
-                                            monthCell: { isSkip: true },
-                                            buCell: { isSkip: true },
-                                            branchCell: { isSkip: true },
-                                            principalCell: { id: prinId, label: pData.principal, isExpanded: false, rowSpan: 1 },
-                                            brandCell: { isPadding: true },
-                                            avgCost: pData.avg_cost
+                                            key: brandId,
+                                            buCell: { isSkip: true }, branchCell: { isSkip: true }, principalCell: { isSkip: true },
+                                            brandCell: { id: brandId, label: brData.brand, isExpanded: false, rowSpan: 1 },
+                                            itemCell: { isPadding: true },
+                                            dateCell: { isPadding: true },
+                                            avgCost: brData.avg_cost
                                         });
                                     } else {
-                                        const prinStartIdx = visibleRows.length;
-                                        pData.brands.forEach(brData => {
-                                            const brandId = `${prinId}::${brData.brand}`;
-                                            visibleRows.push({
-                                                key: brandId,
-                                                monthCell: { isSkip: true },
-                                                buCell: { isSkip: true },
-                                                branchCell: { isSkip: true },
-                                                principalCell: { isSkip: true },
-                                                brandCell: { id: brandId, label: brData.brand, rowSpan: 1 },
-                                                avgCost: brData.avg_cost
-                                            });
+                                        const brandStartIdx = visibleRows.length;
+                                        brData.items.forEach(iData => {
+                                            const itemId = `${brandId}::${iData.item_name}`;
+                                            const isItemExpanded = !!expandedNodes[itemId];
+
+                                            if (!isItemExpanded || !iData.dates || iData.dates.length === 0) {
+                                                visibleRows.push({
+                                                    key: itemId,
+                                                    buCell: { isSkip: true }, branchCell: { isSkip: true }, principalCell: { isSkip: true }, brandCell: { isSkip: true },
+                                                    itemCell: { id: itemId, label: iData.item_name, isExpanded: false, rowSpan: 1 },
+                                                    dateCell: { isPadding: true },
+                                                    avgCost: iData.avg_cost
+                                                });
+                                            } else {
+                                                const itemStartIdx = visibleRows.length;
+                                                iData.dates.forEach(dData => {
+                                                    const dateId = `${itemId}::${dData.date}`;
+                                                    visibleRows.push({
+                                                        key: dateId,
+                                                        buCell: { isSkip: true }, branchCell: { isSkip: true }, principalCell: { isSkip: true }, brandCell: { isSkip: true }, itemCell: { isSkip: true },
+                                                        dateCell: { id: dateId, label: dData.date, rowSpan: 1 },
+                                                        avgCost: dData.avg_cost
+                                                    });
+                                                });
+                                                visibleRows[itemStartIdx].itemCell = { id: itemId, label: iData.item_name, isExpanded: true, rowSpan: visibleRows.length - itemStartIdx };
+                                            }
                                         });
-                                        visibleRows[prinStartIdx].principalCell = { id: prinId, label: pData.principal, isExpanded: true, rowSpan: visibleRows.length - prinStartIdx };
+                                        visibleRows[brandStartIdx].brandCell = { id: brandId, label: brData.brand, isExpanded: true, rowSpan: visibleRows.length - brandStartIdx };
                                     }
                                 });
-                                visibleRows[branchStartIdx].branchCell = { id: branchId, label: bData.branch, isExpanded: true, rowSpan: visibleRows.length - branchStartIdx };
+                                visibleRows[prinStartIdx].principalCell = { id: prinId, label: pData.principal, isExpanded: true, rowSpan: visibleRows.length - prinStartIdx };
                             }
                         });
-                        visibleRows[buStartIdx].buCell = { id: buId, label: buData.bu, isExpanded: true, rowSpan: visibleRows.length - buStartIdx };
+                        visibleRows[branchStartIdx].branchCell = { id: branchId, label: bData.branch, isExpanded: true, rowSpan: visibleRows.length - branchStartIdx };
                     }
                 });
-                visibleRows[monthStartIdx].monthCell = { id: monthId, label: mData.month, isExpanded: true, rowSpan: visibleRows.length - monthStartIdx };
+                visibleRows[buStartIdx].buCell = { id: buId, label: buData.bu, isExpanded: true, rowSpan: visibleRows.length - buStartIdx };
             }
         });
     }
@@ -1719,7 +1734,7 @@ const PricingApp = () => {
             {activeDashboardTab === 'rate_cart' && (
                 <div className="animation-fade-in">
                     
-                    {/* INDEPENDENT PRINCIPAL/BRAND ROWSPAN TREE TABLE */}
+                    {/* INDEPENDENT PRINCIPAL/BRAND/ITEM ROWSPAN TREE TABLE */}
                     <div className="mb-10 bg-white border rounded-lg shadow-sm">
                         <div className="p-4 border-b bg-gray-50 flex justify-between items-center rounded-t-lg">
                             <h2 className="text-xl font-bold text-gray-800">Principal & Brand Allocation Overview</h2>
@@ -1739,11 +1754,12 @@ const PricingApp = () => {
                                 <table className="w-full border-collapse text-xs relative">
                                     <thead className="bg-gray-100 border-b-2 border-gray-200 sticky top-0 z-10">
                                         <tr>
-                                            <th className="px-2 py-1 text-left font-bold text-gray-700 border bg-gray-100">Month-Year</th>
-                                            {maxDepth >= 2 && <th className="px-2 py-1 text-left font-bold text-teal-900 border bg-gray-100 transition-all duration-300">BU</th>}
-                                            {maxDepth >= 3 && <th className="px-2 py-1 text-left font-bold text-blue-900 border bg-gray-100 transition-all duration-300">Branch</th>}
-                                            {maxDepth >= 4 && <th className="px-2 py-1 text-left font-bold text-indigo-900 border bg-gray-100 transition-all duration-300">Principal</th>}
-                                            {maxDepth >= 5 && <th className="px-2 py-1 text-left font-bold text-purple-900 border bg-gray-100 transition-all duration-300">Brand</th>}
+                                            <th className="px-2 py-1 text-left font-bold text-teal-900 border bg-gray-100">BU</th>
+                                            {maxDepth >= 2 && <th className="px-2 py-1 text-left font-bold text-blue-900 border bg-gray-100 transition-all duration-300">Branch</th>}
+                                            {maxDepth >= 3 && <th className="px-2 py-1 text-left font-bold text-indigo-900 border bg-gray-100 transition-all duration-300">Principal</th>}
+                                            {maxDepth >= 4 && <th className="px-2 py-1 text-left font-bold text-purple-900 border bg-gray-100 transition-all duration-300">Brand</th>}
+                                            {maxDepth >= 5 && <th className="px-2 py-1 text-left font-bold text-pink-900 border bg-gray-100 transition-all duration-300">Item Name</th>}
+                                            {maxDepth >= 6 && <th className="px-2 py-1 text-left font-bold text-gray-700 border bg-gray-100 transition-all duration-300">Date</th>}
                                             <th className="px-2 py-1 text-right font-bold text-gray-700 border bg-gray-100 w-24">Avg Cost</th>
                                         </tr>
                                     </thead>
@@ -1751,22 +1767,10 @@ const PricingApp = () => {
                                         {visibleRows.map((row) => (
                                             <tr key={row.key} className="hover:bg-gray-50 border-b transition-colors">
                                                 
-                                                {/* Month Column */}
-                                                {!row.monthCell.isSkip && (
-                                                    row.monthCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                                        <td rowSpan={row.monthCell.rowSpan} onClick={() => toggleNode(row.monthCell.id)} className="border px-2 py-1 font-bold text-gray-800 cursor-pointer align-top bg-white">
-                                                            <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                                {row.monthCell.isExpanded ? <ChevronDown size={14} className="text-gray-500 shrink-0"/> : <ChevronRight size={14} className="text-gray-500 shrink-0"/>}
-                                                                <span>{row.monthCell.label}</span>
-                                                            </div>
-                                                        </td>
-                                                    )
-                                                )}
-
                                                 {/* BU Column */}
-                                                {maxDepth >= 2 && !row.buCell.isSkip && (
+                                                {!row.buCell.isSkip && (
                                                     row.buCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                                        <td rowSpan={row.buCell.rowSpan} onClick={() => toggleNode(row.buCell.id)} className="border px-2 py-1 font-semibold text-teal-800 cursor-pointer align-top bg-teal-50/30">
+                                                        <td rowSpan={row.buCell.rowSpan} onClick={() => toggleNode(row.buCell.id)} className="border px-2 py-1 font-bold text-teal-800 cursor-pointer align-top bg-white">
                                                             <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
                                                                 {row.buCell.isExpanded ? <ChevronDown size={14} className="text-teal-500 shrink-0"/> : <ChevronRight size={14} className="text-teal-500 shrink-0"/>}
                                                                 <span>{row.buCell.label}</span>
@@ -1776,7 +1780,7 @@ const PricingApp = () => {
                                                 )}
                                                 
                                                 {/* Branch Column */}
-                                                {maxDepth >= 3 && !row.branchCell.isSkip && (
+                                                {maxDepth >= 2 && !row.branchCell.isSkip && (
                                                     row.branchCell.isPadding ? <td className="border px-2 py-1"></td> : (
                                                         <td rowSpan={row.branchCell.rowSpan} onClick={() => toggleNode(row.branchCell.id)} className="border px-2 py-1 font-semibold text-blue-800 cursor-pointer align-top bg-blue-50/30">
                                                             <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
@@ -1788,7 +1792,7 @@ const PricingApp = () => {
                                                 )}
 
                                                 {/* Principal Column */}
-                                                {maxDepth >= 4 && !row.principalCell.isSkip && (
+                                                {maxDepth >= 3 && !row.principalCell.isSkip && (
                                                     row.principalCell.isPadding ? <td className="border px-2 py-1"></td> : (
                                                         <td rowSpan={row.principalCell.rowSpan} onClick={() => toggleNode(row.principalCell.id)} className="border px-2 py-1 font-semibold text-indigo-800 cursor-pointer align-top bg-indigo-50/30">
                                                             <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
@@ -1800,11 +1804,35 @@ const PricingApp = () => {
                                                 )}
 
                                                 {/* Brand Column */}
-                                                {maxDepth >= 5 && !row.brandCell.isSkip && (
+                                                {maxDepth >= 4 && !row.brandCell.isSkip && (
                                                     row.brandCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                                        <td rowSpan={row.brandCell.rowSpan} className="border px-2 py-1 text-purple-900 font-medium align-top bg-purple-50/30">
+                                                        <td rowSpan={row.brandCell.rowSpan} onClick={() => toggleNode(row.brandCell.id)} className="border px-2 py-1 font-semibold text-purple-900 cursor-pointer align-top bg-purple-50/30">
+                                                            <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                                {row.brandCell.isExpanded ? <ChevronDown size={14} className="text-purple-500 shrink-0"/> : <ChevronRight size={14} className="text-purple-500 shrink-0"/>}
+                                                                <span>{row.brandCell.label}</span>
+                                                            </div>
+                                                        </td>
+                                                    )
+                                                )}
+
+                                                {/* Item Name Column */}
+                                                {maxDepth >= 5 && !row.itemCell.isSkip && (
+                                                    row.itemCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                                        <td rowSpan={row.itemCell.rowSpan} onClick={() => toggleNode(row.itemCell.id)} className="border px-2 py-1 font-semibold text-pink-900 cursor-pointer align-top bg-pink-50/30 max-w-[200px] truncate" title={row.itemCell.label}>
+                                                            <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                                {row.itemCell.isExpanded ? <ChevronDown size={14} className="text-pink-500 shrink-0"/> : <ChevronRight size={14} className="text-pink-500 shrink-0"/>}
+                                                                <span className="truncate">{row.itemCell.label}</span>
+                                                            </div>
+                                                        </td>
+                                                    )
+                                                )}
+
+                                                {/* Date Column */}
+                                                {maxDepth >= 6 && !row.dateCell.isSkip && (
+                                                    row.dateCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                                        <td rowSpan={row.dateCell.rowSpan} className="border px-2 py-1 text-gray-700 font-medium align-top bg-gray-50/50">
                                                             <div className="whitespace-nowrap mt-0.5 ml-4">
-                                                                {row.brandCell.label}
+                                                                {row.dateCell.label}
                                                             </div>
                                                         </td>
                                                     )
