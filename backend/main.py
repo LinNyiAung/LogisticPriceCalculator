@@ -1303,6 +1303,7 @@ def _get_daily_report_data(target_date: str):
         i_key = (b, d, g["item_code"])
         if i_key not in item_report_dict:
             item_report_dict[i_key] = {
+                "target_date": target_date, # INJECT DATE
                 "bu": g["bu"], "branch": b, "driver_name": d, "item_code": g["item_code"],
                 "item_name": g["item_name"], "principal": g["principal"], "brand": g["brand"],
                 "ctns": 0.0, "allocated_cost": 0.0, "cost_per_carton": cost_per_ctn,
@@ -1315,6 +1316,7 @@ def _get_daily_report_data(target_date: str):
         t_key = (g["branch"], g["township"], g["customer_code"], g["driver_name"])
         if t_key not in township_report_dict:
             township_report_dict[t_key] = {
+                "target_date": target_date, # INJECT DATE
                 "branch": b, "driver_name": g["driver_name"], "township": g["township"], 
                 "customer_code": g["customer_code"], "contact_person": g["contact_person"], 
                 "ctns": 0.0, "driver_total_ctns": d_total, "branch_cost": b_cost,
@@ -1382,9 +1384,18 @@ def get_or_generate_daily_report(target_date: str):
     conn.close()
 
     if row:
+        item_report = json.loads(row[0])
+        township_report = json.loads(row[1])
+
+        # Inject target_date for backward compatibility with existing saved records
+        for item in item_report:
+            item["target_date"] = target_date
+        for tw in township_report:
+            tw["target_date"] = target_date
+
         return {
-            "item_report": json.loads(row[0]),
-            "township_report": json.loads(row[1])
+            "item_report": item_report,
+            "township_report": township_report
         }
     else:
         return _get_daily_report_data(target_date)
@@ -1398,9 +1409,12 @@ def _aggregate_reports(daily_datas: List[dict]):
         
         # --- 1. Fix Item Report Aggregation ---
         for item in data.get("item_report", []):
-            i_key = (item.get("branch", ""), item.get("driver_name", ""), item.get("item_code", ""))
+            t_date = item.get("target_date", "")
+            # Include target_date in key to prevent squashing different dates together
+            i_key = (t_date, item.get("branch", ""), item.get("driver_name", ""), item.get("item_code", ""))
             if i_key not in item_report_dict:
                 item_report_dict[i_key] = {
+                    "target_date": t_date,
                     "bu": item.get("bu", ""), "branch": item.get("branch", ""), "driver_name": item.get("driver_name", ""),
                     "item_code": item.get("item_code", ""), "item_name": item.get("item_name", ""), 
                     "principal": item.get("principal", ""), "brand": item.get("brand", ""),
@@ -1408,48 +1422,47 @@ def _aggregate_reports(daily_datas: List[dict]):
                     "branch_cost": item.get("branch_cost", 0.0), "sales_amount": 0.0
                 }
             else:
-                # FIX: Overwrite with the latest rate instead of summing
                 item_report_dict[i_key]["branch_cost"] = item.get("branch_cost", item_report_dict[i_key]["branch_cost"])
 
             item_report_dict[i_key]["ctns"] += item.get("ctns", 0.0)
             item_report_dict[i_key]["allocated_cost"] += item.get("allocated_cost", 0.0)
             item_report_dict[i_key]["sales_amount"] += item.get("sales_amount", 0.0)
             item_report_dict[i_key]["driver_total_ctns"] += item.get("driver_total_ctns", 0.0)
-            # REMOVED: item_report_dict[i_key]["branch_cost"] += item.get("branch_cost", 0.0)
 
         # --- 2. Fix Township Report Aggregation ---
         for tw in data.get("township_report", []):
-            t_key = (tw.get("branch", ""), tw.get("township", ""), tw.get("customer_code", ""), tw.get("driver_name", ""))
+            t_date = tw.get("target_date", "")
+            # Include target_date in key
+            t_key = (t_date, tw.get("branch", ""), tw.get("township", ""), tw.get("customer_code", ""), tw.get("driver_name", ""))
             if t_key not in township_report_dict:
                 township_report_dict[t_key] = {
+                    "target_date": t_date,
                     "branch": tw.get("branch", ""), "driver_name": tw.get("driver_name", ""), 
                     "township": tw.get("township", ""), "customer_code": tw.get("customer_code", ""), 
                     "contact_person": tw.get("contact_person", ""), "ctns": 0.0, "allocated_cost": 0.0, 
                     "driver_total_ctns": 0.0, "branch_cost": tw.get("branch_cost", 0.0), "total_drop_points": 0.0, "sales_amount": 0.0
                 }
             else:
-                # FIX: Overwrite with the latest rate instead of summing
                 township_report_dict[t_key]["branch_cost"] = tw.get("branch_cost", township_report_dict[t_key]["branch_cost"])
 
             township_report_dict[t_key]["ctns"] += tw.get("ctns", 0.0)
             township_report_dict[t_key]["allocated_cost"] += tw.get("allocated_cost", 0.0)
             township_report_dict[t_key]["sales_amount"] += tw.get("sales_amount", 0.0)
             township_report_dict[t_key]["driver_total_ctns"] += tw.get("driver_total_ctns", 0.0)
-            # REMOVED: township_report_dict[t_key]["branch_cost"] += tw.get("branch_cost", 0.0)
             township_report_dict[t_key]["total_drop_points"] += tw.get("total_drop_points", 0.0)
 
     # Recalculate accurate averages across the whole period for items
     item_report_list = list(item_report_dict.values())
     for item in item_report_list:
         item["cost_per_carton"] = item["allocated_cost"] / item["ctns"] if item["ctns"] > 0 else 0.0
-    item_report_list.sort(key=lambda x: (x["branch"], x["driver_name"], x["item_code"]))
+    item_report_list.sort(key=lambda x: (x.get("target_date", ""), x["branch"], x["driver_name"], x["item_code"]))
 
     # Recalculate accurate averages across the whole period for townships
     township_report_list = list(township_report_dict.values())
     for tw in township_report_list:
         tw["cost_per_carton"] = tw["allocated_cost"] / tw["ctns"] if tw["ctns"] > 0 else 0.0
         tw["cost_per_drop_point"] = tw["allocated_cost"] / tw["total_drop_points"] if tw["total_drop_points"] > 0 else 0.0
-    township_report_list.sort(key=lambda x: (x["branch"], x["driver_name"], x["township"], x["customer_code"]))
+    township_report_list.sort(key=lambda x: (x.get("target_date", ""), x["branch"], x["driver_name"], x["township"], x["customer_code"]))
 
     return {
         "item_report": item_report_list,
@@ -3185,16 +3198,20 @@ def export_daily_rate_cut_report(
 
         # --- NEW: Apply Dynamic Filters ---
         filters = dict(request.query_params)
+        # Pop the API specific parameters so they aren't treated as raw text filters
         for k in ['report_type', 'target_date', 'start_date', 'end_date']:
-            filters.pop(k, None) # Remove standard params so we only have search filters left
+            filters.pop(k, None) 
             
         if filters:
             filtered_data = []
             for row in report_data:
                 match = True
                 for key, val in filters.items():
-                    row_val = str(row.get(key, '')).lower()
-                    if val.lower() not in row_val:
+                    # Map the frontend 'date_filter' to the actual row key 'target_date'
+                    actual_key = 'target_date' if key == 'date_filter' else key
+                    
+                    row_val = str(row.get(actual_key, '')).lower()
+                    if str(val).lower() not in row_val:
                         match = False
                         break
                 if match:
@@ -3212,16 +3229,16 @@ def export_daily_rate_cut_report(
         border_style = Side(border_style="thin", color="000000")
         border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
 
-        # 3. Define Headers
+        # 3. Define Headers (Date added as the second column)
         if report_type == 'item':
             headers = [
-                "BU", "Branch", "Driver Name", "Principal", "Brand", "Item Code", "Item Name", 
+                "BU", "Date", "Branch", "Driver Name", "Principal", "Brand", "Item Code", "Item Name", 
                 "Cartons", "Driver Total (Ctns)", "Branch Rate Cost", "Cost per Carton", 
                 "Allocated Cost", "Sales Amount"
             ]
         else:
             headers = [
-                "Branch", "Driver Name", "Township", "Customer Code", "Contact Person", 
+                "Branch", "Date", "Driver Name", "Township", "Customer Code", "Contact Person", 
                 "Customer Total (Ctns)", "Driver Total (Ctns)", "Branch Rate Cost", "Total Drop Points", 
                 "Cost per Drop Point", "Cost per Carton", "Allocated Cost", "Sales Amount"
             ]
@@ -3233,11 +3250,11 @@ def export_daily_rate_cut_report(
             cell.alignment = Alignment(horizontal='center')
             cell.border = border
 
-        # 4. Write Rows
+        # 4. Write Rows (Adding row.get("target_date") at index 1)
         for idx, row in enumerate(report_data, 2):
             if report_type == 'item':
                 row_data = [
-                    row.get("bu", "-"), row.get("branch", ""), row.get("driver_name", ""),
+                    row.get("bu", "-"), row.get("target_date", ""), row.get("branch", ""), row.get("driver_name", ""),
                     row.get("principal", ""), row.get("brand", ""), row.get("item_code", ""),
                     row.get("item_name", ""), row.get("ctns", 0), row.get("driver_total_ctns", 0),
                     row.get("branch_cost", 0), row.get("cost_per_carton", 0), row.get("allocated_cost", 0),
@@ -3245,7 +3262,7 @@ def export_daily_rate_cut_report(
                 ]
             else:
                 row_data = [
-                    row.get("branch", ""), row.get("driver_name", ""), row.get("township", ""),
+                    row.get("branch", ""), row.get("target_date", ""), row.get("driver_name", ""), row.get("township", ""),
                     row.get("customer_code", ""), row.get("contact_person", ""), row.get("ctns", 0),
                     row.get("driver_total_ctns", 0), row.get("branch_cost", 0), row.get("total_drop_points", 0),
                     row.get("cost_per_drop_point", 0), row.get("cost_per_carton", 0), row.get("allocated_cost", 0),
