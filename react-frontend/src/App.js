@@ -136,6 +136,7 @@ const PricingApp = () => {
   // Excel-like Filter State for Tree Table
   const [overviewFilters, setOverviewFilters] = useState({ bu: [], branch: [], group: [] });
   const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
+  const [avgCostSortOrder, setAvgCostSortOrder] = useState(null); // Added sort state
 
   // Extract unique options for filters based on the loaded data
   const filterOptions = useMemo(() => {
@@ -1672,8 +1673,8 @@ const PricingApp = () => {
         }
     });
 
-    // 1. PRE-FILTER THE DATASET BASED ON EXCEL FILTERS
-    const filteredPrincipalData = principalAllocationData.map(buData => {
+    // 1. PRE-FILTER AND SORT THE DATASET BASED ON EXCEL FILTERS
+    let filteredPrincipalData = principalAllocationData.map(buData => {
         if (overviewFilters.bu.length > 0 && !overviewFilters.bu.includes(buData.bu)) return null;
 
         const filteredBranches = (buData.branches || []).map(bData => {
@@ -1682,7 +1683,7 @@ const PricingApp = () => {
             const filteredGroups = (bData.group_data || []).filter(gData => {
                 if (overviewFilters.group.length > 0 && !overviewFilters.group.includes(gData.name)) return false;
                 return true;
-            });
+            }).map(gData => ({ ...gData, dates: [...(gData.dates || [])] })); // Clone dates for safe sorting
 
             if (overviewFilters.group.length > 0 && filteredGroups.length === 0) return null;
             return { ...bData, group_data: filteredGroups };
@@ -1691,6 +1692,28 @@ const PricingApp = () => {
         if ((overviewFilters.branch.length > 0 || overviewFilters.group.length > 0) && filteredBranches.length === 0) return null;
         return { ...buData, branches: filteredBranches };
     }).filter(Boolean);
+
+    // APPLY HIERARCHICAL SORTING
+    if (avgCostSortOrder) {
+        const modifier = avgCostSortOrder === 'desc' ? -1 : 1;
+        filteredPrincipalData.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
+        
+        filteredPrincipalData.forEach(bu => {
+            if (bu.branches) {
+                bu.branches.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
+                bu.branches.forEach(branch => {
+                    if (branch.group_data) {
+                        branch.group_data.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
+                        branch.group_data.forEach(group => {
+                            if (group.dates) {
+                                group.dates.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    }
 
     // 2. Build flattened table rows taking into account Expanded State and rowSpans
     const visibleRows = [];
@@ -1914,7 +1937,22 @@ const PricingApp = () => {
                                                 </th>
                                             )}
                                             {maxDepth >= 4 && <th className="px-2 py-1 text-left font-bold text-gray-700 border bg-gray-100 transition-all duration-300 align-middle">Date</th>}
-                                            <th className="px-2 py-1 text-right font-bold text-gray-700 border bg-gray-100 w-24 align-middle">Avg Cost</th>
+                                            <th 
+                                                className="px-2 py-1 text-right font-bold text-gray-700 border bg-gray-100 w-28 align-middle cursor-pointer hover:bg-gray-200 transition select-none"
+                                                onClick={() => {
+                                                    if (avgCostSortOrder === null) setAvgCostSortOrder('desc');
+                                                    else if (avgCostSortOrder === 'desc') setAvgCostSortOrder('asc');
+                                                    else setAvgCostSortOrder(null);
+                                                }}
+                                                title="Click to sort by Avg Cost"
+                                            >
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <span>Avg Cost</span>
+                                                    <span className="text-gray-400 text-[10px] w-3 text-center">
+                                                        {avgCostSortOrder === 'asc' ? '▲' : avgCostSortOrder === 'desc' ? '▼' : '⇅'}
+                                                    </span>
+                                                </div>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody>
