@@ -71,7 +71,7 @@ const LoginScreen = ({ onLogin }) => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white p-8 rounded-lg shadow-md w-96">
-        <h1 className="text-2xl font-bold mb-6 text-center text-blue-600">Logistic App Login</h1>
+        <h1 className="text-2xl font-bold mb-6 text-center text-blue-600">Logistics Cost Calculator</h1>
         {error && <div className="bg-red-100 text-red-700 p-2 rounded mb-4 text-sm text-center">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
@@ -1790,7 +1790,7 @@ const PricingApp = () => {
             
             {/* Global Header (Removed the Top Filters from here) */}
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 pb-4 border-b">
-              <h1 className="text-3xl font-bold text-gray-800">Logistic Cost Dashboard</h1>
+              <h1 className="text-3xl font-bold text-gray-800">Logistics Cost Dashboard</h1>
             </div>
 
             {/* --- DASHBOARD TABS --- */}
@@ -3247,7 +3247,7 @@ const PricingApp = () => {
           {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Logistic Cost Calculator</h1>
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Logistics Cost Calculator</h1>
             <div className="bg-white rounded-lg border p-6 mb-6">
               <h2 className="text-xl font-bold mb-4">Select Doc Nums (Transfer IDs) <span className="text-red-500">*</span></h2>
               <div className="relative mb-4">
@@ -3420,7 +3420,7 @@ const PricingApp = () => {
         {renderNavigation()}
         <div className="bg-white rounded-lg shadow-md p-6 flex flex-col items-center justify-center min-h-[50vh]">
             <Activity size={64} className="text-gray-300 mb-4" />
-            <h2 className="text-2xl font-bold text-gray-700 mb-2">Welcome to Logistic App</h2>
+            <h2 className="text-2xl font-bold text-gray-700 mb-2">Welcome to Logistics Cost Calculator</h2>
             <p className="text-gray-500">Please select a module from the navigation menu above to get started.</p>
         </div>
       </div>
