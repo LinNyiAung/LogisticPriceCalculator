@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Calendar, Percent, BarChart2, Key, Activity, ChevronRight, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, X, History, Save, FileDown, LogOut, User, Users, List as ListIcon, Search, Clock, CheckCircle, Shield, Calendar, Percent, BarChart2, Key, Activity, ChevronRight, ChevronDown, Filter } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
 
@@ -133,12 +133,101 @@ const PricingApp = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
   });
 
+  // Excel-like Filter State for Tree Table
+  const [overviewFilters, setOverviewFilters] = useState({ bu: [], branch: [], group: [] });
+  const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
+
+  // Extract unique options for filters based on the loaded data
+  const filterOptions = useMemo(() => {
+      const buSet = new Set();
+      const branchSet = new Set();
+      const groupSet = new Set();
+
+      principalAllocationData.forEach(bu => {
+          buSet.add(bu.bu);
+          (bu.branches || []).forEach(b => {
+              branchSet.add(b.branch);
+              (b.group_data || []).forEach(g => {
+                  groupSet.add(g.name);
+              });
+          });
+      });
+
+      return {
+          bu: Array.from(buSet).sort(),
+          branch: Array.from(branchSet).sort(),
+          group: Array.from(groupSet).sort()
+      };
+  }, [principalAllocationData]);
+
+  // Reusable Component for the Excel-like Dropdown
+  const ExcelFilterDropdown = ({ columnKey, options, selectedOptions, onApply, onClose }) => {
+      const [search, setSearch] = useState('');
+      const [localSelection, setLocalSelection] = useState(
+          selectedOptions.length > 0 ? selectedOptions : options
+      );
+
+      const filteredOptions = options.filter(o => String(o).toLowerCase().includes(search.toLowerCase()));
+      const isAllSelected = localSelection.length === options.length;
+
+      const handleToggleAll = () => {
+          if (isAllSelected) setLocalSelection([]);
+          else setLocalSelection([...options]);
+      };
+
+      const handleToggleOne = (val) => {
+          if (localSelection.includes(val)) setLocalSelection(localSelection.filter(v => v !== val));
+          else setLocalSelection([...localSelection, val]);
+      };
+
+      const handleApply = () => {
+          if (localSelection.length === options.length) onApply(columnKey, []);
+          else onApply(columnKey, localSelection);
+          onClose();
+      };
+
+      const handleClear = () => {
+          onApply(columnKey, []);
+          onClose();
+      };
+
+      return (
+          <div 
+              className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-2xl z-50 w-64 p-3 text-gray-800 font-normal cursor-default"
+              onClick={(e) => e.stopPropagation()}
+          >
+              <input
+                  type="text"
+                  placeholder="Search..."
+                  className="w-full p-2 border rounded mb-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+              />
+              <div className="max-h-48 overflow-y-auto mb-3 border rounded p-1">
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-gray-100 cursor-pointer text-sm font-semibold rounded transition">
+                      <input type="checkbox" checked={isAllSelected} onChange={handleToggleAll} className="rounded text-blue-600 focus:ring-blue-500" />
+                      (Select All)
+                  </label>
+                  {filteredOptions.map(opt => (
+                      <label key={opt} className="flex items-center gap-2 p-1.5 hover:bg-gray-100 cursor-pointer text-sm rounded transition">
+                          <input type="checkbox" checked={localSelection.includes(opt)} onChange={() => handleToggleOne(opt)} className="rounded text-blue-600 focus:ring-blue-500" />
+                          <span className="truncate">{opt}</span>
+                      </label>
+                  ))}
+                  {filteredOptions.length === 0 && <div className="p-3 text-gray-500 text-xs text-center italic">No matches</div>}
+              </div>
+              <div className="flex justify-between gap-2">
+                  <button onClick={handleApply} className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 flex-1 font-semibold transition">Apply</button>
+                  <button onClick={handleClear} className="bg-gray-100 border text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-200 flex-1 font-semibold transition">Clear Filter</button>
+              </div>
+          </div>
+      );
+  };
+
   const toggleNode = (nodeId) => {
     setExpandedNodes(prev => {
       const isExpanded = prev[nodeId];
       if (isExpanded) {
-        // When closing a node, recursively close all of its children 
-        // to correctly reset the dynamic column count.
         const nextState = { ...prev };
         Object.keys(nextState).forEach(key => {
           if (key === nodeId || key.startsWith(nodeId + '::')) {
@@ -147,7 +236,6 @@ const PricingApp = () => {
         });
         return nextState;
       } else {
-        // When opening a node, simply set it to true
         return { ...prev, [nodeId]: true };
       }
     });
@@ -437,11 +525,9 @@ const PricingApp = () => {
     try {
         showNotification('Generating Excel file...', 'info');
         
-        // Base URL
         let url = `${API_URL}/account/daily-rate-cut-report/export?report_type=${reportType}`;
         const params = new URLSearchParams();
         
-        // Append Dates
         if (isDateRange) {
             if (dailyReportStartDate) params.append('start_date', dailyReportStartDate);
             if (dailyReportEndDate) params.append('end_date', dailyReportEndDate);
@@ -449,7 +535,6 @@ const PricingApp = () => {
             if (dailyReportDate) params.append('target_date', dailyReportDate);
         }
 
-        // Attach Active Frontend Filters
         const activeFilters = reportType === 'item' ? dailyReportFilters : townshipFilters;
         Object.entries(activeFilters).forEach(([key, value]) => {
             if (value && String(value).trim() !== '') {
@@ -457,7 +542,6 @@ const PricingApp = () => {
             }
         });
 
-        // Finalize URL
         const queryString = params.toString();
         if (queryString) url += `&${queryString}`;
 
@@ -486,22 +570,18 @@ const PricingApp = () => {
     try {
         showNotification('Generating Excel file...', 'info');
         
-        // Base URL
         let url = `${API_URL}/account/submitted-allocation-report/export`;
         const params = new URLSearchParams();
         
-        // Append Dates
         if (allocationStartDate) params.append('start_date', allocationStartDate);
         if (allocationEndDate) params.append('end_date', allocationEndDate);
         
-        // Attach Active Frontend Filters
         Object.entries(allocationFilters).forEach(([key, value]) => {
             if (value && String(value).trim() !== '') {
                 params.append(key, String(value).trim());
             }
         });
 
-        // Finalize URL
         const queryString = params.toString();
         if (queryString) url += `?${queryString}`;
 
@@ -563,8 +643,7 @@ const PricingApp = () => {
       } catch (error) { showNotification(`Error loading rate carts: ${error.message}`, 'error'); }
   };
 
-// Update your fetch function to include the query parameter and dates
-const fetchPrincipalAllocation = async (view = allocationView, start = overviewStartDate, end = overviewEndDate) => {
+  const fetchPrincipalAllocation = async (view = allocationView, start = overviewStartDate, end = overviewEndDate) => {
     setIsPrincipalAllocationLoading(true);
     try {
         let url = `${API_URL}/dashboard/principal-brand-allocation?view_by=${view}`;
@@ -577,21 +656,21 @@ const fetchPrincipalAllocation = async (view = allocationView, start = overviewS
         const result = await response.json();
         if (result.status === 'success') {
             setPrincipalAllocationData(result.data);
-            setExpandedNodes({}); // reset expansion on view change
+            setExpandedNodes({}); 
         }
     } catch (error) {
         console.error("Error fetching allocation data:", error);
     } finally {
         setIsPrincipalAllocationLoading(false);
     }
-};
+  };
 
-// Add this useEffect to trigger fetching when the dropdown or dates change
-useEffect(() => {
+  useEffect(() => {
     if (currentPage === 'dashboard' && activeDashboardTab === 'rate_cart') {
         fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate);
+        setOverviewFilters({ bu: [], branch: [], group: [] }); // Reset filters dynamically on view changes
     }
-}, [allocationView, overviewStartDate, overviewEndDate, activeDashboardTab, currentPage]);
+  }, [allocationView, overviewStartDate, overviewEndDate, activeDashboardTab, currentPage]);
 
   const fetchCombinedDashboard = async (monthToFetch, branchToFetch = '', toLocToFetch = '') => {
     setIsDashboardLoading(true);
@@ -1585,11 +1664,31 @@ useEffect(() => {
         }
     });
 
-    // Build flattened table rows taking into account Expanded State and rowSpans
+    // 1. PRE-FILTER THE DATASET BASED ON EXCEL FILTERS
+    const filteredPrincipalData = principalAllocationData.map(buData => {
+        if (overviewFilters.bu.length > 0 && !overviewFilters.bu.includes(buData.bu)) return null;
+
+        const filteredBranches = (buData.branches || []).map(bData => {
+            if (overviewFilters.branch.length > 0 && !overviewFilters.branch.includes(bData.branch)) return null;
+
+            const filteredGroups = (bData.group_data || []).filter(gData => {
+                if (overviewFilters.group.length > 0 && !overviewFilters.group.includes(gData.name)) return false;
+                return true;
+            });
+
+            if (overviewFilters.group.length > 0 && filteredGroups.length === 0) return null;
+            return { ...bData, group_data: filteredGroups };
+        }).filter(Boolean);
+
+        if ((overviewFilters.branch.length > 0 || overviewFilters.group.length > 0) && filteredBranches.length === 0) return null;
+        return { ...buData, branches: filteredBranches };
+    }).filter(Boolean);
+
+    // 2. Build flattened table rows taking into account Expanded State and rowSpans
     const visibleRows = [];
     
     if (activeDashboardTab === 'rate_cart') {
-        principalAllocationData.forEach(buData => {
+        filteredPrincipalData.forEach(buData => {
             const buId = buData.bu;
             const isBuExpanded = !!expandedNodes[buId];
 
@@ -1736,20 +1835,78 @@ useEffect(() => {
                             </button>
                         </div>
                         
-                        <div className="overflow-auto max-h-[550px]">
+                        <div className="overflow-auto max-h-[550px] relative">
+                            {/* Overlay to close dropdowns when clicking outside */}
+                            {activeFilterDropdown && (
+                                <div className="fixed inset-0 z-40" onClick={() => setActiveFilterDropdown(null)}></div>
+                            )}
+                            
                             {principalAllocationData.length === 0 ? (
                                 <div className="text-center p-6 text-gray-500 italic">No allocation data available for this view.</div>
                             ) : (
                                 <table className="w-full border-collapse text-xs relative">
-                                    <thead className="bg-gray-100 border-b-2 border-gray-200 sticky top-0 z-10">
+                                    <thead className={`bg-gray-100 border-b-2 border-gray-200 sticky top-0 ${activeFilterDropdown ? 'z-50' : 'z-10'}`}>
                                         <tr>
-                                            <th className="px-2 py-1 text-left font-bold text-teal-900 border bg-gray-100">BU</th>
-                                            {maxDepth >= 2 && <th className="px-2 py-1 text-left font-bold text-blue-900 border bg-gray-100 transition-all duration-300">Branch</th>}
-                                            {maxDepth >= 3 && <th className="px-2 py-1 text-left font-bold text-indigo-900 border bg-gray-100 transition-all duration-300">
-                                                {allocationView === 'principal' ? 'Principal' : allocationView === 'brand' ? 'Brand' : 'Item Name'}
-                                            </th>}
-                                            {maxDepth >= 4 && <th className="px-2 py-1 text-left font-bold text-gray-700 border bg-gray-100 transition-all duration-300">Date</th>}
-                                            <th className="px-2 py-1 text-right font-bold text-gray-700 border bg-gray-100 w-24">Avg Cost</th>
+                                            <th className="px-2 py-1 text-left font-bold text-teal-900 border bg-gray-100 align-middle relative w-32">
+                                                <div 
+                                                    className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition"
+                                                    onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'bu' ? null : 'bu')}
+                                                >
+                                                    <span>BU</span>
+                                                    <Filter size={14} className={overviewFilters.bu.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
+                                                </div>
+                                                {activeFilterDropdown === 'bu' && (
+                                                    <ExcelFilterDropdown
+                                                        columnKey="bu"
+                                                        options={filterOptions.bu}
+                                                        selectedOptions={overviewFilters.bu}
+                                                        onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))}
+                                                        onClose={() => setActiveFilterDropdown(null)}
+                                                    />
+                                                )}
+                                            </th>
+                                            {maxDepth >= 2 && (
+                                                <th className="px-2 py-1 text-left font-bold text-blue-900 border bg-gray-100 align-middle relative transition-all duration-300 w-40">
+                                                    <div 
+                                                        className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition"
+                                                        onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'branch' ? null : 'branch')}
+                                                    >
+                                                        <span>Branch</span>
+                                                        <Filter size={14} className={overviewFilters.branch.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
+                                                    </div>
+                                                    {activeFilterDropdown === 'branch' && (
+                                                        <ExcelFilterDropdown
+                                                            columnKey="branch"
+                                                            options={filterOptions.branch}
+                                                            selectedOptions={overviewFilters.branch}
+                                                            onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))}
+                                                            onClose={() => setActiveFilterDropdown(null)}
+                                                        />
+                                                    )}
+                                                </th>
+                                            )}
+                                            {maxDepth >= 3 && (
+                                                <th className="px-2 py-1 text-left font-bold text-indigo-900 border bg-gray-100 align-middle relative transition-all duration-300 min-w-[200px]">
+                                                    <div 
+                                                        className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition"
+                                                        onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'group' ? null : 'group')}
+                                                    >
+                                                        <span>{allocationView === 'principal' ? 'Principal' : allocationView === 'brand' ? 'Brand' : 'Item Name'}</span>
+                                                        <Filter size={14} className={overviewFilters.group.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
+                                                    </div>
+                                                    {activeFilterDropdown === 'group' && (
+                                                        <ExcelFilterDropdown
+                                                            columnKey="group"
+                                                            options={filterOptions.group}
+                                                            selectedOptions={overviewFilters.group}
+                                                            onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))}
+                                                            onClose={() => setActiveFilterDropdown(null)}
+                                                        />
+                                                    )}
+                                                </th>
+                                            )}
+                                            {maxDepth >= 4 && <th className="px-2 py-1 text-left font-bold text-gray-700 border bg-gray-100 transition-all duration-300 align-middle">Date</th>}
+                                            <th className="px-2 py-1 text-right font-bold text-gray-700 border bg-gray-100 w-24 align-middle">Avg Cost</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -2570,7 +2727,6 @@ useEffect(() => {
                           </div>
                       )}
 
-                      {/* --- TAB: SUBMITTED ALLOCATION REPORT --- */}
                       {/* --- TAB: SUBMITTED ALLOCATION REPORT --- */}
                       {activeDailyTab === 'submitted' && (
                           <div className="animation-fade-in">
