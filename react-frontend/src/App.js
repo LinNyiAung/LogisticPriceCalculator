@@ -656,7 +656,15 @@ const PricingApp = () => {
         const result = await response.json();
         if (result.status === 'success') {
             setPrincipalAllocationData(result.data);
-            setExpandedNodes({}); 
+            
+            // Build default expanded state for BU and Branch levels
+            const defaultExpanded = {};
+            result.data.forEach(buData => {
+                const buId = buData.bu;
+                defaultExpanded[buId] = true; // Expand BU node
+            });
+            
+            setExpandedNodes(defaultExpanded); 
         }
     } catch (error) {
         console.error("Error fetching allocation data:", error);
@@ -1835,7 +1843,7 @@ const PricingApp = () => {
                             </button>
                         </div>
                         
-                        <div className="overflow-auto max-h-[550px] relative">
+                        <div className={`overflow-auto max-h-[550px] relative ${activeFilterDropdown ? 'min-h-[300px]' : ''}`}>
                             {/* Overlay to close dropdowns when clicking outside */}
                             {activeFilterDropdown && (
                                 <div className="fixed inset-0 z-40" onClick={() => setActiveFilterDropdown(null)}></div>
