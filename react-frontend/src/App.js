@@ -1845,56 +1845,6 @@ useEffect(() => {
                         </div>
                     </div>
 
-                    <div className="mb-10">
-                    <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Dashboard: 3-Month Summary (Rate Cart)</h2>
-                    <div className="overflow-x-auto border rounded-lg shadow-sm">
-                        <table className="w-full border-collapse">
-                        <thead className="bg-gray-100">
-                            <tr>
-                            <th className="border p-4 text-left font-bold text-gray-600 uppercase text-sm tracking-wider">Brand</th>
-                            <th className="border p-4 text-right">
-                                <div className="text-orange-700 font-bold">{month2Label}</div>
-                                <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
-                            </th>
-                            <th className="border p-4 text-right">
-                                <div className="text-purple-700 font-bold">{month1Label}</div>
-                                <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
-                            </th>
-                            <th className="border p-4 text-right">
-                                <div className="text-blue-700 font-bold">{month0Label}</div>
-                                <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
-                            </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {isDashboardLoading ? (
-                            <tr><td colSpan="4" className="text-center p-8 text-gray-500 font-semibold">Loading data...</td></tr>
-                            ) : !selectedAllocRow ? (
-                            <tr><td colSpan="4" className="text-center p-6 text-gray-500 italic">No allocation data available for this period.</td></tr>
-                            ) : (
-                            <tr className="bg-white hover:bg-gray-50 transition-colors">
-                                <td className="border p-4 font-black text-gray-800 text-xl">{selectedAllocRow.brand}</td>
-                                <td className="border p-4 text-right">
-                                <span className="font-bold text-xl text-orange-700">{formatNumber(selectedAllocRow['month_2_avg_cost'])}</span>
-                                <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedAllocRow['month_2_total_ctns'])}</span></div>
-                                <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedAllocRow['month_2_total_cost'])}</span> mmk</div>
-                                </td>
-                                <td className="border p-4 text-right">
-                                <span className="font-bold text-xl text-purple-700">{formatNumber(selectedAllocRow['month_1_avg_cost'])}</span>
-                                <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedAllocRow['month_1_total_ctns'])}</span></div>
-                                <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedAllocRow['month_1_total_cost'])}</span> mmk</div>
-                                </td>
-                                <td className="border p-4 text-right">
-                                <span className="font-black text-2xl text-blue-700">{formatNumber(selectedAllocRow['month_0_avg_cost'])}</span>
-                                <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedAllocRow['month_0_total_ctns'])}</span></div>
-                                <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedAllocRow['month_0_total_cost'])}</span> mmk</div>
-                                </td>
-                            </tr>
-                            )}
-                        </tbody>
-                        </table>
-                    </div>
-                    </div>
 
                     <div className="mb-10 w-full">
                         <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Dashboard: 12-Month Trend Analysis (Rate Cart)</h2>
@@ -1996,57 +1946,6 @@ useEffect(() => {
                                 </div>
                             )}
                         </div>
-                    </div>
-
-                    <div className="mb-10">
-                    <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Dashboard: 3-Month Summary (Third Party)</h2>
-                    <div className="overflow-x-auto border rounded-lg shadow-sm">
-                        <table className="w-full border-collapse">
-                        <thead className="bg-gray-100">
-                            <tr>
-                            <th className="border p-4 text-left font-bold text-gray-600 uppercase text-sm tracking-wider">Brand</th>
-                            <th className="border p-4 text-right">
-                                <div className="text-orange-700 font-bold">{month2Label}</div>
-                                <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
-                            </th>
-                            <th className="border p-4 text-right">
-                                <div className="text-purple-700 font-bold">{month1Label}</div>
-                                <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
-                            </th>
-                            <th className="border p-4 text-right">
-                                <div className="text-blue-700 font-bold">{month0Label}</div>
-                                <div className="text-xs text-gray-500 font-normal">Avg (MMK) Per Carton</div>
-                            </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {isDashboardLoading ? (
-                            <tr><td colSpan="4" className="text-center p-8 text-gray-500 font-semibold">Loading data...</td></tr>
-                            ) : !selectedCalcRow ? (
-                            <tr><td colSpan="4" className="text-center p-6 text-gray-500 italic">No calculated data available for this period.</td></tr>
-                            ) : (
-                            <tr className="bg-white hover:bg-gray-50 transition-colors">
-                                <td className="border p-4 font-black text-gray-800 text-xl">{selectedCalcRow.brand}</td>
-                                <td className="border p-4 text-right">
-                                <span className="font-bold text-xl text-orange-700">{formatNumber(selectedCalcRow['month_2_avg_cost'])}</span>
-                                <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedCalcRow['month_2_total_ctns'])}</span></div>
-                                <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedCalcRow['month_2_total_cost'])}</span> mmk</div>
-                                </td>
-                                <td className="border p-4 text-right">
-                                <span className="font-bold text-xl text-purple-700">{formatNumber(selectedCalcRow['month_1_avg_cost'])}</span>
-                                <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedCalcRow['month_1_total_ctns'])}</span></div>
-                                <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedCalcRow['month_1_total_cost'])}</span> mmk</div>
-                                </td>
-                                <td className="border p-4 text-right">
-                                <span className="font-black text-2xl text-blue-700">{formatNumber(selectedCalcRow['month_0_avg_cost'])}</span>
-                                <div className="text-sm text-gray-500 mt-2">Total Ctns: <span className="font-semibold">{formatNumber(selectedCalcRow['month_0_total_ctns'])}</span></div>
-                                <div className="text-sm text-gray-500 mt-1">Total Cost: <span className="font-semibold">{formatNumber(selectedCalcRow['month_0_total_cost'])}</span> mmk</div>
-                                </td>
-                            </tr>
-                            )}
-                        </tbody>
-                        </table>
-                    </div>
                     </div>
 
                     <div className="mb-10 w-full">

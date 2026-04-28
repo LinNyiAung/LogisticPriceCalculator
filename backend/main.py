@@ -2725,9 +2725,9 @@ def _generate_allocation_data(target_month: str, target_branch: Optional[str] = 
 
     valid_months = set(months_list)
 
+    # Keep month0_label because the return statement needs it, 
+    # but remove month1_label and month2_label.
     month0_label = months_list[0]
-    month1_label = months_list[1]
-    month2_label = months_list[2]
 
     start_date = f"{months_list[-1]}-01"
     _, last_day = calendar.monthrange(year, month)
@@ -2786,23 +2786,11 @@ def _generate_allocation_data(target_month: str, target_branch: Optional[str] = 
 
     dashboard_results = []
     for brand, data in brands_data.items():
+        # Cleaned up result dictionary
         result = {
-            "brand": brand,
-            "month_0_label": month0_label,
-            "month_1_label": month1_label,
-            "month_2_label": month2_label
+            "brand": brand
         }
         
-        for idx in range(3):
-            m_label = months_list[idx]
-            t_cost = data[m_label]["cost"]
-            t_ctns = data[m_label]["ctns"]
-            avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
-            
-            result[f"month_{idx}_avg_cost"] = round(avg_cost, 2)
-            result[f"month_{idx}_total_ctns"] = round(t_ctns, 2)
-            result[f"month_{idx}_total_cost"] = round(t_cost, 2)
-            
         trend_data = []
         for m_label in reversed(months_list):
             t_cost = data[m_label]["cost"]
@@ -2819,9 +2807,9 @@ def _generate_allocation_data(target_month: str, target_branch: Optional[str] = 
         result["trend"] = trend_data
         dashboard_results.append(result)
 
-    dashboard_results.sort(key=lambda x: x["month_0_total_ctns"], reverse=True)
+    # Fix the sorting to use the current month from the trend array instead of the deleted month_0 field
+    dashboard_results.sort(key=lambda x: x["trend"][-1]["total_ctns"], reverse=True)
     
-    # Return the branches as well
     return dashboard_results, month0_label, sorted(list(available_branches))
 
 
@@ -2842,9 +2830,8 @@ def _generate_calculated_data(target_month: str, target_to_loc: Optional[str] = 
 
     valid_months = set(months_list)
 
+    # Keep month0_label for the return statement
     month0_label = months_list[0]
-    month1_label = months_list[1]
-    month2_label = months_list[2]
 
     conn = get_logistic_connection()
     cursor = conn.cursor()
@@ -2908,23 +2895,11 @@ def _generate_calculated_data(target_month: str, target_to_loc: Optional[str] = 
 
     dashboard_results = []
     for brand, data in brands_data.items():
+        # Cleaned up result dictionary
         result = {
-            "brand": brand,
-            "month_0_label": month0_label,
-            "month_1_label": month1_label,
-            "month_2_label": month2_label
+            "brand": brand
         }
         
-        for idx in range(3):
-            m_label = months_list[idx]
-            t_cost = data[m_label]["cost"]
-            t_ctns = data[m_label]["ctns"]
-            avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
-            
-            result[f"month_{idx}_avg_cost"] = round(avg_cost, 2)
-            result[f"month_{idx}_total_ctns"] = round(t_ctns, 2)
-            result[f"month_{idx}_total_cost"] = round(t_cost, 2)
-            
         trend_data = []
         for m_label in reversed(months_list):
             t_cost = data[m_label]["cost"]
@@ -2941,7 +2916,8 @@ def _generate_calculated_data(target_month: str, target_to_loc: Optional[str] = 
         result["trend"] = trend_data
         dashboard_results.append(result)
 
-    dashboard_results.sort(key=lambda x: x["month_0_total_ctns"], reverse=True)
+    # Fix the sorting to use the current month from the trend array
+    dashboard_results.sort(key=lambda x: x["trend"][-1]["total_ctns"], reverse=True)
     return dashboard_results, month0_label, sorted(list(available_to_locs))
 
 
