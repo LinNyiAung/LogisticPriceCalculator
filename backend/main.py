@@ -2992,16 +2992,33 @@ def get_combined_dashboard(
 @app.get("/dashboard/principal-brand-allocation")
 def get_principal_brand_allocation(
     view_by: str = Query("principal", description="Group by: principal, brand, or item_name"),
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     user: dict = Depends(require_permission("view_dashboard"))
 ):
     """
-    Independent endpoint that fetches all available historical data 
+    Independent endpoint that fetches available historical data 
     and groups it dynamically: BU -> Branch -> (Principal|Brand|Item) -> Date.
     """
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT target_date, item_report_json FROM Daily_Report_History")
+        
+        query = "SELECT target_date, item_report_json FROM Daily_Report_History"
+        params = []
+        
+        # Apply date filters
+        if start_date and end_date:
+            query += " WHERE target_date BETWEEN ? AND ?"
+            params.extend([start_date, end_date])
+        elif start_date:
+            query += " WHERE target_date >= ?"
+            params.append(start_date)
+        elif end_date:
+            query += " WHERE target_date <= ?"
+            params.append(end_date)
+            
+        cursor.execute(query, params)
         rows = cursor.fetchall()
         conn.close()
 

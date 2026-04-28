@@ -123,6 +123,15 @@ const PricingApp = () => {
   const [principalAllocationData, setPrincipalAllocationData] = useState([]);
   const [isPrincipalAllocationLoading, setIsPrincipalAllocationLoading] = useState(false);
   const [expandedNodes, setExpandedNodes] = useState({});
+  const [overviewStartDate, setOverviewStartDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [overviewEndDate, setOverviewEndDate] = useState(() => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
+  });
 
   const toggleNode = (nodeId) => {
     setExpandedNodes(prev => {
@@ -554,11 +563,15 @@ const PricingApp = () => {
       } catch (error) { showNotification(`Error loading rate carts: ${error.message}`, 'error'); }
   };
 
-  // Update your fetch function to include the query parameter
-const fetchPrincipalAllocation = async (view = allocationView) => {
+// Update your fetch function to include the query parameter and dates
+const fetchPrincipalAllocation = async (view = allocationView, start = overviewStartDate, end = overviewEndDate) => {
     setIsPrincipalAllocationLoading(true);
     try {
-        const response = await fetch(`${API_URL}/dashboard/principal-brand-allocation?view_by=${view}`, {
+        let url = `${API_URL}/dashboard/principal-brand-allocation?view_by=${view}`;
+        if (start) url += `&start_date=${start}`;
+        if (end) url += `&end_date=${end}`;
+        
+        const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const result = await response.json();
@@ -573,12 +586,12 @@ const fetchPrincipalAllocation = async (view = allocationView) => {
     }
 };
 
-// Add this useEffect to trigger fetching when the dropdown changes
+// Add this useEffect to trigger fetching when the dropdown or dates change
 useEffect(() => {
     if (currentPage === 'dashboard' && activeDashboardTab === 'rate_cart') {
-        fetchPrincipalAllocation(allocationView);
+        fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate);
     }
-}, [allocationView, activeDashboardTab, currentPage]);
+}, [allocationView, overviewStartDate, overviewEndDate, activeDashboardTab, currentPage]);
 
   const fetchCombinedDashboard = async (monthToFetch, branchToFetch = '', toLocToFetch = '') => {
     setIsDashboardLoading(true);
@@ -1683,6 +1696,24 @@ useEffect(() => {
                         <div className="p-4 border-b bg-gray-50 flex justify-between items-center rounded-t-lg">
                             <div className="flex flex-wrap items-center gap-4">
                                 <h2 className="text-xl font-bold text-gray-800">Allocation Overview</h2>
+                                
+                                {/* NEW DATE RANGE FILTER */}
+                                <div className="flex items-center gap-2 bg-white px-2 py-1 border rounded shadow-sm">
+                                    <input 
+                                        type="date" 
+                                        value={overviewStartDate} 
+                                        onChange={(e) => setOverviewStartDate(e.target.value)}
+                                        className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer"
+                                    />
+                                    <span className="text-gray-400">to</span>
+                                    <input 
+                                        type="date" 
+                                        value={overviewEndDate} 
+                                        onChange={(e) => setOverviewEndDate(e.target.value)}
+                                        className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer"
+                                    />
+                                </div>
+
                                 <div className="flex items-center gap-2 bg-white px-2 py-1 border rounded shadow-sm">
                                     <span className="text-sm font-medium text-gray-500">View By:</span>
                                     <select 
