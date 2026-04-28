@@ -3118,6 +3118,139 @@ def get_principal_brand_allocation(
         raise HTTPException(status_code=500, detail=f"Error generating hierarchy data: {str(e)}")
     
     
+    
+@app.get("/dashboard/third-party-allocation")
+def get_third_party_allocation(
+    view_by: str = Query("principal", description="Group by: principal, brand, or item_name"),
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    user: dict = Depends(require_permission("view_dashboard"))
+):
+    """
+    Independent endpoint that fetches calculated third-party data 
+    and groups it dynamically: BU -> To_Loc (Branch) -> (Principal|Brand|Item) -> Date.
+    """
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        query = "SELECT submitted_at, to_loc, calculated_products FROM Calculation_History WHERE status IN ('submitted', 'claimed')"
+        params = []
+        
+        # Apply date filters
+        if start_date and end_date:
+            query += " AND SUBSTR(submitted_at, 1, 10) BETWEEN ? AND ?"
+            params.extend([start_date, end_date])
+        elif start_date:
+            query += " AND SUBSTR(submitted_at, 1, 10) >= ?"
+            params.append(start_date)
+        elif end_date:
+            query += " AND SUBSTR(submitted_at, 1, 10) <= ?"
+            params.append(end_date)
+            
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        conn.close()
+
+        hierarchy = {}
+
+        for row in rows:
+            submitted_at = row[0]
+            target_date = submitted_at[:10] if submitted_at else ""
+            if not target_date: continue
+            
+            to_loc = str(row[1] or "UNKNOWN").strip()
+            
+            try: items = json.loads(row[2])
+            except Exception: continue
+
+            for item in items:
+                bu = str(item.get("bu", "")).strip() or "UNKNOWN"
+                
+                # Determine the dynamic 3rd level based on the query parameter
+                if view_by == "brand":
+                    group_val = str(item.get("brand", "")).strip() or "UNKNOWN"
+                elif view_by == "item_name":
+                    group_val = str(item.get("name", "")).strip() or "UNKNOWN"
+                else:
+                    group_val = str(item.get("principal", "")).strip() or "UNKNOWN"
+
+                try:
+                    ctns = float(item.get("ctns", 0) or 0)
+                    cost = float(item.get("total_cost", 0) or 0)
+                except ValueError:
+                    continue
+
+                if ctns <= 0: continue
+
+                # Build dictionary: BU -> To Loc -> Group -> Date
+                if bu not in hierarchy: hierarchy[bu] = {}
+                if to_loc not in hierarchy[bu]: hierarchy[bu][to_loc] = {}
+                if group_val not in hierarchy[bu][to_loc]:
+                    hierarchy[bu][to_loc][group_val] = {"ctns": 0.0, "cost": 0.0, "dates": {}}
+                
+                hierarchy[bu][to_loc][group_val]["ctns"] += ctns
+                hierarchy[bu][to_loc][group_val]["cost"] += cost
+
+                if target_date not in hierarchy[bu][to_loc][group_val]["dates"]:
+                    hierarchy[bu][to_loc][group_val]["dates"][target_date] = {"ctns": 0.0, "cost": 0.0}
+                
+                hierarchy[bu][to_loc][group_val]["dates"][target_date]["ctns"] += ctns
+                hierarchy[bu][to_loc][group_val]["dates"][target_date]["cost"] += cost
+
+        result = []
+        for bu, branch_data in hierarchy.items():
+            bu_total_cost = 0.0; bu_total_ctns = 0.0; bu_branches = []
+            
+            for branch, group_data_dict in branch_data.items():
+                b_total_cost = 0.0; b_total_ctns = 0.0; branch_groups = []
+                
+                for group_val, data in group_data_dict.items():
+                    g_total_cost = data["cost"]; g_total_ctns = data["ctns"]
+                    
+                    g_dates = []
+                    for date, d_vals in data["dates"].items():
+                        d_avg_cost = d_vals["cost"] / d_vals["ctns"] if d_vals["ctns"] > 0 else 0
+                        g_dates.append({"date": date, "avg_cost": round(d_avg_cost, 2)})
+                    
+                    g_dates.sort(key=lambda x: x["date"], reverse=True)
+                    g_avg_cost = g_total_cost / g_total_ctns if g_total_ctns > 0 else 0
+                    
+                    branch_groups.append({
+                        "name": group_val,
+                        "avg_cost": round(g_avg_cost, 2),
+                        "dates": g_dates
+                    })
+                    
+                    b_total_cost += g_total_cost
+                    b_total_ctns += g_total_ctns
+                
+                branch_groups.sort(key=lambda x: x["name"])
+                b_avg_cost = b_total_cost / b_total_ctns if b_total_ctns > 0 else 0
+                
+                # Note: We keep the key named 'branch' so the React frontend maps it identically
+                bu_branches.append({
+                    "branch": branch,
+                    "avg_cost": round(b_avg_cost, 2),
+                    "group_data": branch_groups
+                })
+                
+                bu_total_cost += b_total_cost
+                bu_total_ctns += b_total_ctns
+            
+            bu_branches.sort(key=lambda x: x["branch"])
+            bu_avg_cost = bu_total_cost / bu_total_ctns if bu_total_ctns > 0 else 0
+            
+            result.append({"bu": bu, "avg_cost": round(bu_avg_cost, 2), "branches": bu_branches})
+        
+        result.sort(key=lambda x: x["bu"])
+        return {"status": "success", "data": result}
+
+    except Exception as e:
+        logger.error(f"Error generating third party allocation hierarchy: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating hierarchy data: {str(e)}")
+    
+    
 # --- Daily Report Excel Export Endpoints ---
 
 @app.get("/account/daily-rate-cut-report/export")

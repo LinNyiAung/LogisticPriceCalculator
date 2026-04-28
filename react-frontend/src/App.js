@@ -644,16 +644,18 @@ const PricingApp = () => {
       } catch (error) { showNotification(`Error loading rate carts: ${error.message}`, 'error'); }
   };
 
-  const fetchPrincipalAllocation = async (view = allocationView, start = overviewStartDate, end = overviewEndDate) => {
+  const fetchPrincipalAllocation = async (view = allocationView, start = overviewStartDate, end = overviewEndDate, tab = activeDashboardTab) => {
     setIsPrincipalAllocationLoading(true);
     try {
-        let url = `${API_URL}/dashboard/principal-brand-allocation?view_by=${view}`;
+        const endpoint = tab === 'rate_cart' 
+            ? '/dashboard/principal-brand-allocation' 
+            : '/dashboard/third-party-allocation';
+            
+        let url = `${API_URL}${endpoint}?view_by=${view}`;
         if (start) url += `&start_date=${start}`;
         if (end) url += `&end_date=${end}`;
         
-        const response = await fetch(url, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const response = await authFetch(url);
         const result = await response.json();
         if (result.status === 'success') {
             setPrincipalAllocationData(result.data);
@@ -675,8 +677,8 @@ const PricingApp = () => {
   };
 
   useEffect(() => {
-    if (currentPage === 'dashboard' && activeDashboardTab === 'rate_cart') {
-        fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate);
+    if (currentPage === 'dashboard') {
+        fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate, activeDashboardTab);
         setOverviewFilters({ bu: [], branch: [], group: [] }); // Reset filters dynamically on view changes
     }
   }, [allocationView, overviewStartDate, overviewEndDate, activeDashboardTab, currentPage]);
@@ -995,7 +997,6 @@ const PricingApp = () => {
     }
     if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { 
         fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc); 
-        fetchPrincipalAllocation(); 
     }
     if (token && currentPage === 'activity_logs' && permissions.includes('view_activity_logs')) { fetchActivityLogs(0); }
   }, [currentPage, token, permissions, activeDailyTab]); 
@@ -1718,67 +1719,264 @@ const PricingApp = () => {
     // 2. Build flattened table rows taking into account Expanded State and rowSpans
     const visibleRows = [];
     
-    if (activeDashboardTab === 'rate_cart') {
-        filteredPrincipalData.forEach(buData => {
-            const buId = buData.bu;
-            const isBuExpanded = !!expandedNodes[buId];
+    filteredPrincipalData.forEach(buData => {
+        const buId = buData.bu;
+        const isBuExpanded = !!expandedNodes[buId];
 
-            if (!isBuExpanded || !buData.branches || buData.branches.length === 0) {
-                visibleRows.push({
-                    key: buId,
-                    buCell: { id: buId, label: buData.bu, isExpanded: false, rowSpan: 1 },
-                    branchCell: { isPadding: true }, groupCell: { isPadding: true }, dateCell: { isPadding: true },
-                    avgCost: buData.avg_cost
-                });
-            } else {
-                const buStartIdx = visibleRows.length;
-                buData.branches.forEach(bData => {
-                    const branchId = `${buId}::${bData.branch}`;
-                    const isBranchExpanded = !!expandedNodes[branchId];
+        if (!isBuExpanded || !buData.branches || buData.branches.length === 0) {
+            visibleRows.push({
+                key: buId,
+                buCell: { id: buId, label: buData.bu, isExpanded: false, rowSpan: 1 },
+                branchCell: { isPadding: true }, groupCell: { isPadding: true }, dateCell: { isPadding: true },
+                avgCost: buData.avg_cost
+            });
+        } else {
+            const buStartIdx = visibleRows.length;
+            buData.branches.forEach(bData => {
+                const branchId = `${buId}::${bData.branch}`;
+                const isBranchExpanded = !!expandedNodes[branchId];
 
-                    if (!isBranchExpanded || !bData.group_data || bData.group_data.length === 0) {
-                        visibleRows.push({
-                            key: branchId,
-                            buCell: { isSkip: true },
-                            branchCell: { id: branchId, label: bData.branch, isExpanded: false, rowSpan: 1 },
-                            groupCell: { isPadding: true }, dateCell: { isPadding: true },
-                            avgCost: bData.avg_cost
-                        });
-                    } else {
-                        const branchStartIdx = visibleRows.length;
-                        bData.group_data.forEach(gData => {
-                            const groupId = `${branchId}::${gData.name}`;
-                            const isGroupExpanded = !!expandedNodes[groupId];
+                if (!isBranchExpanded || !bData.group_data || bData.group_data.length === 0) {
+                    visibleRows.push({
+                        key: branchId,
+                        buCell: { isSkip: true },
+                        branchCell: { id: branchId, label: bData.branch, isExpanded: false, rowSpan: 1 },
+                        groupCell: { isPadding: true }, dateCell: { isPadding: true },
+                        avgCost: bData.avg_cost
+                    });
+                } else {
+                    const branchStartIdx = visibleRows.length;
+                    bData.group_data.forEach(gData => {
+                        const groupId = `${branchId}::${gData.name}`;
+                        const isGroupExpanded = !!expandedNodes[groupId];
 
-                            if (!isGroupExpanded || !gData.dates || gData.dates.length === 0) {
+                        if (!isGroupExpanded || !gData.dates || gData.dates.length === 0) {
+                            visibleRows.push({
+                                key: groupId,
+                                buCell: { isSkip: true }, branchCell: { isSkip: true },
+                                groupCell: { id: groupId, label: gData.name, isExpanded: false, rowSpan: 1 },
+                                dateCell: { isPadding: true },
+                                avgCost: gData.avg_cost
+                            });
+                        } else {
+                            const groupStartIdx = visibleRows.length;
+                            gData.dates.forEach(dData => {
+                                const dateId = `${groupId}::${dData.date}`;
                                 visibleRows.push({
-                                    key: groupId,
-                                    buCell: { isSkip: true }, branchCell: { isSkip: true },
-                                    groupCell: { id: groupId, label: gData.name, isExpanded: false, rowSpan: 1 },
-                                    dateCell: { isPadding: true },
-                                    avgCost: gData.avg_cost
+                                    key: dateId,
+                                    buCell: { isSkip: true }, branchCell: { isSkip: true }, groupCell: { isSkip: true },
+                                    dateCell: { id: dateId, label: dData.date, rowSpan: 1 },
+                                    avgCost: dData.avg_cost
                                 });
-                            } else {
-                                const groupStartIdx = visibleRows.length;
-                                gData.dates.forEach(dData => {
-                                    const dateId = `${groupId}::${dData.date}`;
-                                    visibleRows.push({
-                                        key: dateId,
-                                        buCell: { isSkip: true }, branchCell: { isSkip: true }, groupCell: { isSkip: true },
-                                        dateCell: { id: dateId, label: dData.date, rowSpan: 1 },
-                                        avgCost: dData.avg_cost
-                                    });
-                                });
-                                visibleRows[groupStartIdx].groupCell = { id: groupId, label: gData.name, isExpanded: true, rowSpan: visibleRows.length - groupStartIdx };
-                            }
-                        });
-                        visibleRows[branchStartIdx].branchCell = { id: branchId, label: bData.branch, isExpanded: true, rowSpan: visibleRows.length - branchStartIdx };
-                    }
-                });
-                visibleRows[buStartIdx].buCell = { id: buId, label: buData.bu, isExpanded: true, rowSpan: visibleRows.length - buStartIdx };
-            }
-        });
-    }
+                            });
+                            visibleRows[groupStartIdx].groupCell = { id: groupId, label: gData.name, isExpanded: true, rowSpan: visibleRows.length - groupStartIdx };
+                        }
+                    });
+                    visibleRows[branchStartIdx].branchCell = { id: branchId, label: bData.branch, isExpanded: true, rowSpan: visibleRows.length - branchStartIdx };
+                }
+            });
+            visibleRows[buStartIdx].buCell = { id: buId, label: buData.bu, isExpanded: true, rowSpan: visibleRows.length - buStartIdx };
+        }
+    });
+
+    const allocationOverviewTable = (
+        <div className="mb-10 bg-white border rounded-lg shadow-sm">
+            <div className="p-4 border-b bg-gray-50 flex justify-between items-center rounded-t-lg">
+                <div className="flex flex-wrap items-center gap-4">
+                    <h2 className="text-xl font-bold text-gray-800">Allocation Overview</h2>
+                    
+                    {/* NEW DATE RANGE FILTER */}
+                    <div className="flex items-center gap-2 bg-white px-2 py-1 border rounded shadow-sm">
+                        <input 
+                            type="date" 
+                            value={overviewStartDate} 
+                            onChange={(e) => setOverviewStartDate(e.target.value)}
+                            className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer"
+                        />
+                        <span className="text-gray-400">to</span>
+                        <input 
+                            type="date" 
+                            value={overviewEndDate} 
+                            onChange={(e) => setOverviewEndDate(e.target.value)}
+                            className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer"
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-white px-2 py-1 border rounded shadow-sm">
+                        <span className="text-sm font-medium text-gray-500">View By:</span>
+                        <select 
+                            value={allocationView}
+                            onChange={(e) => setAllocationView(e.target.value)}
+                            className="border-none bg-transparent text-sm font-bold text-blue-700 cursor-pointer focus:ring-0 outline-none"
+                        >
+                            <option value="principal">Principal</option>
+                            <option value="brand">Brand</option>
+                            <option value="item_name">Item Name</option>
+                        </select>
+                    </div>
+                </div>
+                <button 
+                    onClick={() => fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate, activeDashboardTab)} 
+                    disabled={isPrincipalAllocationLoading}
+                    className="text-sm px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded font-semibold transition"
+                >
+                    {isPrincipalAllocationLoading ? 'Loading...' : 'Refresh Data'}
+                </button>
+            </div>
+            
+            <div className={`overflow-auto max-h-[550px] relative ${activeFilterDropdown ? 'min-h-[300px]' : ''}`}>
+                {/* Overlay to close dropdowns when clicking outside */}
+                {activeFilterDropdown && (
+                    <div className="fixed inset-0 z-40" onClick={() => setActiveFilterDropdown(null)}></div>
+                )}
+                
+                {principalAllocationData.length === 0 ? (
+                    <div className="text-center p-6 text-gray-500 italic">No allocation data available for this view.</div>
+                ) : (
+                    <table className="w-full border-collapse text-xs relative">
+                        <thead className={`bg-gray-100 border-b-2 border-gray-200 sticky top-0 ${activeFilterDropdown ? 'z-50' : 'z-10'}`}>
+                            <tr>
+                                <th className="px-2 py-1 text-left font-bold text-teal-900 border bg-gray-100 align-middle relative w-32">
+                                    <div 
+                                        className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition"
+                                        onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'bu' ? null : 'bu')}
+                                    >
+                                        <span>BU</span>
+                                        <Filter size={14} className={overviewFilters.bu.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
+                                    </div>
+                                    {activeFilterDropdown === 'bu' && (
+                                        <ExcelFilterDropdown
+                                            columnKey="bu"
+                                            options={filterOptions.bu}
+                                            selectedOptions={overviewFilters.bu}
+                                            onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))}
+                                            onClose={() => setActiveFilterDropdown(null)}
+                                        />
+                                    )}
+                                </th>
+                                {maxDepth >= 2 && (
+                                    <th className="px-2 py-1 text-left font-bold text-blue-900 border bg-gray-100 align-middle relative transition-all duration-300 w-40">
+                                        <div 
+                                            className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition"
+                                            onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'branch' ? null : 'branch')}
+                                        >
+                                            {/* DYNAMIC HEADER BASED ON ACTIVE TAB */}
+                                            <span>{activeDashboardTab === 'third_party' ? 'To Location' : 'Branch'}</span>
+                                            <Filter size={14} className={overviewFilters.branch.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
+                                        </div>
+                                        {activeFilterDropdown === 'branch' && (
+                                            <ExcelFilterDropdown
+                                                columnKey="branch"
+                                                options={filterOptions.branch}
+                                                selectedOptions={overviewFilters.branch}
+                                                onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))}
+                                                onClose={() => setActiveFilterDropdown(null)}
+                                            />
+                                        )}
+                                    </th>
+                                )}
+                                {maxDepth >= 3 && (
+                                    <th className="px-2 py-1 text-left font-bold text-indigo-900 border bg-gray-100 align-middle relative transition-all duration-300 min-w-[200px]">
+                                        <div 
+                                            className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition"
+                                            onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'group' ? null : 'group')}
+                                        >
+                                            <span>{allocationView === 'principal' ? 'Principal' : allocationView === 'brand' ? 'Brand' : 'Item Name'}</span>
+                                            <Filter size={14} className={overviewFilters.group.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
+                                        </div>
+                                        {activeFilterDropdown === 'group' && (
+                                            <ExcelFilterDropdown
+                                                columnKey="group"
+                                                options={filterOptions.group}
+                                                selectedOptions={overviewFilters.group}
+                                                onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))}
+                                                onClose={() => setActiveFilterDropdown(null)}
+                                            />
+                                        )}
+                                    </th>
+                                )}
+                                {maxDepth >= 4 && <th className="px-2 py-1 text-left font-bold text-gray-700 border bg-gray-100 transition-all duration-300 align-middle">Date</th>}
+                                <th 
+                                    className="px-2 py-1 text-right font-bold text-gray-700 border bg-gray-100 w-28 align-middle cursor-pointer hover:bg-gray-200 transition select-none"
+                                    onClick={() => {
+                                        if (avgCostSortOrder === null) setAvgCostSortOrder('desc');
+                                        else if (avgCostSortOrder === 'desc') setAvgCostSortOrder('asc');
+                                        else setAvgCostSortOrder(null);
+                                    }}
+                                    title="Click to sort by Avg Cost"
+                                >
+                                    <div className="flex items-center justify-end gap-1">
+                                        <span>Avg Cost</span>
+                                        <span className="text-gray-400 text-[10px] w-3 text-center">
+                                            {avgCostSortOrder === 'asc' ? '▲' : avgCostSortOrder === 'desc' ? '▼' : '⇅'}
+                                        </span>
+                                    </div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {visibleRows.map((row) => (
+                                <tr key={row.key} className="hover:bg-gray-50 border-b transition-colors">
+                                    
+                                    {/* BU Column */}
+                                    {!row.buCell.isSkip && (
+                                        row.buCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                            <td rowSpan={row.buCell.rowSpan} onClick={() => toggleNode(row.buCell.id)} className="border px-2 py-1 font-bold text-teal-800 cursor-pointer align-top bg-white">
+                                                <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                    {row.buCell.isExpanded ? <ChevronDown size={14} className="text-teal-500 shrink-0"/> : <ChevronRight size={14} className="text-teal-500 shrink-0"/>}
+                                                    <span>{row.buCell.label}</span>
+                                                </div>
+                                            </td>
+                                        )
+                                    )}
+                                    
+                                    {/* Branch Column */}
+                                    {maxDepth >= 2 && !row.branchCell.isSkip && (
+                                        row.branchCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                            <td rowSpan={row.branchCell.rowSpan} onClick={() => toggleNode(row.branchCell.id)} className="border px-2 py-1 font-semibold text-blue-800 cursor-pointer align-top bg-blue-50/30">
+                                                <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                    {row.branchCell.isExpanded ? <ChevronDown size={14} className="text-blue-500 shrink-0"/> : <ChevronRight size={14} className="text-blue-500 shrink-0"/>}
+                                                    <span>{row.branchCell.label}</span>
+                                                </div>
+                                            </td>
+                                        )
+                                    )}
+
+                                    {/* Dynamic 3rd Level (Principal/Brand/Item) Column */}
+                                    {maxDepth >= 3 && !row.groupCell.isSkip && (
+                                        row.groupCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                            <td rowSpan={row.groupCell.rowSpan} onClick={() => toggleNode(row.groupCell.id)} className="border px-2 py-1 font-semibold text-indigo-800 cursor-pointer align-top bg-indigo-50/30 max-w-[200px] truncate" title={row.groupCell.label}>
+                                                <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                    {row.groupCell.isExpanded ? <ChevronDown size={14} className="text-indigo-500 shrink-0"/> : <ChevronRight size={14} className="text-indigo-500 shrink-0"/>}
+                                                    <span className="truncate">{row.groupCell.label}</span>
+                                                </div>
+                                            </td>
+                                        )
+                                    )}
+
+                                    {/* Date Column */}
+                                    {maxDepth >= 4 && !row.dateCell.isSkip && (
+                                        row.dateCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                            <td rowSpan={row.dateCell.rowSpan} className="border px-2 py-1 text-gray-700 font-medium align-top bg-gray-50/50">
+                                                <div className="whitespace-nowrap mt-0.5 ml-4">
+                                                    {row.dateCell.label}
+                                                </div>
+                                            </td>
+                                        )
+                                    )}
+
+                                    {/* Cost Column */}
+                                    <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
+                                        <div className="mt-0.5">{row.avgCost !== null && row.avgCost !== undefined ? formatNumber(row.avgCost) : '-'}</div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+        </div>
+    );
 
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -1805,7 +2003,7 @@ const PricingApp = () => {
                 >
                     Rate Cart (Branch Allocation)
                 </button>
-                {/* <button
+                <button
                     className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${
                         activeDashboardTab === 'third_party' 
                             ? 'border-green-600 text-green-600 bg-green-50' 
@@ -1814,210 +2012,15 @@ const PricingApp = () => {
                     onClick={() => setActiveDashboardTab('third_party')}
                 >
                     Third Party (Calculated Cost)
-                </button> */}
+                </button>
             </div>
 
             {/* --- RATE CART TAB CONTENT --- */}
             {activeDashboardTab === 'rate_cart' && (
                 <div className="animation-fade-in">
                     
-                    {/* DYNAMIC ROWSPAN TREE TABLE */}
-                    <div className="mb-10 bg-white border rounded-lg shadow-sm">
-                        <div className="p-4 border-b bg-gray-50 flex justify-between items-center rounded-t-lg">
-                            <div className="flex flex-wrap items-center gap-4">
-                                <h2 className="text-xl font-bold text-gray-800">Allocation Overview</h2>
-                                
-                                {/* NEW DATE RANGE FILTER */}
-                                <div className="flex items-center gap-2 bg-white px-2 py-1 border rounded shadow-sm">
-                                    <input 
-                                        type="date" 
-                                        value={overviewStartDate} 
-                                        onChange={(e) => setOverviewStartDate(e.target.value)}
-                                        className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer"
-                                    />
-                                    <span className="text-gray-400">to</span>
-                                    <input 
-                                        type="date" 
-                                        value={overviewEndDate} 
-                                        onChange={(e) => setOverviewEndDate(e.target.value)}
-                                        className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer"
-                                    />
-                                </div>
-
-                                <div className="flex items-center gap-2 bg-white px-2 py-1 border rounded shadow-sm">
-                                    <span className="text-sm font-medium text-gray-500">View By:</span>
-                                    <select 
-                                        value={allocationView}
-                                        onChange={(e) => setAllocationView(e.target.value)}
-                                        className="border-none bg-transparent text-sm font-bold text-blue-700 cursor-pointer focus:ring-0 outline-none"
-                                    >
-                                        <option value="principal">Principal</option>
-                                        <option value="brand">Brand</option>
-                                        <option value="item_name">Item Name</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <button 
-                                onClick={() => fetchPrincipalAllocation(allocationView)} 
-                                disabled={isPrincipalAllocationLoading}
-                                className="text-sm px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded font-semibold transition"
-                            >
-                                {isPrincipalAllocationLoading ? 'Loading...' : 'Refresh Data'}
-                            </button>
-                        </div>
-                        
-                        <div className={`overflow-auto max-h-[550px] relative ${activeFilterDropdown ? 'min-h-[300px]' : ''}`}>
-                            {/* Overlay to close dropdowns when clicking outside */}
-                            {activeFilterDropdown && (
-                                <div className="fixed inset-0 z-40" onClick={() => setActiveFilterDropdown(null)}></div>
-                            )}
-                            
-                            {principalAllocationData.length === 0 ? (
-                                <div className="text-center p-6 text-gray-500 italic">No allocation data available for this view.</div>
-                            ) : (
-                                <table className="w-full border-collapse text-xs relative">
-                                    <thead className={`bg-gray-100 border-b-2 border-gray-200 sticky top-0 ${activeFilterDropdown ? 'z-50' : 'z-10'}`}>
-                                        <tr>
-                                            <th className="px-2 py-1 text-left font-bold text-teal-900 border bg-gray-100 align-middle relative w-32">
-                                                <div 
-                                                    className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition"
-                                                    onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'bu' ? null : 'bu')}
-                                                >
-                                                    <span>BU</span>
-                                                    <Filter size={14} className={overviewFilters.bu.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
-                                                </div>
-                                                {activeFilterDropdown === 'bu' && (
-                                                    <ExcelFilterDropdown
-                                                        columnKey="bu"
-                                                        options={filterOptions.bu}
-                                                        selectedOptions={overviewFilters.bu}
-                                                        onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))}
-                                                        onClose={() => setActiveFilterDropdown(null)}
-                                                    />
-                                                )}
-                                            </th>
-                                            {maxDepth >= 2 && (
-                                                <th className="px-2 py-1 text-left font-bold text-blue-900 border bg-gray-100 align-middle relative transition-all duration-300 w-40">
-                                                    <div 
-                                                        className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition"
-                                                        onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'branch' ? null : 'branch')}
-                                                    >
-                                                        <span>Branch</span>
-                                                        <Filter size={14} className={overviewFilters.branch.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
-                                                    </div>
-                                                    {activeFilterDropdown === 'branch' && (
-                                                        <ExcelFilterDropdown
-                                                            columnKey="branch"
-                                                            options={filterOptions.branch}
-                                                            selectedOptions={overviewFilters.branch}
-                                                            onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))}
-                                                            onClose={() => setActiveFilterDropdown(null)}
-                                                        />
-                                                    )}
-                                                </th>
-                                            )}
-                                            {maxDepth >= 3 && (
-                                                <th className="px-2 py-1 text-left font-bold text-indigo-900 border bg-gray-100 align-middle relative transition-all duration-300 min-w-[200px]">
-                                                    <div 
-                                                        className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition"
-                                                        onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'group' ? null : 'group')}
-                                                    >
-                                                        <span>{allocationView === 'principal' ? 'Principal' : allocationView === 'brand' ? 'Brand' : 'Item Name'}</span>
-                                                        <Filter size={14} className={overviewFilters.group.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
-                                                    </div>
-                                                    {activeFilterDropdown === 'group' && (
-                                                        <ExcelFilterDropdown
-                                                            columnKey="group"
-                                                            options={filterOptions.group}
-                                                            selectedOptions={overviewFilters.group}
-                                                            onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))}
-                                                            onClose={() => setActiveFilterDropdown(null)}
-                                                        />
-                                                    )}
-                                                </th>
-                                            )}
-                                            {maxDepth >= 4 && <th className="px-2 py-1 text-left font-bold text-gray-700 border bg-gray-100 transition-all duration-300 align-middle">Date</th>}
-                                            <th 
-                                                className="px-2 py-1 text-right font-bold text-gray-700 border bg-gray-100 w-28 align-middle cursor-pointer hover:bg-gray-200 transition select-none"
-                                                onClick={() => {
-                                                    if (avgCostSortOrder === null) setAvgCostSortOrder('desc');
-                                                    else if (avgCostSortOrder === 'desc') setAvgCostSortOrder('asc');
-                                                    else setAvgCostSortOrder(null);
-                                                }}
-                                                title="Click to sort by Avg Cost"
-                                            >
-                                                <div className="flex items-center justify-end gap-1">
-                                                    <span>Avg Cost</span>
-                                                    <span className="text-gray-400 text-[10px] w-3 text-center">
-                                                        {avgCostSortOrder === 'asc' ? '▲' : avgCostSortOrder === 'desc' ? '▼' : '⇅'}
-                                                    </span>
-                                                </div>
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {visibleRows.map((row) => (
-                                            <tr key={row.key} className="hover:bg-gray-50 border-b transition-colors">
-                                                
-                                                {/* BU Column */}
-                                                {!row.buCell.isSkip && (
-                                                    row.buCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                                        <td rowSpan={row.buCell.rowSpan} onClick={() => toggleNode(row.buCell.id)} className="border px-2 py-1 font-bold text-teal-800 cursor-pointer align-top bg-white">
-                                                            <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                                {row.buCell.isExpanded ? <ChevronDown size={14} className="text-teal-500 shrink-0"/> : <ChevronRight size={14} className="text-teal-500 shrink-0"/>}
-                                                                <span>{row.buCell.label}</span>
-                                                            </div>
-                                                        </td>
-                                                    )
-                                                )}
-                                                
-                                                {/* Branch Column */}
-                                                {maxDepth >= 2 && !row.branchCell.isSkip && (
-                                                    row.branchCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                                        <td rowSpan={row.branchCell.rowSpan} onClick={() => toggleNode(row.branchCell.id)} className="border px-2 py-1 font-semibold text-blue-800 cursor-pointer align-top bg-blue-50/30">
-                                                            <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                                {row.branchCell.isExpanded ? <ChevronDown size={14} className="text-blue-500 shrink-0"/> : <ChevronRight size={14} className="text-blue-500 shrink-0"/>}
-                                                                <span>{row.branchCell.label}</span>
-                                                            </div>
-                                                        </td>
-                                                    )
-                                                )}
-
-                                                {/* Dynamic 3rd Level (Principal/Brand/Item) Column */}
-                                                {maxDepth >= 3 && !row.groupCell.isSkip && (
-                                                    row.groupCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                                        <td rowSpan={row.groupCell.rowSpan} onClick={() => toggleNode(row.groupCell.id)} className="border px-2 py-1 font-semibold text-indigo-800 cursor-pointer align-top bg-indigo-50/30 max-w-[200px] truncate" title={row.groupCell.label}>
-                                                            <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                                {row.groupCell.isExpanded ? <ChevronDown size={14} className="text-indigo-500 shrink-0"/> : <ChevronRight size={14} className="text-indigo-500 shrink-0"/>}
-                                                                <span className="truncate">{row.groupCell.label}</span>
-                                                            </div>
-                                                        </td>
-                                                    )
-                                                )}
-
-                                                {/* Date Column */}
-                                                {maxDepth >= 4 && !row.dateCell.isSkip && (
-                                                    row.dateCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                                        <td rowSpan={row.dateCell.rowSpan} className="border px-2 py-1 text-gray-700 font-medium align-top bg-gray-50/50">
-                                                            <div className="whitespace-nowrap mt-0.5 ml-4">
-                                                                {row.dateCell.label}
-                                                            </div>
-                                                        </td>
-                                                    )
-                                                )}
-
-                                                {/* Cost Column */}
-                                                <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
-                                                    <div className="mt-0.5">{row.avgCost !== null && row.avgCost !== undefined ? formatNumber(row.avgCost) : '-'}</div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )}
-                        </div>
-                    </div>
-                    {/* END DYNAMIC TREE TABLE */}
+                    {/* INJECT SHARED TABLE HERE */}
+                    {allocationOverviewTable}
 
                     {/* NEW COMBINED FILTERS AND TREND ANALYSIS (RATE CART) */}
                     <div className="mb-10 w-full mt-8">
@@ -2040,7 +2043,7 @@ const PricingApp = () => {
                                     <button 
                                         onClick={() => {
                                             fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc);
-                                            fetchPrincipalAllocation();
+                                            fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate, activeDashboardTab);
                                         }}
                                         disabled={isDashboardLoading || isPrincipalAllocationLoading} 
                                         className="bg-blue-600 text-white px-4 py-2 rounded transition hover:bg-blue-700 disabled:bg-gray-400 font-semibold"
@@ -2146,6 +2149,10 @@ const PricingApp = () => {
             {/* --- THIRD PARTY TAB CONTENT --- */}
             {activeDashboardTab === 'third_party' && (
                 <div className="animation-fade-in">
+                    
+                    {/* INJECT SHARED TABLE HERE */}
+                    {allocationOverviewTable}
+
                     {/* NEW COMBINED FILTERS AND TREND ANALYSIS (THIRD PARTY) */}
                     <div className="mb-10 w-full mt-4">
                         <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Dashboard: 12-Month Trend Analysis (Third Party)</h2>
@@ -2167,7 +2174,7 @@ const PricingApp = () => {
                                     <button 
                                         onClick={() => {
                                             fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc);
-                                            fetchPrincipalAllocation();
+                                            fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate, activeDashboardTab);
                                         }}
                                         disabled={isDashboardLoading || isPrincipalAllocationLoading} 
                                         className="bg-green-600 text-white px-4 py-2 rounded transition hover:bg-green-700 disabled:bg-gray-400 font-semibold"
