@@ -1805,7 +1805,7 @@ const PricingApp = () => {
                 >
                     Rate Cart (Branch Allocation)
                 </button>
-                <button
+                {/* <button
                     className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${
                         activeDashboardTab === 'third_party' 
                             ? 'border-green-600 text-green-600 bg-green-50' 
@@ -1814,7 +1814,7 @@ const PricingApp = () => {
                     onClick={() => setActiveDashboardTab('third_party')}
                 >
                     Third Party (Calculated Cost)
-                </button>
+                </button> */}
             </div>
 
             {/* --- RATE CART TAB CONTENT --- */}
