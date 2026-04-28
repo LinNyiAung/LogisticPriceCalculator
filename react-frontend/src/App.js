@@ -1645,29 +1645,9 @@ useEffect(() => {
           
           <div className="bg-white rounded-lg shadow-md p-6">
             
+            {/* Global Header (Removed the Top Filters from here) */}
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 pb-4 border-b">
               <h1 className="text-3xl font-bold text-gray-800">Logistic Cost Dashboard</h1>
-              <div className="flex flex-wrap items-center gap-2 mt-4 md:mt-0">
-                  <input 
-                      type="month"
-                      value={dashboardMonth}
-                      onChange={(e) => {
-                          setDashboardMonth(e.target.value);
-                          fetchCombinedDashboard(e.target.value, dashboardBranch, dashboardToLoc);
-                      }}
-                      className="border p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button 
-                      onClick={() => {
-                          fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc);
-                          fetchPrincipalAllocation();
-                      }}
-                      disabled={isDashboardLoading || isPrincipalAllocationLoading} 
-                      className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition disabled:bg-gray-400 bg-blue-600 hover:bg-blue-700 font-semibold`}
-                  >
-                  {(isDashboardLoading || isPrincipalAllocationLoading) ? 'Refreshing...' : 'Refresh'}
-                  </button>
-              </div>
             </div>
 
             {/* --- DASHBOARD TABS --- */}
@@ -1805,9 +1785,37 @@ useEffect(() => {
                     </div>
                     {/* END DYNAMIC TREE TABLE */}
 
-                    <div className="mb-8 border-b pb-6">
-                        <div className={`flex flex-col gap-4 ${allocTheme.bg} p-4 rounded-lg border ${allocTheme.border} h-full`}>
-                            <div className="flex flex-col gap-1">
+                    {/* NEW COMBINED FILTERS AND TREND ANALYSIS (RATE CART) */}
+                    <div className="mb-10 w-full mt-8">
+                        <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Dashboard: 12-Month Trend Analysis (Rate Cart)</h2>
+                        
+                        {/* Unified Filters Moved Here */}
+                        <div className={`flex flex-wrap items-end gap-4 ${allocTheme.bg} p-4 rounded-lg border ${allocTheme.border} mb-6`}>
+                            <div className="flex flex-col gap-1 w-full md:w-auto flex-1">
+                                <label className={`text-sm font-semibold ${allocTheme.text}`}>Month Filter:</label>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="month"
+                                        value={dashboardMonth}
+                                        onChange={(e) => {
+                                            setDashboardMonth(e.target.value);
+                                            fetchCombinedDashboard(e.target.value, dashboardBranch, dashboardToLoc);
+                                        }}
+                                        className={`p-2 bg-white/80 border ${allocTheme.border} rounded focus:outline-none focus:ring-2 focus:ring-blue-500 w-full`}
+                                    />
+                                    <button 
+                                        onClick={() => {
+                                            fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc);
+                                            fetchPrincipalAllocation();
+                                        }}
+                                        disabled={isDashboardLoading || isPrincipalAllocationLoading} 
+                                        className="bg-blue-600 text-white px-4 py-2 rounded transition hover:bg-blue-700 disabled:bg-gray-400 font-semibold"
+                                    >
+                                        Refresh
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-1 w-full md:w-auto flex-1">
                                 <label className={`text-sm font-semibold ${allocTheme.text}`}>Branch Filter:</label>
                                 <select
                                     value={dashboardBranch}
@@ -1815,7 +1823,7 @@ useEffect(() => {
                                         setDashboardBranch(e.target.value);
                                         fetchCombinedDashboard(dashboardMonth, e.target.value, dashboardToLoc);
                                     }}
-                                    className={`p-2 bg-white/80 border ${allocTheme.border} rounded focus:outline-none ${allocTheme.selectText} cursor-pointer text-sm w-full md:w-1/3`}
+                                    className={`p-2 bg-white/80 border ${allocTheme.border} rounded focus:outline-none ${allocTheme.selectText} cursor-pointer w-full`}
                                 >
                                     <option value="">All Branches</option>
                                     {dashboardBranches.map(b => (
@@ -1823,35 +1831,31 @@ useEffect(() => {
                                     ))}
                                 </select>
                             </div>
-
-                            {allocationData.length > 0 ? (
-                                <div className="flex flex-col gap-1 border-t border-blue-200 pt-3">
-                                    <label className={`text-sm font-semibold ${allocTheme.text}`}>Brand (Rate Cart Dashboard):</label>
+                            <div className="flex flex-col gap-1 w-full md:w-auto flex-1">
+                                <label className={`text-sm font-semibold ${allocTheme.text}`}>Brand Filter:</label>
+                                {allocationData.length > 0 ? (
                                     <select
                                         value={selectedAllocBrand}
                                         onChange={(e) => setSelectedAllocBrand(e.target.value)}
-                                        className={`p-1 bg-transparent focus:outline-none font-bold ${allocTheme.selectText} cursor-pointer text-xl w-full md:w-1/3`}
+                                        className={`p-2 bg-white/80 border ${allocTheme.border} rounded focus:outline-none font-bold ${allocTheme.selectText} cursor-pointer w-full`}
                                     >
                                         {allocationData.map(r => (
                                             <option key={r.brand} value={r.brand}>{r.brand}</option>
                                         ))}
                                     </select>
-                                </div>
-                            ) : (
-                                <div className={`text-sm italic mt-2 border-t border-blue-200 pt-3 ${allocTheme.text}`}>
-                                    No allocation data for selected branch/month.
-                                </div>
-                            )}
+                                ) : (
+                                    <div className={`p-2 italic bg-white/50 border ${allocTheme.border} rounded ${allocTheme.text} text-sm flex items-center`}>
+                                        No data available
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
 
-
-                    <div className="mb-10 w-full">
-                        <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Dashboard: 12-Month Trend Analysis (Rate Cart)</h2>
+                        {/* Chart Render */}
                         {isDashboardLoading ? (
-                        <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center">Loading trends...</div>
+                        <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center bg-white">Loading trends...</div>
                         ) : !selectedAllocRow ? (
-                        <div className="text-center p-6 text-gray-500 italic border rounded-lg flex items-center justify-center">No trend data available.</div>
+                        <div className="text-center p-6 text-gray-500 italic border rounded-lg flex items-center justify-center bg-white">No trend data available.</div>
                         ) : (
                         <div className="bg-white border rounded-lg p-6 shadow-sm">
                             {(() => {
@@ -1908,9 +1912,37 @@ useEffect(() => {
             {/* --- THIRD PARTY TAB CONTENT --- */}
             {activeDashboardTab === 'third_party' && (
                 <div className="animation-fade-in">
-                    <div className="mb-8 border-b pb-6">
-                        <div className={`flex flex-col gap-4 ${calcTheme.bg} p-4 rounded-lg border ${calcTheme.border} h-full`}>
-                            <div className="flex flex-col gap-1">
+                    {/* NEW COMBINED FILTERS AND TREND ANALYSIS (THIRD PARTY) */}
+                    <div className="mb-10 w-full mt-4">
+                        <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Dashboard: 12-Month Trend Analysis (Third Party)</h2>
+                        
+                        {/* Unified Filters Moved Here */}
+                        <div className={`flex flex-wrap items-end gap-4 ${calcTheme.bg} p-4 rounded-lg border ${calcTheme.border} mb-6`}>
+                            <div className="flex flex-col gap-1 w-full md:w-auto flex-1">
+                                <label className={`text-sm font-semibold ${calcTheme.text}`}>Month Filter:</label>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="month"
+                                        value={dashboardMonth}
+                                        onChange={(e) => {
+                                            setDashboardMonth(e.target.value);
+                                            fetchCombinedDashboard(e.target.value, dashboardBranch, dashboardToLoc);
+                                        }}
+                                        className={`p-2 bg-white/80 border ${calcTheme.border} rounded focus:outline-none focus:ring-2 focus:ring-green-500 w-full`}
+                                    />
+                                    <button 
+                                        onClick={() => {
+                                            fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc);
+                                            fetchPrincipalAllocation();
+                                        }}
+                                        disabled={isDashboardLoading || isPrincipalAllocationLoading} 
+                                        className="bg-green-600 text-white px-4 py-2 rounded transition hover:bg-green-700 disabled:bg-gray-400 font-semibold"
+                                    >
+                                        Refresh
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-1 w-full md:w-auto flex-1">
                                 <label className={`text-sm font-semibold ${calcTheme.text}`}>To Location Filter:</label>
                                 <select
                                     value={dashboardToLoc}
@@ -1918,7 +1950,7 @@ useEffect(() => {
                                         setDashboardToLoc(e.target.value);
                                         fetchCombinedDashboard(dashboardMonth, dashboardBranch, e.target.value);
                                     }}
-                                    className={`p-2 bg-white/80 border ${calcTheme.border} rounded focus:outline-none ${calcTheme.selectText} cursor-pointer text-sm w-full md:w-1/3`}
+                                    className={`p-2 bg-white/80 border ${calcTheme.border} rounded focus:outline-none ${calcTheme.selectText} cursor-pointer w-full`}
                                 >
                                     <option value="">All Locations</option>
                                     {dashboardToLocs.map(loc => (
@@ -1926,34 +1958,31 @@ useEffect(() => {
                                     ))}
                                 </select>
                             </div>
-
-                            {calculatedData.length > 0 ? (
-                                <div className="flex flex-col gap-1 border-t border-green-200 pt-3">
-                                    <label className={`text-sm font-semibold ${calcTheme.text}`}>Brand (Third Party Dashboard):</label>
+                            <div className="flex flex-col gap-1 w-full md:w-auto flex-1">
+                                <label className={`text-sm font-semibold ${calcTheme.text}`}>Brand Filter:</label>
+                                {calculatedData.length > 0 ? (
                                     <select
                                         value={selectedCalcBrand}
                                         onChange={(e) => setSelectedCalcBrand(e.target.value)}
-                                        className={`p-1 bg-transparent focus:outline-none font-bold ${calcTheme.selectText} cursor-pointer text-xl w-full md:w-1/3`}
+                                        className={`p-2 bg-white/80 border ${calcTheme.border} rounded focus:outline-none font-bold ${calcTheme.selectText} cursor-pointer w-full`}
                                     >
                                         {calculatedData.map(r => (
                                             <option key={r.brand} value={r.brand}>{r.brand}</option>
                                         ))}
                                     </select>
-                                </div>
-                            ) : (
-                                <div className={`text-sm italic mt-2 border-t border-green-200 pt-3 ${calcTheme.text}`}>
-                                    No third-party data for selected month/location.
-                                </div>
-                            )}
+                                ) : (
+                                    <div className={`p-2 italic bg-white/50 border ${calcTheme.border} rounded ${calcTheme.text} text-sm flex items-center`}>
+                                        No data available
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
 
-                    <div className="mb-10 w-full">
-                        <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Dashboard: 12-Month Trend Analysis (Third Party)</h2>
+                        {/* Chart Render */}
                         {isDashboardLoading ? (
-                        <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center">Loading trends...</div>
+                        <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center bg-white">Loading trends...</div>
                         ) : !selectedCalcRow ? (
-                        <div className="text-center p-6 text-gray-500 italic border rounded-lg flex items-center justify-center">No trend data available.</div>
+                        <div className="text-center p-6 text-gray-500 italic border rounded-lg flex items-center justify-center bg-white">No trend data available.</div>
                         ) : (
                         <div className="bg-white border rounded-lg p-6 shadow-sm">
                             {(() => {
