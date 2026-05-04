@@ -42,10 +42,12 @@ const LoginScreen = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setIsSubmitting(true);
     
     const formData = new FormData();
     formData.append('username', username);
@@ -65,6 +67,8 @@ const LoginScreen = ({ onLogin }) => {
       }
     } catch (err) {
       setError('Login failed. Check server connection.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -76,13 +80,15 @@ const LoginScreen = ({ onLogin }) => {
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2">Username <span className="text-red-500">*</span></label>
-            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:border-blue-500" placeholder="Enter username" required />
+            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:border-blue-500" placeholder="Enter username" required disabled={isSubmitting} />
           </div>
           <div className="mb-6">
             <label className="block text-gray-700 text-sm font-bold mb-2">Password <span className="text-red-500">*</span></label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:border-blue-500" placeholder="Enter password" required />
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:border-blue-500" placeholder="Enter password" required disabled={isSubmitting} />
           </div>
-          <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition font-semibold">Sign In</button>
+          <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition font-semibold disabled:opacity-70 disabled:cursor-not-allowed">
+            {isSubmitting ? 'Signing In...' : 'Sign In'}
+          </button>
         </form>
       </div>
     </div>
@@ -105,6 +111,10 @@ const PricingApp = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   };
+
+  // Global saving/deleting states for button disablement
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Dashboard State
   const [activeDashboardTab, setActiveDashboardTab] = useState('rate_cart'); 
@@ -136,9 +146,8 @@ const PricingApp = () => {
   // Excel-like Filter State for Tree Table
   const [overviewFilters, setOverviewFilters] = useState({ bu: [], branch: [], group: [] });
   const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
-  const [avgCostSortOrder, setAvgCostSortOrder] = useState(null); // Added sort state
+  const [avgCostSortOrder, setAvgCostSortOrder] = useState(null); 
 
-  // Extract unique options for filters based on the loaded data
   const filterOptions = useMemo(() => {
       const buSet = new Set();
       const branchSet = new Set();
@@ -161,7 +170,6 @@ const PricingApp = () => {
       };
   }, [principalAllocationData]);
 
-  // Reusable Component for the Excel-like Dropdown
   const ExcelFilterDropdown = ({ columnKey, options, selectedOptions, onApply, onClose }) => {
       const [search, setSearch] = useState('');
       const [localSelection, setLocalSelection] = useState(
@@ -243,7 +251,7 @@ const PricingApp = () => {
   };
 
   // App State
-  const [allocationView, setAllocationView] = useState('principal'); // Default to Principal
+  const [allocationView, setAllocationView] = useState('principal'); 
 
   const [currentPage, setCurrentPage] = useState('calculator');
   const [docNums, setDocNums] = useState([]); 
@@ -667,11 +675,10 @@ const PricingApp = () => {
         if (result.status === 'success') {
             setPrincipalAllocationData(result.data);
             
-            // Build default expanded state for BU and Branch levels
             const defaultExpanded = {};
             result.data.forEach(buData => {
                 const buId = buData.bu;
-                defaultExpanded[buId] = true; // Expand BU node
+                defaultExpanded[buId] = true; 
             });
             
             setExpandedNodes(defaultExpanded); 
@@ -686,7 +693,7 @@ const PricingApp = () => {
   useEffect(() => {
     if (currentPage === 'dashboard') {
         fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate, activeDashboardTab);
-        setOverviewFilters({ bu: [], branch: [], group: [] }); // Reset filters dynamically on view changes
+        setOverviewFilters({ bu: [], branch: [], group: [] }); 
     }
   }, [allocationView, overviewStartDate, overviewEndDate, activeDashboardTab, currentPage]);
 
@@ -797,6 +804,7 @@ const PricingApp = () => {
 
   const addReference = async (type, value) => {
       if(!value.trim()) return;
+      setIsSaving(true);
       try {
           const response = await authFetch(`${API_URL}/references/${type}`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: value })
@@ -804,18 +812,22 @@ const PricingApp = () => {
           if(response.ok) { showNotification('Added successfully', 'success'); setNewRefValue(''); loadReferenceData(); } 
           else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
       } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+      finally { setIsSaving(false); }
   }
 
   const deleteReference = async (type, value) => {
       if(!window.confirm(`Delete ${value}?`)) return;
+      setIsDeleting(true);
       try {
           const response = await authFetch(`${API_URL}/references/${type}/${value}`, { method: 'DELETE' });
           if(response.ok) loadReferenceData();
       } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+      finally { setIsDeleting(false); }
   }
 
   const handleSaveCalculation = async (isUpdate = false) => {
     if (!selectedChannel) { showNotification('Channel is required to save.', 'error'); return; }
+    setIsSaving(true);
     try {
       const payload = {
         id: isUpdate ? currentHistoryId : null, gate_name: selectedGate, from_loc: selectedFrom, to_loc: selectedTo,
@@ -827,37 +839,45 @@ const PricingApp = () => {
       if (response.ok) { showNotification('Calculation saved successfully', 'success'); loadHistory(); } 
       else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsSaving(false); }
   };
 
   const handleSubmitHistory = async (id) => {
     if(!window.confirm("Submit calculation? Account users will review it.")) return;
+    setIsSaving(true);
     try {
       const response = await authFetch(`${API_URL}/history/${id}/submit`, { method: 'PUT' });
       if (response.ok) { showNotification('Calculation submitted', 'success'); loadHistory(); } 
       else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsSaving(false); }
   };
 
   const handleClaimHistory = async (id) => {
     if(!window.confirm("Claim this calculation?")) return;
+    setIsSaving(true);
     try {
       const response = await authFetch(`${API_URL}/history/${id}/claim`, { method: 'PUT' });
       if (response.ok) { showNotification('Calculation claimed', 'success'); loadHistory(); } 
       else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsSaving(false); }
   };
 
   const deleteHistory = async (id) => {
     if(!window.confirm("Delete this saved calculation?")) return;
+    setIsDeleting(true);
     try {
       const response = await authFetch(`${API_URL}/history/${id}`, { method: 'DELETE' });
       if (response.ok) { showNotification('Record deleted', 'success'); loadHistory(); } 
       else { showNotification('Error deleting record', 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsDeleting(false); }
   };
 
   const saveGate = async (gateData) => {
     if (!gateData.gate_name?.trim() || !gateData.from_loc || !gateData.to_loc) { showNotification('Required fields missing.', 'error'); return; }
+    setIsSaving(true);
     try {
       const payload = { 
         ...gateData, 
@@ -870,48 +890,54 @@ const PricingApp = () => {
       if (response.ok) { showNotification('Gate saved', 'success'); loadGates(); loadFromLocations(); setShowAddGateModal(false); setEditingGate(null); } 
       else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsSaving(false); }
   };
 
   const deleteGate = async (gateId) => {
     setConfirmDialog({
       message: `Delete this gate and all associated item pricing?`,
       onConfirm: async () => {
+        setIsDeleting(true);
         try {
           const response = await authFetch(`${API_URL}/account/gates/${gateId}`, { method: 'DELETE' });
           if (response.ok) { showNotification('Gate deleted', 'success'); loadGates(); loadFromLocations(); } 
           else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
         } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
-        setConfirmDialog(null);
+        finally { setIsDeleting(false); setConfirmDialog(null); }
       },
       onCancel: () => setConfirmDialog(null)
     });
   };
 
   const saveItem = async (itemData) => {
+    setIsSaving(true);
     try {
       const payload = { ...itemData, gate_id: selectedGateForPricing, original_item_code: originalItemCode || itemData.item_code };
       const response = await authFetch(`${API_URL}/account/item-pricing`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (response.ok) { showNotification('Item saved', 'success'); loadItemPricing(selectedGateForPricing); setShowAddItemModal(false); setEditingItem(null); setOriginalItemCode(null); } 
       else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsSaving(false); }
   };
 
   const deleteItem = async (itemCode) => {
     setConfirmDialog({
       message: `Delete item "${itemCode}"?`,
       onConfirm: async () => {
+        setIsDeleting(true);
         try {
           const response = await authFetch(`${API_URL}/account/item-pricing/${selectedGateForPricing}/${encodeURIComponent(itemCode)}`, { method: 'DELETE' });
           if (response.ok) { showNotification('Item deleted', 'success'); loadItemPricing(selectedGateForPricing); } 
           else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
         } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
-        setConfirmDialog(null);
+        finally { setIsDeleting(false); setConfirmDialog(null); }
       },
       onCancel: () => setConfirmDialog(null)
     });
   };
 
   const saveUser = async (userData) => {
+    setIsSaving(true);
     try {
         let url = `${API_URL}/users`;
         let method = 'POST';
@@ -920,6 +946,7 @@ const PricingApp = () => {
         if (response.ok) { showNotification(editingUser ? 'User updated' : 'User created', 'success'); loadUsers(); setShowUserModal(false); setEditingUser(null); } 
         else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsSaving(false); }
   };
 
   const deleteUser = async (userToDelete) => {
@@ -927,18 +954,20 @@ const PricingApp = () => {
     setConfirmDialog({
         message: `Delete user "${userToDelete}"?`,
         onConfirm: async () => {
+            setIsDeleting(true);
             try {
                 const response = await authFetch(`${API_URL}/users/${userToDelete}`, { method: 'DELETE' });
                 if (response.ok) { showNotification('User deleted', 'success'); loadUsers(); } 
                 else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
             } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
-            setConfirmDialog(null);
+            finally { setIsDeleting(false); setConfirmDialog(null); }
         },
         onCancel: () => setConfirmDialog(null)
     });
   };
 
   const saveRole = async (roleData) => {
+    setIsSaving(true);
     try {
       const isNew = !rolesList.find(r => r.name === roleData.name);
       const response = await authFetch(`${API_URL}/roles${isNew ? '' : `/${roleData.name}`}`, {
@@ -947,19 +976,23 @@ const PricingApp = () => {
       if (response.ok) { showNotification(isNew ? 'Role created' : 'Role updated', 'success'); loadRoles(); setShowRoleModal(false); } 
       else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsSaving(false); }
   };
 
   const deleteRole = async (roleName) => {
     if(!window.confirm(`Delete role ${roleName}?`)) return;
+    setIsDeleting(true);
     try {
       const response = await authFetch(`${API_URL}/roles/${roleName}`, { method: 'DELETE' });
       if (response.ok) { showNotification('Role deleted', 'success'); loadRoles(); } 
       else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsDeleting(false); }
   };
 
   const saveRateCart = async (data) => {
     if (!data.location || data.cost === '') { showNotification('Both fields are required', 'error'); return; }
+    setIsSaving(true);
     try {
         const response = await authFetch(`${API_URL}/account/rate-cuts`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, 
@@ -968,15 +1001,18 @@ const PricingApp = () => {
         if (response.ok) { showNotification('Rate cart saved', 'success'); loadRateCarts(); setShowRateCartModal(false); }
         else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsSaving(false); }
   };
 
   const deleteRateCart = async (location) => {
       if (!window.confirm(`Delete rate cart for ${location}?`)) return;
+      setIsDeleting(true);
       try {
           const response = await authFetch(`${API_URL}/account/rate-cuts/${encodeURIComponent(location)}`, { method: 'DELETE' });
           if (response.ok) { showNotification('Deleted successfully', 'success'); loadRateCarts(); }
           else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
       } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+      finally { setIsDeleting(false); }
   };
 
   useEffect(() => {
@@ -1105,8 +1141,6 @@ const PricingApp = () => {
         setManualTotalCost(fullRecord.manual_total_cost || ''); 
         setAdditionalCharges(fullRecord.additional_charges || '');
         
-        // --- ADD THIS FIX HERE ---
-        // Find the matched gate to restore the calculationType state
         const gateInfo = gates.find(g => 
           g.gate_name === fullRecord.gate_name && 
           g.from_loc === fullRecord.from_loc && 
@@ -1118,7 +1152,6 @@ const PricingApp = () => {
         } else {
             setCalculationType('');
         }
-        // -------------------------
 
         let loadedFromPG = false;
         
@@ -1254,32 +1287,35 @@ const PricingApp = () => {
       } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
-  const GateModal = ({ gate, onSave, onClose }) => {
+  // Modals with loading constraints applied
+  const GateModal = ({ gate, onSave, onClose, isSaving }) => {
     const [formData, setFormData] = useState(gate || { gate_name: '', from_loc: '', to_loc: '', uom: '', unit: '', cost: '' });
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-6 w-full max-w-md">
           <h2 className="text-2xl font-bold mb-4">{gate ? 'Edit Gate' : 'Add New Gate'}</h2>
           <div className="space-y-4">
-            <div><label className="block text-sm font-semibold mb-1">Gate Name <span className="text-red-500">*</span></label><input type="text" value={formData.gate_name ?? ''} onChange={(e) => setFormData({...formData, gate_name: e.target.value})} className="w-full p-2 border rounded" /></div>
-            <div><label className="block text-sm font-semibold mb-1">From <span className="text-red-500">*</span></label><select value={formData.from_loc ?? ''} onChange={(e) => setFormData({...formData, from_loc: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}</select></div>
-            <div><label className="block text-sm font-semibold mb-1">To <span className="text-red-500">*</span></label><select value={formData.to_loc ?? ''} onChange={(e) => setFormData({...formData, to_loc: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}</select></div>
+            <div><label className="block text-sm font-semibold mb-1">Gate Name <span className="text-red-500">*</span></label><input disabled={isSaving} type="text" value={formData.gate_name ?? ''} onChange={(e) => setFormData({...formData, gate_name: e.target.value})} className="w-full p-2 border rounded" /></div>
+            <div><label className="block text-sm font-semibold mb-1">From <span className="text-red-500">*</span></label><select disabled={isSaving} value={formData.from_loc ?? ''} onChange={(e) => setFormData({...formData, from_loc: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}</select></div>
+            <div><label className="block text-sm font-semibold mb-1">To <span className="text-red-500">*</span></label><select disabled={isSaving} value={formData.to_loc ?? ''} onChange={(e) => setFormData({...formData, to_loc: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}</select></div>
             <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-sm font-semibold mb-1">UOM</label><select value={formData.uom ?? ''} onChange={(e) => setFormData({...formData, uom: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refUOMs.map((u, i) => (<option key={i} value={u}>{u}</option>))}</select></div>
-                <div><label className="block text-sm font-semibold mb-1">Unit</label><input type="number" value={formData.unit ?? ''} onChange={(e) => setFormData({...formData, unit: e.target.value})} className="w-full p-2 border rounded" placeholder="1" /></div>
+                <div><label className="block text-sm font-semibold mb-1">UOM</label><select disabled={isSaving} value={formData.uom ?? ''} onChange={(e) => setFormData({...formData, uom: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refUOMs.map((u, i) => (<option key={i} value={u}>{u}</option>))}</select></div>
+                <div><label className="block text-sm font-semibold mb-1">Unit</label><input disabled={isSaving} type="number" value={formData.unit ?? ''} onChange={(e) => setFormData({...formData, unit: e.target.value})} className="w-full p-2 border rounded" placeholder="1" /></div>
             </div>
-            <div><label className="block text-sm font-semibold mb-1">Cost</label><input type="number" value={formData.cost ?? ''} onChange={(e) => setFormData({...formData, cost: e.target.value})} className="w-full p-2 border rounded" /></div>
+            <div><label className="block text-sm font-semibold mb-1">Cost</label><input disabled={isSaving} type="number" value={formData.cost ?? ''} onChange={(e) => setFormData({...formData, cost: e.target.value})} className="w-full p-2 border rounded" /></div>
           </div>
           <div className="flex gap-2 mt-6">
-            <button onClick={() => onSave(formData)} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Save</button>
-            <button onClick={onClose} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
+            <button onClick={() => onSave(formData)} disabled={isSaving} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed">
+                {isSaving ? 'Saving...' : 'Save'}
+            </button>
+            <button onClick={onClose} disabled={isSaving} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed">Cancel</button>
           </div>
         </div>
       </div>
     );
   };
 
-  const ItemModal = ({ item, onSave, onClose }) => {
+  const ItemModal = ({ item, onSave, onClose, isSaving }) => {
     const [formData, setFormData] = useState(item || { bu: '', item_code: '', item_name: '', principal: '', brand: '', transportation_cost: '' });
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
@@ -1335,50 +1371,54 @@ const PricingApp = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="relative">
               <label className="block text-sm font-semibold mb-1">Item Code (Search) <span className="text-red-500">*</span></label>
-              <div className="relative"><input type="text" value={searchTerm} onChange={(e) => handleSearch(e.target.value)} className="w-full p-2 border rounded pr-8" placeholder="Type code or name..." /><div className="absolute right-2 top-2 text-gray-400"><Search size={18} /></div></div>
+              <div className="relative"><input disabled={isSaving || isValidating} type="text" value={searchTerm} onChange={(e) => handleSearch(e.target.value)} className="w-full p-2 border rounded pr-8" placeholder="Type code or name..." /><div className="absolute right-2 top-2 text-gray-400"><Search size={18} /></div></div>
               {searchResults.length > 0 && (<div className="absolute z-10 w-full bg-white border rounded shadow-lg max-h-48 overflow-y-auto mt-1">{searchResults.map((res, idx) => (<div key={idx} onClick={() => selectItem(res)} className="p-2 hover:bg-blue-50 cursor-pointer border-b last:border-0 text-sm"><div className="font-bold text-gray-800">{res.item_code}</div><div className="text-gray-600 truncate">{res.item_name}</div></div>))}</div>)}
             </div>
             <div><label className="block text-sm font-semibold mb-1">BU</label><input type="text" value={formData.bu ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
             <div><label className="block text-sm font-semibold mb-1">Item Name</label><input type="text" value={formData.item_name ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
             <div><label className="block text-sm font-semibold mb-1">Principal</label><input type="text" value={formData.principal ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
             <div><label className="block text-sm font-semibold mb-1">Brand</label><input type="text" value={formData.brand ?? ''} readOnly className="w-full p-2 border rounded bg-gray-50" /></div>
-            <div><label className="block text-sm font-semibold mb-1">Transportation Cost</label><input type="number" step="any" value={formData.transportation_cost ?? ''} onChange={(e) => setFormData({...formData, transportation_cost: e.target.value})} className="w-full p-2 border rounded" /></div>
+            <div><label className="block text-sm font-semibold mb-1">Transportation Cost</label><input disabled={isSaving || isValidating} type="number" step="any" value={formData.transportation_cost ?? ''} onChange={(e) => setFormData({...formData, transportation_cost: e.target.value})} className="w-full p-2 border rounded" /></div>
           </div>
           <div className="flex gap-2 mt-6">
-            <button onClick={handleSaveButton} disabled={isValidating} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:bg-blue-400">{isValidating ? "Validating..." : "Save"}</button>
-            <button onClick={onClose} disabled={isValidating} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
+            <button onClick={handleSaveButton} disabled={isValidating || isSaving} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed">
+              {isValidating ? "Validating..." : isSaving ? "Saving..." : "Save"}
+            </button>
+            <button onClick={onClose} disabled={isValidating || isSaving} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed">Cancel</button>
           </div>
         </div>
       </div>
     );
   };
 
-  const UserModal = ({ user, onSave, onClose }) => {
+  const UserModal = ({ user, onSave, onClose, isSaving }) => {
     const [formData, setFormData] = useState(user ? { ...user, password: '' } : { username: '', password: '', role: rolesList.length > 0 ? rolesList[0].name : '' });
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
                 <h2 className="text-2xl font-bold mb-4">{user ? 'Edit User' : 'Add New User'}</h2>
                 <div className="space-y-4">
-                    <div><label className="block text-sm font-semibold mb-1">Username <span className="text-red-500">*</span></label><input type="text" value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} className="w-full p-2 border rounded" disabled={!!user} /></div>
-                    <div><label className="block text-sm font-semibold mb-1">Password {!user && <span className="text-red-500">*</span>}</label><input type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full p-2 border rounded" placeholder={user ? "Leave blank to keep" : "Required"} /></div>
+                    <div><label className="block text-sm font-semibold mb-1">Username <span className="text-red-500">*</span></label><input disabled={!!user || isSaving} type="text" value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} className="w-full p-2 border rounded" /></div>
+                    <div><label className="block text-sm font-semibold mb-1">Password {!user && <span className="text-red-500">*</span>}</label><input disabled={isSaving} type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full p-2 border rounded" placeholder={user ? "Leave blank to keep" : "Required"} /></div>
                     <div>
                         <label className="block text-sm font-semibold mb-1">Role <span className="text-red-500">*</span></label>
-                        <select value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})} className="w-full p-2 border rounded">
+                        <select disabled={isSaving} value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})} className="w-full p-2 border rounded">
                             {rolesList.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
                         </select>
                     </div>
                 </div>
                 <div className="flex gap-2 mt-6">
-                    <button onClick={() => onSave(formData)} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700" disabled={!user && !formData.password}>Save</button>
-                    <button onClick={onClose} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
+                    <button onClick={() => onSave(formData)} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed" disabled={(!user && !formData.password) || isSaving}>
+                        {isSaving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button onClick={onClose} disabled={isSaving} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed">Cancel</button>
                 </div>
             </div>
         </div>
     );
   };
 
-  const RoleModal = ({ role, onSave, onClose }) => {
+  const RoleModal = ({ role, onSave, onClose, isSaving }) => {
     const [formData, setFormData] = useState(role || { name: '', permissions: [] });
 
     const handleToggle = (permId) => {
@@ -1392,13 +1432,13 @@ const PricingApp = () => {
         <div className="bg-white rounded-lg p-6 w-full max-w-lg">
           <h2 className="text-2xl font-bold mb-4">{role ? 'Edit Role' : 'Add New Role'}</h2>
           <div className="space-y-4">
-            <div><label className="block text-sm font-semibold mb-1">Role Name <span className="text-red-500">*</span></label><input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full p-2 border rounded" disabled={!!role} /></div>
+            <div><label className="block text-sm font-semibold mb-1">Role Name <span className="text-red-500">*</span></label><input disabled={!!role || isSaving} type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full p-2 border rounded" /></div>
             <div>
               <label className="block text-sm font-semibold mb-2">Permissions</label>
               <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto border p-3 rounded bg-gray-50">
                 {AVAILABLE_PERMISSIONS.map(perm => (
                   <label key={perm.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
-                    <input type="checkbox" checked={formData.permissions.includes(perm.id)} onChange={() => handleToggle(perm.id)} className="rounded text-blue-600 focus:ring-blue-500"/>
+                    <input disabled={isSaving} type="checkbox" checked={formData.permissions.includes(perm.id)} onChange={() => handleToggle(perm.id)} className="rounded text-blue-600 focus:ring-blue-500"/>
                     {perm.label}
                   </label>
                 ))}
@@ -1406,15 +1446,17 @@ const PricingApp = () => {
             </div>
           </div>
           <div className="flex gap-2 mt-6">
-            <button onClick={() => onSave(formData)} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700" disabled={!formData.name.trim()}>Save</button>
-            <button onClick={onClose} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
+            <button onClick={() => onSave(formData)} disabled={!formData.name.trim() || isSaving} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed">
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+            <button onClick={onClose} disabled={isSaving} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed">Cancel</button>
           </div>
         </div>
       </div>
     );
   };
 
-  const RateCartModal = ({ rateCart, onSave, onClose }) => {
+  const RateCartModal = ({ rateCart, onSave, onClose, isSaving }) => {
     const [formData, setFormData] = useState(rateCart || { location: '', cost: '' });
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1427,7 +1469,7 @@ const PricingApp = () => {
                             value={formData.location} 
                             onChange={(e) => setFormData({...formData, location: e.target.value})} 
                             className="w-full p-2 border rounded"
-                            disabled={!!rateCart}
+                            disabled={!!rateCart || isSaving}
                         >
                             <option value="">-- Select Location --</option>
                             {refRateCartLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}
@@ -1435,12 +1477,14 @@ const PricingApp = () => {
                     </div>
                     <div>
                         <label className="block text-sm font-semibold mb-1">Cost <span className="text-red-500">*</span></label>
-                        <input type="number" step="any" value={formData.cost} onChange={(e) => setFormData({...formData, cost: e.target.value})} className="w-full p-2 border rounded" />
+                        <input disabled={isSaving} type="number" step="any" value={formData.cost} onChange={(e) => setFormData({...formData, cost: e.target.value})} className="w-full p-2 border rounded" />
                     </div>
                 </div>
                 <div className="flex gap-2 mt-6">
-                    <button onClick={() => onSave(formData)} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700" disabled={!formData.location || formData.cost === ''}>Save</button>
-                    <button onClick={onClose} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
+                    <button onClick={() => onSave(formData)} disabled={!formData.location || formData.cost === '' || isSaving} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed">
+                        {isSaving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button onClick={onClose} disabled={isSaving} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed">Cancel</button>
                 </div>
             </div>
         </div>
@@ -1489,21 +1533,21 @@ const PricingApp = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-semibold mb-1">Current Password <span className="text-red-500">*</span></label>
-              <input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full p-2 border rounded" required />
+              <input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full p-2 border rounded" required disabled={isSubmitting} />
             </div>
             <div>
               <label className="block text-sm font-semibold mb-1">New Password <span className="text-red-500">*</span></label>
-              <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-2 border rounded" required />
+              <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-2 border rounded" required disabled={isSubmitting} />
             </div>
             <div>
               <label className="block text-sm font-semibold mb-1">Confirm New Password <span className="text-red-500">*</span></label>
-              <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full p-2 border rounded" required />
+              <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full p-2 border rounded" required disabled={isSubmitting} />
             </div>
             <div className="flex gap-2 mt-6">
-              <button type="submit" disabled={isSubmitting} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:bg-blue-400">
+              <button type="submit" disabled={isSubmitting} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed">
                 {isSubmitting ? 'Saving...' : 'Save Password'}
               </button>
-              <button type="button" onClick={onClose} disabled={isSubmitting} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">
+              <button type="button" onClick={onClose} disabled={isSubmitting} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed">
                 Cancel
               </button>
             </div>
@@ -1513,14 +1557,16 @@ const PricingApp = () => {
     );
   };
 
-  const ConfirmDialog = ({ message, onConfirm, onCancel }) => (
+  const ConfirmDialog = ({ message, onConfirm, onCancel, isDeleting }) => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
         <h2 className="text-xl font-bold mb-4">Confirm Action</h2>
         <p className="text-gray-700 mb-6">{message}</p>
         <div className="flex gap-2">
-          <button onClick={onConfirm} className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700">Confirm</button>
-          <button onClick={onCancel} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
+          <button onClick={onConfirm} disabled={isDeleting} className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700 disabled:opacity-70 disabled:cursor-not-allowed">
+              {isDeleting ? 'Processing...' : 'Confirm'}
+          </button>
+          <button onClick={onCancel} disabled={isDeleting} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed">Cancel</button>
         </div>
       </div>
     </div>
@@ -1696,7 +1742,6 @@ const PricingApp = () => {
         }
     });
 
-    // 1. PRE-FILTER AND SORT THE DATASET BASED ON EXCEL FILTERS
     let filteredPrincipalData = principalAllocationData.map(buData => {
         if (overviewFilters.bu.length > 0 && !overviewFilters.bu.includes(buData.bu)) return null;
 
@@ -1706,7 +1751,7 @@ const PricingApp = () => {
             const filteredGroups = (bData.group_data || []).filter(gData => {
                 if (overviewFilters.group.length > 0 && !overviewFilters.group.includes(gData.name)) return false;
                 return true;
-            }).map(gData => ({ ...gData, dates: [...(gData.dates || [])] })); // Clone dates for safe sorting
+            }).map(gData => ({ ...gData, dates: [...(gData.dates || [])] })); 
 
             if (overviewFilters.group.length > 0 && filteredGroups.length === 0) return null;
             return { ...bData, group_data: filteredGroups };
@@ -1716,7 +1761,6 @@ const PricingApp = () => {
         return { ...buData, branches: filteredBranches };
     }).filter(Boolean);
 
-    // APPLY HIERARCHICAL SORTING
     if (avgCostSortOrder) {
         const modifier = avgCostSortOrder === 'desc' ? -1 : 1;
         filteredPrincipalData.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
@@ -1738,7 +1782,6 @@ const PricingApp = () => {
         });
     }
 
-    // 2. Build flattened table rows taking into account Expanded State and rowSpans
     const visibleRows = [];
     
     filteredPrincipalData.forEach(buData => {
@@ -1807,7 +1850,6 @@ const PricingApp = () => {
                 <div className="flex flex-wrap items-center gap-4">
                     <h2 className="text-xl font-bold text-gray-800">Allocation Overview</h2>
                     
-                    {/* NEW DATE RANGE FILTER */}
                     <div className="flex items-center gap-2 bg-white px-2 py-1 border rounded shadow-sm">
                         <input 
                             type="date" 
@@ -1840,14 +1882,13 @@ const PricingApp = () => {
                 <button 
                     onClick={() => fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate, activeDashboardTab)} 
                     disabled={isPrincipalAllocationLoading}
-                    className="text-sm px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded font-semibold transition"
+                    className="text-sm px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded font-semibold transition disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                     {isPrincipalAllocationLoading ? 'Loading...' : 'Refresh Data'}
                 </button>
             </div>
             
             <div className={`overflow-auto max-h-[550px] relative ${activeFilterDropdown ? 'min-h-[300px]' : ''}`}>
-                {/* Overlay to close dropdowns when clicking outside */}
                 {activeFilterDropdown && (
                     <div className="fixed inset-0 z-40" onClick={() => setActiveFilterDropdown(null)}></div>
                 )}
@@ -1882,7 +1923,6 @@ const PricingApp = () => {
                                             className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition"
                                             onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'branch' ? null : 'branch')}
                                         >
-                                            {/* DYNAMIC HEADER BASED ON ACTIVE TAB */}
                                             <span>{activeDashboardTab === 'third_party' ? 'To Location' : 'Branch'}</span>
                                             <Filter size={14} className={overviewFilters.branch.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
                                         </div>
@@ -1940,7 +1980,6 @@ const PricingApp = () => {
                             {visibleRows.map((row) => (
                                 <tr key={row.key} className="hover:bg-gray-50 border-b transition-colors">
                                     
-                                    {/* BU Column */}
                                     {!row.buCell.isSkip && (
                                         row.buCell.isPadding ? <td className="border px-2 py-1"></td> : (
                                             <td rowSpan={row.buCell.rowSpan} onClick={() => toggleNode(row.buCell.id)} className="border px-2 py-1 font-bold text-teal-800 cursor-pointer align-top bg-white">
@@ -1952,7 +1991,6 @@ const PricingApp = () => {
                                         )
                                     )}
                                     
-                                    {/* Branch Column */}
                                     {maxDepth >= 2 && !row.branchCell.isSkip && (
                                         row.branchCell.isPadding ? <td className="border px-2 py-1"></td> : (
                                             <td rowSpan={row.branchCell.rowSpan} onClick={() => toggleNode(row.branchCell.id)} className="border px-2 py-1 font-semibold text-blue-800 cursor-pointer align-top bg-blue-50/30">
@@ -1964,7 +2002,6 @@ const PricingApp = () => {
                                         )
                                     )}
 
-                                    {/* Dynamic 3rd Level (Principal/Brand/Item) Column */}
                                     {maxDepth >= 3 && !row.groupCell.isSkip && (
                                         row.groupCell.isPadding ? <td className="border px-2 py-1"></td> : (
                                             <td rowSpan={row.groupCell.rowSpan} onClick={() => toggleNode(row.groupCell.id)} className="border px-2 py-1 font-semibold text-indigo-800 cursor-pointer align-top bg-indigo-50/30 max-w-[200px] truncate" title={row.groupCell.label}>
@@ -1976,7 +2013,6 @@ const PricingApp = () => {
                                         )
                                     )}
 
-                                    {/* Date Column */}
                                     {maxDepth >= 4 && !row.dateCell.isSkip && (
                                         row.dateCell.isPadding ? <td className="border px-2 py-1"></td> : (
                                             <td rowSpan={row.dateCell.rowSpan} className="border px-2 py-1 text-gray-700 font-medium align-top bg-gray-50/50">
@@ -1987,7 +2023,6 @@ const PricingApp = () => {
                                         )
                                     )}
 
-                                    {/* Cost Column */}
                                     <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
                                         <div className="mt-0.5">{row.avgCost !== null && row.avgCost !== undefined ? formatNumber(row.avgCost) : '-'}</div>
                                     </td>
@@ -2008,12 +2043,10 @@ const PricingApp = () => {
           
           <div className="bg-white rounded-lg shadow-md p-6">
             
-            {/* Global Header (Removed the Top Filters from here) */}
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 pb-4 border-b">
               <h1 className="text-3xl font-bold text-gray-800">Logistics Cost Dashboard</h1>
             </div>
 
-            {/* --- DASHBOARD TABS --- */}
             <div className="flex flex-wrap border-b mb-8 border-gray-200">
                 <button
                     className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${
@@ -2037,18 +2070,14 @@ const PricingApp = () => {
                 </button>
             </div>
 
-            {/* --- RATE CART TAB CONTENT --- */}
             {activeDashboardTab === 'rate_cart' && (
                 <div className="animation-fade-in">
                     
-                    {/* INJECT SHARED TABLE HERE */}
                     {allocationOverviewTable}
 
-                    {/* NEW COMBINED FILTERS AND TREND ANALYSIS (RATE CART) */}
                     <div className="mb-10 w-full mt-8">
                         <h2 className="text-2xl font-bold text-blue-800 mb-4 border-l-4 border-blue-600 pl-3">Brand Dashboard: 12-Month Trend Analysis (Rate Cart)</h2>
                         
-                        {/* Unified Filters Moved Here */}
                         <div className={`flex flex-wrap items-end gap-4 ${allocTheme.bg} p-4 rounded-lg border ${allocTheme.border} mb-6`}>
                             <div className="flex flex-col gap-1 w-full md:w-auto flex-1">
                                 <label className={`text-sm font-semibold ${allocTheme.text}`}>Month Filter:</label>
@@ -2068,7 +2097,7 @@ const PricingApp = () => {
                                             fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate, activeDashboardTab);
                                         }}
                                         disabled={isDashboardLoading || isPrincipalAllocationLoading} 
-                                        className="bg-blue-600 text-white px-4 py-2 rounded transition hover:bg-blue-700 disabled:bg-gray-400 font-semibold"
+                                        className="bg-blue-600 text-white px-4 py-2 rounded transition hover:bg-blue-700 disabled:bg-gray-400 font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
                                     >
                                         Refresh
                                     </button>
@@ -2110,7 +2139,6 @@ const PricingApp = () => {
                             </div>
                         </div>
 
-                        {/* Chart Render */}
                         {isDashboardLoading ? (
                         <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center bg-white">Loading trends...</div>
                         ) : !selectedAllocRow ? (
@@ -2168,18 +2196,14 @@ const PricingApp = () => {
                 </div>
             )}
 
-            {/* --- THIRD PARTY TAB CONTENT --- */}
             {activeDashboardTab === 'third_party' && (
                 <div className="animation-fade-in">
                     
-                    {/* INJECT SHARED TABLE HERE */}
                     {allocationOverviewTable}
 
-                    {/* NEW COMBINED FILTERS AND TREND ANALYSIS (THIRD PARTY) */}
                     <div className="mb-10 w-full mt-4">
                         <h2 className="text-2xl font-bold text-green-800 mb-4 border-l-4 border-green-600 pl-3">Brand Dashboard: 12-Month Trend Analysis (Third Party)</h2>
                         
-                        {/* Unified Filters Moved Here */}
                         <div className={`flex flex-wrap items-end gap-4 ${calcTheme.bg} p-4 rounded-lg border ${calcTheme.border} mb-6`}>
                             <div className="flex flex-col gap-1 w-full md:w-auto flex-1">
                                 <label className={`text-sm font-semibold ${calcTheme.text}`}>Month Filter:</label>
@@ -2199,7 +2223,7 @@ const PricingApp = () => {
                                             fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate, activeDashboardTab);
                                         }}
                                         disabled={isDashboardLoading || isPrincipalAllocationLoading} 
-                                        className="bg-green-600 text-white px-4 py-2 rounded transition hover:bg-green-700 disabled:bg-gray-400 font-semibold"
+                                        className="bg-green-600 text-white px-4 py-2 rounded transition hover:bg-green-700 disabled:bg-gray-400 font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
                                     >
                                         Refresh
                                     </button>
@@ -2241,7 +2265,6 @@ const PricingApp = () => {
                             </div>
                         </div>
 
-                        {/* Chart Render */}
                         {isDashboardLoading ? (
                         <div className="text-center p-8 text-gray-500 font-semibold border rounded-lg flex items-center justify-center bg-white">Loading trends...</div>
                         ) : !selectedCalcRow ? (
@@ -2317,11 +2340,11 @@ const PricingApp = () => {
             </div>
             <table className="w-full border-collapse border">
               <thead className="bg-gray-100"><tr><th className="border p-3 text-left">Role Name</th><th className="border p-3 text-left">Permissions</th><th className="border p-3 text-center w-32">Actions</th></tr></thead>
-              <tbody>{rolesList.map((r, i) => (<tr key={i} className="hover:bg-gray-50"><td className="border p-3 font-semibold text-gray-700">{r.name}</td><td className="border p-3 text-xs text-gray-600"><div className="flex flex-wrap gap-1">{r.permissions.map(p => <span key={p} className="bg-gray-200 px-2 py-1 rounded text-gray-700">{p.replace(/_/g, ' ')}</span>)}</div></td><td className="border p-3 text-center"><div className="flex justify-center gap-2">{permissions.includes('edit_role') && <button onClick={() => { setEditingRole(r); setShowRoleModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded"><Edit2 size={16} /></button>}{permissions.includes('delete_role') && <button onClick={() => deleteRole(r.name)} className="p-2 bg-red-100 text-red-600 rounded"><Trash2 size={16} /></button>}</div></td></tr>))}</tbody>
+              <tbody>{rolesList.map((r, i) => (<tr key={i} className="hover:bg-gray-50"><td className="border p-3 font-semibold text-gray-700">{r.name}</td><td className="border p-3 text-xs text-gray-600"><div className="flex flex-wrap gap-1">{r.permissions.map(p => <span key={p} className="bg-gray-200 px-2 py-1 rounded text-gray-700">{p.replace(/_/g, ' ')}</span>)}</div></td><td className="border p-3 text-center"><div className="flex justify-center gap-2">{permissions.includes('edit_role') && <button onClick={() => { setEditingRole(r); setShowRoleModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded"><Edit2 size={16} /></button>}{permissions.includes('delete_role') && <button onClick={() => deleteRole(r.name)} disabled={isDeleting} className="p-2 bg-red-100 text-red-600 rounded disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>}</div></td></tr>))}</tbody>
             </table>
           </div>
         </div>
-        {showRoleModal && <RoleModal role={editingRole} onSave={saveRole} onClose={() => setShowRoleModal(false)} />}
+        {showRoleModal && <RoleModal role={editingRole} onSave={saveRole} onClose={() => setShowRoleModal(false)} isSaving={isSaving} />}
       </div>
     );
   }
@@ -2340,13 +2363,13 @@ const PricingApp = () => {
                     <div className="overflow-x-auto">
                         <table className="w-full border-collapse border">
                             <thead className="bg-gray-100"><tr><th className="border p-3 text-left">Username</th><th className="border p-3 text-left">Role</th><th className="border p-3 text-center w-32">Actions</th></tr></thead>
-                            <tbody>{usersList.map((u, index) => (<tr key={index} className="hover:bg-gray-50"><td className="border p-3 font-semibold text-gray-700">{u.username}</td><td className="border p-3"><span className="px-2 py-1 rounded text-xs font-bold uppercase bg-blue-100 text-blue-700">{u.role}</span></td><td className="border p-3 text-center"><div className="flex justify-center gap-2">{permissions.includes('edit_user') && <button onClick={() => { setEditingUser(u); setShowUserModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}{permissions.includes('delete_user') && u.username !== username && (<button onClick={() => deleteUser(u.username)} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"><Trash2 size={16} /></button>)}</div></td></tr>))}</tbody>
+                            <tbody>{usersList.map((u, index) => (<tr key={index} className="hover:bg-gray-50"><td className="border p-3 font-semibold text-gray-700">{u.username}</td><td className="border p-3"><span className="px-2 py-1 rounded text-xs font-bold uppercase bg-blue-100 text-blue-700">{u.role}</span></td><td className="border p-3 text-center"><div className="flex justify-center gap-2">{permissions.includes('edit_user') && <button onClick={() => { setEditingUser(u); setShowUserModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}{permissions.includes('delete_user') && u.username !== username && (<button onClick={() => deleteUser(u.username)} disabled={isDeleting} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>)}</div></td></tr>))}</tbody>
                         </table>
                     </div>
                 </div>
             </div>
-            {showUserModal && <UserModal user={editingUser} onSave={saveUser} onClose={() => setShowUserModal(false)} />}
-            {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} />}
+            {showUserModal && <UserModal user={editingUser} onSave={saveUser} onClose={() => setShowUserModal(false)} isSaving={isSaving} />}
+            {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} isDeleting={isDeleting} />}
         </div>
       );
   }
@@ -2381,7 +2404,7 @@ const PricingApp = () => {
                                                 <div className="flex justify-center gap-2">
                                                     <button onClick={() => fetchRateCartLogs(rc)} className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={16} /></button>
                                                     {permissions.includes('edit_rate_cart') && <button onClick={() => { setEditingRateCart(rc); setShowRateCartModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
-                                                    {permissions.includes('delete_rate_cart') && <button onClick={() => deleteRateCart(rc.location)} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200"><Trash2 size={16} /></button>}
+                                                    {permissions.includes('delete_rate_cart') && <button onClick={() => deleteRateCart(rc.location)} disabled={isDeleting} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>}
                                                 </div>
                                             </td>
                                         </tr>
@@ -2391,7 +2414,7 @@ const PricingApp = () => {
                     </div>
                 </div>
             </div>
-            {showRateCartModal && <RateCartModal rateCart={editingRateCart} onSave={saveRateCart} onClose={() => setShowRateCartModal(false)} />}
+            {showRateCartModal && <RateCartModal rateCart={editingRateCart} onSave={saveRateCart} onClose={() => setShowRateCartModal(false)} isSaving={isSaving} />}
             {showRateCartLogModal && <LogTableModal logs={rateCartLogsData} title={currentLogRateCartLocation} onClose={() => setShowRateCartLogModal(false)} />}
         </div>
     );
@@ -2436,7 +2459,6 @@ const PricingApp = () => {
         return matchDate && matchBranch && matchDriver && matchTownship && matchCustomer && matchContactPerson && matchCtns && matchDriverTotal && matchBranchCost && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
       });
 
-      // Filter Logic for Submitted Allocation Tab
       const filteredAllocation = submittedAllocationData.filter(row => {
           const matchCalcId = String(row.calc_id || '').toLowerCase().includes(allocationFilters.calc_id.toLowerCase());
           const matchDate = (row.submitted_at || '').toLowerCase().includes((allocationFilters.date_filter || '').toLowerCase());
@@ -2509,16 +2531,15 @@ const PricingApp = () => {
                                       <button 
                                           onClick={() => fetchDailyReport(dailyReportDate, dailyReportStartDate, dailyReportEndDate, isDateRange)} 
                                           disabled={isDailyReportLoading} 
-                                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 font-semibold"
+                                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed font-semibold"
                                       >
                                           {isDailyReportLoading ? 'Loading...' : 'Fetch Report'}
                                       </button>
 
-                                      {/* --- NEW DOWNLOAD EXCEL BUTTON --- */}
                                       <button 
                                           onClick={() => handleDownloadDailyReportExcel(activeDailyTab)} 
                                           disabled={isDailyReportLoading || (activeDailyTab === 'item' ? dailyReportData.length === 0 : dailyTownshipReportData.length === 0)} 
-                                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:bg-gray-400 font-semibold"
+                                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed font-semibold"
                                       >
                                           <Download size={18} /> Download Excel
                                       </button>
@@ -2545,16 +2566,15 @@ const PricingApp = () => {
                                       <button 
                                           onClick={() => fetchSubmittedAllocation(allocationStartDate, allocationEndDate)} 
                                           disabled={isAllocationLoading} 
-                                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 font-semibold"
+                                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed font-semibold"
                                       >
                                           {isAllocationLoading ? 'Loading...' : 'Fetch Report'}
                                       </button>
 
-                                      {/* --- NEW DOWNLOAD EXCEL BUTTON --- */}
                                       <button 
                                           onClick={handleDownloadSubmittedAllocationExcel} 
                                           disabled={isAllocationLoading || submittedAllocationData.length === 0} 
-                                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:bg-gray-400 font-semibold"
+                                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed font-semibold"
                                       >
                                           <Download size={18} /> Download Excel
                                       </button>
@@ -2802,7 +2822,6 @@ const PricingApp = () => {
                           </div>
                       )}
 
-                      {/* --- TAB: SUBMITTED ALLOCATION REPORT --- */}
                       {activeDailyTab === 'submitted' && (
                           <div className="animation-fade-in">
                               <div className="overflow-x-auto border rounded mb-4">
@@ -2919,15 +2938,15 @@ const PricingApp = () => {
                         <h2 className="text-xl font-bold mb-4 text-blue-700">Gate Locations</h2>
                         {permissions.includes('add_reference') && (
                             <div className="flex gap-2 mb-4">
-                                <input type="text" placeholder="New Location..." className="border p-2 rounded flex-1" id="new-loc" />
-                                <button onClick={() => { addReference('locations', document.getElementById('new-loc').value); document.getElementById('new-loc').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button>
+                                <input disabled={isSaving} type="text" placeholder="New Location..." className="border p-2 rounded flex-1" id="new-loc" />
+                                <button disabled={isSaving} onClick={() => { addReference('locations', document.getElementById('new-loc').value); document.getElementById('new-loc').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-70 disabled:cursor-not-allowed">Add</button>
                             </div>
                         )}
                         <div className="border rounded max-h-96 overflow-y-auto">
                             {refLocations.map((loc, i) => (
                                 <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
                                     <span>{loc}</span>
-                                    {permissions.includes('delete_reference') && <button onClick={() => deleteReference('locations', loc)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                    {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteReference('locations', loc)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
                                 </div>
                             ))}
                         </div>
@@ -2937,15 +2956,15 @@ const PricingApp = () => {
                         <h2 className="text-xl font-bold mb-4 text-emerald-700">Rate Cart Locations</h2>
                         {permissions.includes('add_reference') && (
                             <div className="flex gap-2 mb-4">
-                                <input type="text" placeholder="New Location..." className="border p-2 rounded flex-1" id="new-rc-loc" />
-                                <button onClick={() => { addReference('rate-cart-locations', document.getElementById('new-rc-loc').value); document.getElementById('new-rc-loc').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button>
+                                <input disabled={isSaving} type="text" placeholder="New Location..." className="border p-2 rounded flex-1" id="new-rc-loc" />
+                                <button disabled={isSaving} onClick={() => { addReference('rate-cart-locations', document.getElementById('new-rc-loc').value); document.getElementById('new-rc-loc').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-70 disabled:cursor-not-allowed">Add</button>
                             </div>
                         )}
                         <div className="border rounded max-h-96 overflow-y-auto">
                             {refRateCartLocations.map((loc, i) => (
                                 <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
                                     <span>{loc}</span>
-                                    {permissions.includes('delete_reference') && <button onClick={() => deleteReference('rate-cart-locations', loc)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                    {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteReference('rate-cart-locations', loc)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
                                 </div>
                             ))}
                         </div>
@@ -2955,15 +2974,15 @@ const PricingApp = () => {
                         <h2 className="text-xl font-bold mb-4 text-purple-700">Units of Measure</h2>
                         {permissions.includes('add_reference') && (
                             <div className="flex gap-2 mb-4">
-                                <input type="text" placeholder="New UOM..." className="border p-2 rounded flex-1" id="new-uom" />
-                                <button onClick={() => { addReference('uoms', document.getElementById('new-uom').value); document.getElementById('new-uom').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button>
+                                <input disabled={isSaving} type="text" placeholder="New UOM..." className="border p-2 rounded flex-1" id="new-uom" />
+                                <button disabled={isSaving} onClick={() => { addReference('uoms', document.getElementById('new-uom').value); document.getElementById('new-uom').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-70 disabled:cursor-not-allowed">Add</button>
                             </div>
                         )}
                         <div className="border rounded max-h-96 overflow-y-auto">
                             {refUOMs.map((u, i) => (
                                 <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
                                     <span>{u}</span>
-                                    {permissions.includes('delete_reference') && <button onClick={() => deleteReference('uoms', u)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                    {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteReference('uoms', u)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
                                 </div>
                             ))}
                         </div>
@@ -2973,15 +2992,15 @@ const PricingApp = () => {
                         <h2 className="text-xl font-bold mb-4 text-orange-700">Channels</h2>
                         {permissions.includes('add_reference') && (
                             <div className="flex gap-2 mb-4">
-                                <input type="text" placeholder="New Channel..." className="border p-2 rounded flex-1" id="new-chan" />
-                                <button onClick={() => { addReference('channels', document.getElementById('new-chan').value); document.getElementById('new-chan').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add</button>
+                                <input disabled={isSaving} type="text" placeholder="New Channel..." className="border p-2 rounded flex-1" id="new-chan" />
+                                <button disabled={isSaving} onClick={() => { addReference('channels', document.getElementById('new-chan').value); document.getElementById('new-chan').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-70 disabled:cursor-not-allowed">Add</button>
                             </div>
                         )}
                         <div className="border rounded max-h-96 overflow-y-auto">
                             {refChannels.map((c, i) => (
                                 <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
                                     <span>{c}</span>
-                                    {permissions.includes('delete_reference') && <button onClick={() => deleteReference('channels', c)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                    {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteReference('channels', c)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
                                 </div>
                             ))}
                         </div>
@@ -3051,9 +3070,9 @@ const PricingApp = () => {
                                 <div className="flex justify-center gap-2">
                                     <button onClick={() => handleDownloadHistoryExcel(record)} className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1"><FileDown size={16} /></button>
                                     <button onClick={() => loadSavedCalculation(record)} className="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm font-semibold">Load</button>
-                                    {canSubmit && record.status === 'saved' && (<button onClick={() => handleSubmitHistory(record.id)} className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold flex items-center gap-1" title="Submit"><CheckCircle size={16} /> Submit</button>)}
-                                    {canClaim && record.status === 'submitted' && (<button onClick={() => handleClaimHistory(record.id)} className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-semibold flex items-center gap-1" title="Claim"><CheckCircle size={16} /> Claim</button>)}
-                                    {canDeleteHistory && (<button onClick={() => deleteHistory(record.id)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 size={18} /></button>)}
+                                    {canSubmit && record.status === 'saved' && (<button disabled={isSaving} onClick={() => handleSubmitHistory(record.id)} className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold flex items-center gap-1 disabled:opacity-70 disabled:cursor-not-allowed" title="Submit"><CheckCircle size={16} /> Submit</button>)}
+                                    {canClaim && record.status === 'submitted' && (<button disabled={isSaving} onClick={() => handleClaimHistory(record.id)} className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-semibold flex items-center gap-1 disabled:opacity-70 disabled:cursor-not-allowed" title="Claim"><CheckCircle size={16} /> Claim</button>)}
+                                    {canDeleteHistory && (<button disabled={isDeleting} onClick={() => deleteHistory(record.id)} className="p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={18} /></button>)}
                                 </div>
                             </td>
                         </tr>)))}
@@ -3143,7 +3162,7 @@ const PricingApp = () => {
                             <div className="flex items-center justify-center gap-2">
                                 <button onClick={() => fetchGateLogs(gate)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
                                 {permissions.includes('edit_gate') && <button onClick={() => { setOriginalGateName(gate.gate_name); setEditingGate(gate); setShowAddGateModal(true); }} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={14} /></button>}
-                                {permissions.includes('delete_gate') && <button onClick={() => deleteGate(gate.gate_id)} className="p-1 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={14} /></button>}
+                                {permissions.includes('delete_gate') && <button onClick={() => deleteGate(gate.gate_id)} disabled={isDeleting} className="p-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={14} /></button>}
                             </div>
                         </td>
                     </tr>
@@ -3153,9 +3172,9 @@ const PricingApp = () => {
               </table>
             </div>
           </div>
-          {showAddGateModal && <GateModal gate={editingGate} onSave={saveGate} onClose={() => { setShowAddGateModal(false); setEditingGate(null); setOriginalGateName(null); }} />}
+          {showAddGateModal && <GateModal gate={editingGate} onSave={saveGate} isSaving={isSaving} onClose={() => { setShowAddGateModal(false); setEditingGate(null); setOriginalGateName(null); }} />}
           {showLogModal && <LogTableModal logs={logsData} title={currentLogGateName} onClose={() => setShowLogModal(false)} />}
-          {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} />}
+          {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} isDeleting={isDeleting} />}
         </div>
       </div>
     );
@@ -3223,7 +3242,7 @@ const PricingApp = () => {
                             <div className="flex gap-2">
                                   <button onClick={() => fetchItemLogs(item)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
                                   {permissions.includes('edit_item') && <button onClick={() => { setOriginalItemCode(item.item_code); setEditingItem(item); setShowAddItemModal(true); }} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={14} /></button>}
-                                  {permissions.includes('delete_item') && <button onClick={() => deleteItem(item.item_code)} className="p-1 bg-red-500 text-white rounded hover:bg-red-600"><Trash2 size={14} /></button>}
+                                  {permissions.includes('delete_item') && <button disabled={isDeleting} onClick={() => deleteItem(item.item_code)} className="p-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={14} /></button>}
                             </div>
                           </td>
                         </tr>
@@ -3242,9 +3261,9 @@ const PricingApp = () => {
               </>
             )}
           </div>
-          {showAddItemModal && <ItemModal item={editingItem} onSave={saveItem} onClose={() => { setShowAddItemModal(false); setEditingItem(null); setOriginalItemCode(null); }} />}
+          {showAddItemModal && <ItemModal item={editingItem} onSave={saveItem} isSaving={isSaving} onClose={() => { setShowAddItemModal(false); setEditingItem(null); setOriginalItemCode(null); }} />}
           {showItemLogModal && <LogTableModal logs={itemLogsData} title={currentLogItemName} onClose={() => setShowItemLogModal(false)} />}
-          {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} />}
+          {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} isDeleting={isDeleting} />}
         </div>
       </div>
     );
@@ -3429,19 +3448,19 @@ const PricingApp = () => {
                   </div>
                 </div>
                  <div className="flex gap-4 mb-6">
-                    <button onClick={calculateCosts} disabled={isLoading} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"><Calculator size={20} /> {isLoading ? 'Calculating...' : 'Calculate Costs'}</button>
-                    {calculatedTotalCost !== null && (<button onClick={() => handleSaveCalculation(false)} className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"><Save size={20} /> Save as New</button>)}
+                    <button onClick={calculateCosts} disabled={isLoading} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-70 disabled:cursor-not-allowed"><Calculator size={20} /> {isLoading ? 'Calculating...' : 'Calculate Costs'}</button>
+                    {calculatedTotalCost !== null && (<button disabled={isSaving} onClick={() => handleSaveCalculation(false)} className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-70 disabled:cursor-not-allowed"><Save size={20} /> Save as New</button>)}
                 </div>
                 </>
               )}
           </div>
-          {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} />}
+          {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} isDeleting={isDeleting} />}
         </div>
       </div>
     );
   }
 
-  // --- Fallback View (If logged in but current page is inaccessible due to lacking permission) ---
+  // --- Fallback View ---
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
