@@ -2250,6 +2250,24 @@ def save_gate(gate_data: GateData, user: dict = Depends(get_current_user)):
         conn = get_logistic_connection()
         cursor = conn.cursor()
 
+        # --- NEW VALIDATION: Prevent duplicate gate name + from/to locations ---
+        cursor.execute("""
+            SELECT [Gate ID] FROM Gate 
+            WHERE [Gate Name] = ? AND [From] = ? AND [To] = ?
+        """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc))
+        existing_gate = cursor.fetchone()
+
+        if existing_gate:
+            if gate_data.gate_id is None:
+                # Adding a new gate that perfectly matches an existing one
+                conn.close()
+                raise HTTPException(status_code=400, detail="A gate with this name, origin, and destination already exists.")
+            elif existing_gate[0] != gate_data.gate_id:
+                # Editing a gate to conflict with a different existing gate
+                conn.close()
+                raise HTTPException(status_code=400, detail="Another gate with this name, origin, and destination already exists.")
+        # -----------------------------------------------------------------------
+
         if gate_data.gate_id is not None:
             if "edit_gate" not in perms:
                 conn.close()
