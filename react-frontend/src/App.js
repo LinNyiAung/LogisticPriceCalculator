@@ -297,9 +297,16 @@ const PricingApp = () => {
   const [editingRateCart, setEditingRateCart] = useState(null);
 
   const [dailyReportDate, setDailyReportDate] = useState('');
-  const [dailyReportStartDate, setDailyReportStartDate] = useState(''); 
-  const [dailyReportEndDate, setDailyReportEndDate] = useState('');
-  const [isDateRange, setIsDateRange] = useState(false);
+  const [dailyReportStartDate, setDailyReportStartDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  }); 
+  const [dailyReportEndDate, setDailyReportEndDate] = useState(() => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
+  });
+  const [isDateRange, setIsDateRange] = useState(true); // Default to Date Range active
   const [dailyReportData, setDailyReportData] = useState([]);
   const [dailyTownshipReportData, setDailyTownshipReportData] = useState([]);
   const [isDailyReportLoading, setIsDailyReportLoading] = useState(false);
@@ -316,8 +323,15 @@ const PricingApp = () => {
 
   const [submittedAllocationData, setSubmittedAllocationData] = useState([]);
   const [isAllocationLoading, setIsAllocationLoading] = useState(false);
-  const [allocationStartDate, setAllocationStartDate] = useState('');
-  const [allocationEndDate, setAllocationEndDate] = useState('');
+  const [allocationStartDate, setAllocationStartDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [allocationEndDate, setAllocationEndDate] = useState(() => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
+  });
   const [allocationFilters, setAllocationFilters] = useState({ 
     calc_id: '', date_filter: '', sin_no: '', gate_name: '', route: '', bu: '', item_code: '', item_name: '', principal: '', brand: '', ctns: '', unit_cost: '', total_cost: '' 
   });
@@ -992,7 +1006,8 @@ const PricingApp = () => {
     if (token && currentPage === 'daily_report' && permissions.includes('view_daily_report')) { 
         fetchDailyReport(dailyReportDate, dailyReportStartDate, dailyReportEndDate, isDateRange); 
         if(activeDailyTab === 'submitted' && submittedAllocationData.length === 0) {
-            fetchSubmittedAllocation();
+            // Pass the state dates so it filters by the default month on initial load
+            fetchSubmittedAllocation(allocationStartDate, allocationEndDate);
         }
     }
     if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { 
