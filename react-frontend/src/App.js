@@ -112,7 +112,6 @@ const PricingApp = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   };
 
-  // Global saving/deleting states for button disablement
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -129,7 +128,7 @@ const PricingApp = () => {
   const [selectedAllocBrand, setSelectedAllocBrand] = useState(''); 
   const [selectedCalcBrand, setSelectedCalcBrand] = useState('');
   
-  // Independent Principal/Brand Tree Table State
+  // Independent Deep Tree Table State
   const [principalAllocationData, setPrincipalAllocationData] = useState([]);
   const [isPrincipalAllocationLoading, setIsPrincipalAllocationLoading] = useState(false);
   const [expandedNodes, setExpandedNodes] = useState({});
@@ -143,22 +142,26 @@ const PricingApp = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
   });
 
-  // Excel-like Filter State for Tree Table
-  const [overviewFilters, setOverviewFilters] = useState({ bu: [], branch: [], group: [] });
+  // Deep Excel-like Filter State for Tree Table
+  const [overviewFilters, setOverviewFilters] = useState({ bu: [], branch: [], principal: [], brand: [], item: [] });
   const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
   const [avgCostSortOrder, setAvgCostSortOrder] = useState(null); 
 
   const filterOptions = useMemo(() => {
-      const buSet = new Set();
-      const branchSet = new Set();
-      const groupSet = new Set();
+      const buSet = new Set(), branchSet = new Set(), princSet = new Set(), brandSet = new Set(), itemSet = new Set();
 
       principalAllocationData.forEach(bu => {
           buSet.add(bu.bu);
           (bu.branches || []).forEach(b => {
               branchSet.add(b.branch);
-              (b.group_data || []).forEach(g => {
-                  groupSet.add(g.name);
+              (b.principals || []).forEach(p => {
+                  princSet.add(p.principal);
+                  (p.brands || []).forEach(br => {
+                      brandSet.add(br.brand);
+                      (br.items || []).forEach(i => {
+                          itemSet.add(i.item_name);
+                      });
+                  });
               });
           });
       });
@@ -166,7 +169,9 @@ const PricingApp = () => {
       return {
           bu: Array.from(buSet).sort(),
           branch: Array.from(branchSet).sort(),
-          group: Array.from(groupSet).sort()
+          principal: Array.from(princSet).sort(),
+          brand: Array.from(brandSet).sort(),
+          item: Array.from(itemSet).sort()
       };
   }, [principalAllocationData]);
 
@@ -251,8 +256,6 @@ const PricingApp = () => {
   };
 
   // App State
-  const [allocationView, setAllocationView] = useState('principal'); 
-
   const [currentPage, setCurrentPage] = useState('calculator');
   const [docNums, setDocNums] = useState([]); 
   const [selectedDocNums, setSelectedDocNums] = useState([]); 
@@ -659,14 +662,14 @@ const PricingApp = () => {
       } catch (error) { showNotification(`Error loading rate carts: ${error.message}`, 'error'); }
   };
 
-  const fetchPrincipalAllocation = async (view = allocationView, start = overviewStartDate, end = overviewEndDate, tab = activeDashboardTab) => {
+  const fetchPrincipalAllocation = async (start = overviewStartDate, end = overviewEndDate, tab = activeDashboardTab) => {
     setIsPrincipalAllocationLoading(true);
     try {
         const endpoint = tab === 'rate_cart' 
             ? '/dashboard/principal-brand-allocation' 
             : '/dashboard/third-party-allocation';
             
-        let url = `${API_URL}${endpoint}?view_by=${view}`;
+        let url = `${API_URL}${endpoint}?`;
         if (start) url += `&start_date=${start}`;
         if (end) url += `&end_date=${end}`;
         
@@ -692,10 +695,10 @@ const PricingApp = () => {
 
   useEffect(() => {
     if (currentPage === 'dashboard') {
-        fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate, activeDashboardTab);
-        setOverviewFilters({ bu: [], branch: [], group: [] }); 
+        fetchPrincipalAllocation(overviewStartDate, overviewEndDate, activeDashboardTab);
+        setOverviewFilters({ bu: [], branch: [], principal: [], brand: [], item: [] }); 
     }
-  }, [allocationView, overviewStartDate, overviewEndDate, activeDashboardTab, currentPage]);
+  }, [overviewStartDate, overviewEndDate, activeDashboardTab, currentPage]);
 
   const fetchCombinedDashboard = async (monthToFetch, branchToFetch = '', toLocToFetch = '') => {
     setIsDashboardLoading(true);
@@ -1710,30 +1713,19 @@ const PricingApp = () => {
   if (currentPage === 'dashboard' && permissions.includes('view_dashboard')) {
     
     const allocTheme = { 
-        bg: 'bg-blue-50', 
-        border: 'border-blue-200', 
-        text: 'text-blue-800', 
-        selectText: 'text-blue-900', 
-        barCurrent: 'bg-blue-600 shadow-md', 
-        barOther: 'bg-blue-300 hover:bg-blue-500 hover:shadow-md' 
+        bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', 
+        selectText: 'text-blue-900', barCurrent: 'bg-blue-600 shadow-md', barOther: 'bg-blue-300 hover:bg-blue-500 hover:shadow-md' 
     };
     const calcTheme = { 
-        bg: 'bg-green-50', 
-        border: 'border-green-200', 
-        text: 'text-green-800', 
-        selectText: 'text-green-900', 
-        barCurrent: 'bg-green-600 shadow-md', 
-        barOther: 'bg-green-300 hover:bg-green-500 hover:shadow-md' 
+        bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-800', 
+        selectText: 'text-green-900', barCurrent: 'bg-green-600 shadow-md', barOther: 'bg-green-300 hover:bg-green-500 hover:shadow-md' 
     };
 
     const month0Label = (allocationData.length > 0 ? allocationData[0].month_0_label : (calculatedData.length > 0 ? calculatedData[0].month_0_label : 'Selected Month'));
-    const month1Label = (allocationData.length > 0 ? allocationData[0].month_1_label : (calculatedData.length > 0 ? calculatedData[0].month_1_label : '1 Month Ago'));
-    const month2Label = (allocationData.length > 0 ? allocationData[0].month_2_label : (calculatedData.length > 0 ? calculatedData[0].month_2_label : '2 Months Ago'));
-
     const selectedAllocRow = allocationData.find(r => r.brand === selectedAllocBrand) || allocationData[0];
     const selectedCalcRow = calculatedData.find(r => r.brand === selectedCalcBrand) || calculatedData[0];
 
-    // Calculate max depth for dynamic columns to hide unnecessary ones at first
+    // Calculate max depth dynamically for BU -> Branch -> Principal -> Brand -> Item -> Date
     let maxDepth = 1;
     Object.keys(expandedNodes).forEach(key => {
         if (expandedNodes[key]) {
@@ -1742,25 +1734,41 @@ const PricingApp = () => {
         }
     });
 
+    // Filtering logic deeply nested
     let filteredPrincipalData = principalAllocationData.map(buData => {
         if (overviewFilters.bu.length > 0 && !overviewFilters.bu.includes(buData.bu)) return null;
 
         const filteredBranches = (buData.branches || []).map(bData => {
             if (overviewFilters.branch.length > 0 && !overviewFilters.branch.includes(bData.branch)) return null;
 
-            const filteredGroups = (bData.group_data || []).filter(gData => {
-                if (overviewFilters.group.length > 0 && !overviewFilters.group.includes(gData.name)) return false;
-                return true;
-            }).map(gData => ({ ...gData, dates: [...(gData.dates || [])] })); 
+            const filteredPrincipals = (bData.principals || []).map(pData => {
+                if (overviewFilters.principal.length > 0 && !overviewFilters.principal.includes(pData.principal)) return null;
 
-            if (overviewFilters.group.length > 0 && filteredGroups.length === 0) return null;
-            return { ...bData, group_data: filteredGroups };
+                const filteredBrands = (pData.brands || []).map(brData => {
+                    if (overviewFilters.brand.length > 0 && !overviewFilters.brand.includes(brData.brand)) return null;
+
+                    const filteredItems = (brData.items || []).filter(iData => {
+                        if (overviewFilters.item.length > 0 && !overviewFilters.item.includes(iData.item_name)) return false;
+                        return true;
+                    }).map(iData => ({ ...iData, dates: [...(iData.dates || [])] }));
+
+                    if (overviewFilters.item.length > 0 && filteredItems.length === 0) return null;
+                    return { ...brData, items: filteredItems };
+                }).filter(Boolean);
+
+                if ((overviewFilters.brand.length > 0 || overviewFilters.item.length > 0) && filteredBrands.length === 0) return null;
+                return { ...pData, brands: filteredBrands };
+            }).filter(Boolean);
+
+            if ((overviewFilters.principal.length > 0 || overviewFilters.brand.length > 0 || overviewFilters.item.length > 0) && filteredPrincipals.length === 0) return null;
+            return { ...bData, principals: filteredPrincipals };
         }).filter(Boolean);
 
-        if ((overviewFilters.branch.length > 0 || overviewFilters.group.length > 0) && filteredBranches.length === 0) return null;
+        if ((overviewFilters.branch.length > 0 || overviewFilters.principal.length > 0 || overviewFilters.brand.length > 0 || overviewFilters.item.length > 0) && filteredBranches.length === 0) return null;
         return { ...buData, branches: filteredBranches };
     }).filter(Boolean);
 
+    // Deep sorting logic
     if (avgCostSortOrder) {
         const modifier = avgCostSortOrder === 'desc' ? -1 : 1;
         filteredPrincipalData.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
@@ -1769,11 +1777,19 @@ const PricingApp = () => {
             if (bu.branches) {
                 bu.branches.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
                 bu.branches.forEach(branch => {
-                    if (branch.group_data) {
-                        branch.group_data.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
-                        branch.group_data.forEach(group => {
-                            if (group.dates) {
-                                group.dates.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
+                    if (branch.principals) {
+                        branch.principals.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
+                        branch.principals.forEach(principal => {
+                            if (principal.brands) {
+                                principal.brands.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
+                                principal.brands.forEach(brand => {
+                                    if (brand.items) {
+                                        brand.items.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
+                                        brand.items.forEach(item => {
+                                            if (item.dates) item.dates.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
+                                        });
+                                    }
+                                });
                             }
                         });
                     }
@@ -1792,7 +1808,7 @@ const PricingApp = () => {
             visibleRows.push({
                 key: buId,
                 buCell: { id: buId, label: buData.bu, isExpanded: false, rowSpan: 1 },
-                branchCell: { isPadding: true }, groupCell: { isPadding: true }, dateCell: { isPadding: true },
+                branchCell: { isPadding: true }, princCell: { isPadding: true }, brandCell: { isPadding: true }, itemCell: { isPadding: true }, dateCell: { isPadding: true },
                 avgCost: buData.avg_cost
             });
         } else {
@@ -1801,40 +1817,69 @@ const PricingApp = () => {
                 const branchId = `${buId}::${bData.branch}`;
                 const isBranchExpanded = !!expandedNodes[branchId];
 
-                if (!isBranchExpanded || !bData.group_data || bData.group_data.length === 0) {
+                if (!isBranchExpanded || !bData.principals || bData.principals.length === 0) {
                     visibleRows.push({
-                        key: branchId,
-                        buCell: { isSkip: true },
+                        key: branchId, buCell: { isSkip: true },
                         branchCell: { id: branchId, label: bData.branch, isExpanded: false, rowSpan: 1 },
-                        groupCell: { isPadding: true }, dateCell: { isPadding: true },
+                        princCell: { isPadding: true }, brandCell: { isPadding: true }, itemCell: { isPadding: true }, dateCell: { isPadding: true },
                         avgCost: bData.avg_cost
                     });
                 } else {
                     const branchStartIdx = visibleRows.length;
-                    bData.group_data.forEach(gData => {
-                        const groupId = `${branchId}::${gData.name}`;
-                        const isGroupExpanded = !!expandedNodes[groupId];
+                    bData.principals.forEach(pData => {
+                        const princId = `${branchId}::${pData.principal}`;
+                        const isPrincExpanded = !!expandedNodes[princId];
 
-                        if (!isGroupExpanded || !gData.dates || gData.dates.length === 0) {
+                        if (!isPrincExpanded || !pData.brands || pData.brands.length === 0) {
                             visibleRows.push({
-                                key: groupId,
-                                buCell: { isSkip: true }, branchCell: { isSkip: true },
-                                groupCell: { id: groupId, label: gData.name, isExpanded: false, rowSpan: 1 },
-                                dateCell: { isPadding: true },
-                                avgCost: gData.avg_cost
+                                key: princId, buCell: { isSkip: true }, branchCell: { isSkip: true },
+                                princCell: { id: princId, label: pData.principal, isExpanded: false, rowSpan: 1 },
+                                brandCell: { isPadding: true }, itemCell: { isPadding: true }, dateCell: { isPadding: true },
+                                avgCost: pData.avg_cost
                             });
                         } else {
-                            const groupStartIdx = visibleRows.length;
-                            gData.dates.forEach(dData => {
-                                const dateId = `${groupId}::${dData.date}`;
-                                visibleRows.push({
-                                    key: dateId,
-                                    buCell: { isSkip: true }, branchCell: { isSkip: true }, groupCell: { isSkip: true },
-                                    dateCell: { id: dateId, label: dData.date, rowSpan: 1 },
-                                    avgCost: dData.avg_cost
-                                });
+                            const princStartIdx = visibleRows.length;
+                            pData.brands.forEach(brData => {
+                                const brandId = `${princId}::${brData.brand}`;
+                                const isBrandExpanded = !!expandedNodes[brandId];
+
+                                if (!isBrandExpanded || !brData.items || brData.items.length === 0) {
+                                    visibleRows.push({
+                                        key: brandId, buCell: { isSkip: true }, branchCell: { isSkip: true }, princCell: { isSkip: true },
+                                        brandCell: { id: brandId, label: brData.brand, isExpanded: false, rowSpan: 1 },
+                                        itemCell: { isPadding: true }, dateCell: { isPadding: true },
+                                        avgCost: brData.avg_cost
+                                    });
+                                } else {
+                                    const brandStartIdx = visibleRows.length;
+                                    brData.items.forEach(iData => {
+                                        const itemId = `${brandId}::${iData.item_name}`;
+                                        const isItemExpanded = !!expandedNodes[itemId];
+
+                                        if (!isItemExpanded || !iData.dates || iData.dates.length === 0) {
+                                            visibleRows.push({
+                                                key: itemId, buCell: { isSkip: true }, branchCell: { isSkip: true }, princCell: { isSkip: true }, brandCell: { isSkip: true },
+                                                itemCell: { id: itemId, label: iData.item_name, isExpanded: false, rowSpan: 1 },
+                                                dateCell: { isPadding: true },
+                                                avgCost: iData.avg_cost
+                                            });
+                                        } else {
+                                            const itemStartIdx = visibleRows.length;
+                                            iData.dates.forEach(dData => {
+                                                const dateId = `${itemId}::${dData.date}`;
+                                                visibleRows.push({
+                                                    key: dateId, buCell: { isSkip: true }, branchCell: { isSkip: true }, princCell: { isSkip: true }, brandCell: { isSkip: true }, itemCell: { isSkip: true },
+                                                    dateCell: { id: dateId, label: dData.date, rowSpan: 1 },
+                                                    avgCost: dData.avg_cost
+                                                });
+                                            });
+                                            visibleRows[itemStartIdx].itemCell = { id: itemId, label: iData.item_name, isExpanded: true, rowSpan: visibleRows.length - itemStartIdx };
+                                        }
+                                    });
+                                    visibleRows[brandStartIdx].brandCell = { id: brandId, label: brData.brand, isExpanded: true, rowSpan: visibleRows.length - brandStartIdx };
+                                }
                             });
-                            visibleRows[groupStartIdx].groupCell = { id: groupId, label: gData.name, isExpanded: true, rowSpan: visibleRows.length - groupStartIdx };
+                            visibleRows[princStartIdx].princCell = { id: princId, label: pData.principal, isExpanded: true, rowSpan: visibleRows.length - princStartIdx };
                         }
                     });
                     visibleRows[branchStartIdx].branchCell = { id: branchId, label: bData.branch, isExpanded: true, rowSpan: visibleRows.length - branchStartIdx };
@@ -1851,36 +1896,13 @@ const PricingApp = () => {
                     <h2 className="text-xl font-bold text-gray-800">Allocation Overview</h2>
                     
                     <div className="flex items-center gap-2 bg-white px-2 py-1 border rounded shadow-sm">
-                        <input 
-                            type="date" 
-                            value={overviewStartDate} 
-                            onChange={(e) => setOverviewStartDate(e.target.value)}
-                            className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer"
-                        />
+                        <input type="date" value={overviewStartDate} onChange={(e) => setOverviewStartDate(e.target.value)} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer" />
                         <span className="text-gray-400">to</span>
-                        <input 
-                            type="date" 
-                            value={overviewEndDate} 
-                            onChange={(e) => setOverviewEndDate(e.target.value)}
-                            className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer"
-                        />
-                    </div>
-
-                    <div className="flex items-center gap-2 bg-white px-2 py-1 border rounded shadow-sm">
-                        <span className="text-sm font-medium text-gray-500">View By:</span>
-                        <select 
-                            value={allocationView}
-                            onChange={(e) => setAllocationView(e.target.value)}
-                            className="border-none bg-transparent text-sm font-bold text-blue-700 cursor-pointer focus:ring-0 outline-none"
-                        >
-                            <option value="principal">Principal</option>
-                            <option value="brand">Brand</option>
-                            <option value="item_name">Item Name</option>
-                        </select>
+                        <input type="date" value={overviewEndDate} onChange={(e) => setOverviewEndDate(e.target.value)} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer" />
                     </div>
                 </div>
                 <button 
-                    onClick={() => fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate, activeDashboardTab)} 
+                    onClick={() => fetchPrincipalAllocation(overviewStartDate, overviewEndDate, activeDashboardTab)} 
                     disabled={isPrincipalAllocationLoading}
                     className="text-sm px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded font-semibold transition disabled:opacity-70 disabled:cursor-not-allowed"
                 >
@@ -1894,70 +1916,55 @@ const PricingApp = () => {
                 )}
                 
                 {principalAllocationData.length === 0 ? (
-                    <div className="text-center p-6 text-gray-500 italic">No allocation data available for this view.</div>
+                    <div className="text-center p-6 text-gray-500 italic">No allocation data available for this date range.</div>
                 ) : (
                     <table className="w-full border-collapse text-xs relative">
                         <thead className={`bg-gray-100 border-b-2 border-gray-200 sticky top-0 ${activeFilterDropdown ? 'z-50' : 'z-10'}`}>
                             <tr>
-                                <th className="px-2 py-1 text-left font-bold text-teal-900 border bg-gray-100 align-middle relative w-32">
-                                    <div 
-                                        className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition"
-                                        onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'bu' ? null : 'bu')}
-                                    >
+                                <th className="px-2 py-1 text-left font-bold text-teal-900 border bg-gray-100 align-middle relative w-24">
+                                    <div className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'bu' ? null : 'bu')}>
                                         <span>BU</span>
                                         <Filter size={14} className={overviewFilters.bu.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
                                     </div>
-                                    {activeFilterDropdown === 'bu' && (
-                                        <ExcelFilterDropdown
-                                            columnKey="bu"
-                                            options={filterOptions.bu}
-                                            selectedOptions={overviewFilters.bu}
-                                            onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))}
-                                            onClose={() => setActiveFilterDropdown(null)}
-                                        />
-                                    )}
+                                    {activeFilterDropdown === 'bu' && <ExcelFilterDropdown columnKey="bu" options={filterOptions.bu} selectedOptions={overviewFilters.bu} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
                                 </th>
                                 {maxDepth >= 2 && (
-                                    <th className="px-2 py-1 text-left font-bold text-blue-900 border bg-gray-100 align-middle relative transition-all duration-300 w-40">
-                                        <div 
-                                            className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition"
-                                            onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'branch' ? null : 'branch')}
-                                        >
+                                    <th className="px-2 py-1 text-left font-bold text-blue-900 border bg-gray-100 align-middle relative transition-all duration-300 w-32">
+                                        <div className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'branch' ? null : 'branch')}>
                                             <span>{activeDashboardTab === 'third_party' ? 'To Location' : 'Branch'}</span>
                                             <Filter size={14} className={overviewFilters.branch.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
                                         </div>
-                                        {activeFilterDropdown === 'branch' && (
-                                            <ExcelFilterDropdown
-                                                columnKey="branch"
-                                                options={filterOptions.branch}
-                                                selectedOptions={overviewFilters.branch}
-                                                onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))}
-                                                onClose={() => setActiveFilterDropdown(null)}
-                                            />
-                                        )}
+                                        {activeFilterDropdown === 'branch' && <ExcelFilterDropdown columnKey="branch" options={filterOptions.branch} selectedOptions={overviewFilters.branch} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
                                     </th>
                                 )}
                                 {maxDepth >= 3 && (
-                                    <th className="px-2 py-1 text-left font-bold text-indigo-900 border bg-gray-100 align-middle relative transition-all duration-300 min-w-[200px]">
-                                        <div 
-                                            className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition"
-                                            onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'group' ? null : 'group')}
-                                        >
-                                            <span>{allocationView === 'principal' ? 'Principal' : allocationView === 'brand' ? 'Brand' : 'Item Name'}</span>
-                                            <Filter size={14} className={overviewFilters.group.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
+                                    <th className="px-2 py-1 text-left font-bold text-indigo-900 border bg-gray-100 align-middle relative transition-all duration-300 w-32">
+                                        <div className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'principal' ? null : 'principal')}>
+                                            <span>Principal</span>
+                                            <Filter size={14} className={overviewFilters.principal.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
                                         </div>
-                                        {activeFilterDropdown === 'group' && (
-                                            <ExcelFilterDropdown
-                                                columnKey="group"
-                                                options={filterOptions.group}
-                                                selectedOptions={overviewFilters.group}
-                                                onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))}
-                                                onClose={() => setActiveFilterDropdown(null)}
-                                            />
-                                        )}
+                                        {activeFilterDropdown === 'principal' && <ExcelFilterDropdown columnKey="principal" options={filterOptions.principal} selectedOptions={overviewFilters.principal} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
                                     </th>
                                 )}
-                                {maxDepth >= 4 && <th className="px-2 py-1 text-left font-bold text-gray-700 border bg-gray-100 transition-all duration-300 align-middle">Date</th>}
+                                {maxDepth >= 4 && (
+                                    <th className="px-2 py-1 text-left font-bold text-purple-900 border bg-gray-100 align-middle relative transition-all duration-300 w-32">
+                                        <div className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'brand' ? null : 'brand')}>
+                                            <span>Brand</span>
+                                            <Filter size={14} className={overviewFilters.brand.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
+                                        </div>
+                                        {activeFilterDropdown === 'brand' && <ExcelFilterDropdown columnKey="brand" options={filterOptions.brand} selectedOptions={overviewFilters.brand} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
+                                    </th>
+                                )}
+                                {maxDepth >= 5 && (
+                                    <th className="px-2 py-1 text-left font-bold text-pink-900 border bg-gray-100 align-middle relative transition-all duration-300 min-w-[150px]">
+                                        <div className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'item' ? null : 'item')}>
+                                            <span>Item Name</span>
+                                            <Filter size={14} className={overviewFilters.item.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
+                                        </div>
+                                        {activeFilterDropdown === 'item' && <ExcelFilterDropdown columnKey="item" options={filterOptions.item} selectedOptions={overviewFilters.item} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
+                                    </th>
+                                )}
+                                {maxDepth >= 6 && <th className="px-2 py-1 text-left font-bold text-gray-700 border bg-gray-100 transition-all duration-300 align-middle">Date</th>}
                                 <th 
                                     className="px-2 py-1 text-right font-bold text-gray-700 border bg-gray-100 w-28 align-middle cursor-pointer hover:bg-gray-200 transition select-none"
                                     onClick={() => {
@@ -2002,18 +2009,40 @@ const PricingApp = () => {
                                         )
                                     )}
 
-                                    {maxDepth >= 3 && !row.groupCell.isSkip && (
-                                        row.groupCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                            <td rowSpan={row.groupCell.rowSpan} onClick={() => toggleNode(row.groupCell.id)} className="border px-2 py-1 font-semibold text-indigo-800 cursor-pointer align-top bg-indigo-50/30 max-w-[200px] truncate" title={row.groupCell.label}>
+                                    {maxDepth >= 3 && !row.princCell.isSkip && (
+                                        row.princCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                            <td rowSpan={row.princCell.rowSpan} onClick={() => toggleNode(row.princCell.id)} className="border px-2 py-1 font-semibold text-indigo-800 cursor-pointer align-top bg-indigo-50/30 truncate" title={row.princCell.label}>
                                                 <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                    {row.groupCell.isExpanded ? <ChevronDown size={14} className="text-indigo-500 shrink-0"/> : <ChevronRight size={14} className="text-indigo-500 shrink-0"/>}
-                                                    <span className="truncate">{row.groupCell.label}</span>
+                                                    {row.princCell.isExpanded ? <ChevronDown size={14} className="text-indigo-500 shrink-0"/> : <ChevronRight size={14} className="text-indigo-500 shrink-0"/>}
+                                                    <span className="truncate">{row.princCell.label}</span>
                                                 </div>
                                             </td>
                                         )
                                     )}
 
-                                    {maxDepth >= 4 && !row.dateCell.isSkip && (
+                                    {maxDepth >= 4 && !row.brandCell.isSkip && (
+                                        row.brandCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                            <td rowSpan={row.brandCell.rowSpan} onClick={() => toggleNode(row.brandCell.id)} className="border px-2 py-1 font-semibold text-purple-800 cursor-pointer align-top bg-purple-50/30 truncate" title={row.brandCell.label}>
+                                                <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                    {row.brandCell.isExpanded ? <ChevronDown size={14} className="text-purple-500 shrink-0"/> : <ChevronRight size={14} className="text-purple-500 shrink-0"/>}
+                                                    <span className="truncate">{row.brandCell.label}</span>
+                                                </div>
+                                            </td>
+                                        )
+                                    )}
+
+                                    {maxDepth >= 5 && !row.itemCell.isSkip && (
+                                        row.itemCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                            <td rowSpan={row.itemCell.rowSpan} onClick={() => toggleNode(row.itemCell.id)} className="border px-2 py-1 font-semibold text-pink-800 cursor-pointer align-top bg-pink-50/30 truncate max-w-[150px]" title={row.itemCell.label}>
+                                                <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                    {row.itemCell.isExpanded ? <ChevronDown size={14} className="text-pink-500 shrink-0"/> : <ChevronRight size={14} className="text-pink-500 shrink-0"/>}
+                                                    <span className="truncate">{row.itemCell.label}</span>
+                                                </div>
+                                            </td>
+                                        )
+                                    )}
+
+                                    {maxDepth >= 6 && !row.dateCell.isSkip && (
                                         row.dateCell.isPadding ? <td className="border px-2 py-1"></td> : (
                                             <td rowSpan={row.dateCell.rowSpan} className="border px-2 py-1 text-gray-700 font-medium align-top bg-gray-50/50">
                                                 <div className="whitespace-nowrap mt-0.5 ml-4">
@@ -2094,7 +2123,7 @@ const PricingApp = () => {
                                     <button 
                                         onClick={() => {
                                             fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc);
-                                            fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate, activeDashboardTab);
+                                            fetchPrincipalAllocation(overviewStartDate, overviewEndDate, activeDashboardTab);
                                         }}
                                         disabled={isDashboardLoading || isPrincipalAllocationLoading} 
                                         className="bg-blue-600 text-white px-4 py-2 rounded transition hover:bg-blue-700 disabled:bg-gray-400 font-semibold disabled:opacity-70 disabled:cursor-not-allowed"
@@ -2220,7 +2249,7 @@ const PricingApp = () => {
                                     <button 
                                         onClick={() => {
                                             fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc);
-                                            fetchPrincipalAllocation(allocationView, overviewStartDate, overviewEndDate, activeDashboardTab);
+                                            fetchPrincipalAllocation(overviewStartDate, overviewEndDate, activeDashboardTab);
                                         }}
                                         disabled={isDashboardLoading || isPrincipalAllocationLoading} 
                                         className="bg-green-600 text-white px-4 py-2 rounded transition hover:bg-green-700 disabled:bg-gray-400 font-semibold disabled:opacity-70 disabled:cursor-not-allowed"

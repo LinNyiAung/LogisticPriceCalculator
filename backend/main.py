@@ -3009,14 +3009,13 @@ def get_combined_dashboard(
 
 @app.get("/dashboard/principal-brand-allocation")
 def get_principal_brand_allocation(
-    view_by: str = Query("principal", description="Group by: principal, brand, or item_name"),
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     user: dict = Depends(require_permission("view_dashboard"))
 ):
     """
     Independent endpoint that fetches available historical data 
-    and groups it dynamically: BU -> Branch -> (Principal|Brand|Item) -> Date.
+    and groups it dynamically: BU -> Branch -> Principal -> Brand -> Item Name -> Date.
     """
     try:
         conn = get_logistic_connection()
@@ -3052,14 +3051,9 @@ def get_principal_brand_allocation(
             for item in items:
                 bu = str(item.get("bu", "")).strip() or "UNKNOWN"
                 branch = str(item.get("branch", "")).strip() or "UNKNOWN"
-
-                # Determine the dynamic 3rd level based on the query parameter
-                if view_by == "brand":
-                    group_val = str(item.get("brand", "")).strip() or "UNKNOWN"
-                elif view_by == "item_name":
-                    group_val = str(item.get("item_name", "")).strip() or "UNKNOWN"
-                else:
-                    group_val = str(item.get("principal", "")).strip() or "UNKNOWN"
+                principal = str(item.get("principal", "")).strip() or "UNKNOWN"
+                brand = str(item.get("brand", "")).strip() or "UNKNOWN"
+                item_name = str(item.get("item_name", "")).strip() or "UNKNOWN"
 
                 try:
                     ctns = float(item.get("ctns", 0) or 0)
@@ -3069,55 +3063,87 @@ def get_principal_brand_allocation(
 
                 if ctns <= 0: continue
 
-                # Build dictionary: BU -> Branch -> Group -> Date
+                # Build dictionary: BU -> Branch -> Principal -> Brand -> Item Name -> Date
                 if bu not in hierarchy: hierarchy[bu] = {}
                 if branch not in hierarchy[bu]: hierarchy[bu][branch] = {}
-                if group_val not in hierarchy[bu][branch]:
-                    hierarchy[bu][branch][group_val] = {"ctns": 0.0, "cost": 0.0, "dates": {}}
+                if principal not in hierarchy[bu][branch]: hierarchy[bu][branch][principal] = {}
+                if brand not in hierarchy[bu][branch][principal]: hierarchy[bu][branch][principal][brand] = {}
+                if item_name not in hierarchy[bu][branch][principal][brand]:
+                    hierarchy[bu][branch][principal][brand][item_name] = {"ctns": 0.0, "cost": 0.0, "dates": {}}
                 
-                hierarchy[bu][branch][group_val]["ctns"] += ctns
-                hierarchy[bu][branch][group_val]["cost"] += cost
+                hierarchy[bu][branch][principal][brand][item_name]["ctns"] += ctns
+                hierarchy[bu][branch][principal][brand][item_name]["cost"] += cost
 
-                if target_date not in hierarchy[bu][branch][group_val]["dates"]:
-                    hierarchy[bu][branch][group_val]["dates"][target_date] = {"ctns": 0.0, "cost": 0.0}
+                if target_date not in hierarchy[bu][branch][principal][brand][item_name]["dates"]:
+                    hierarchy[bu][branch][principal][brand][item_name]["dates"][target_date] = {"ctns": 0.0, "cost": 0.0}
                 
-                hierarchy[bu][branch][group_val]["dates"][target_date]["ctns"] += ctns
-                hierarchy[bu][branch][group_val]["dates"][target_date]["cost"] += cost
+                hierarchy[bu][branch][principal][brand][item_name]["dates"][target_date]["ctns"] += ctns
+                hierarchy[bu][branch][principal][brand][item_name]["dates"][target_date]["cost"] += cost
 
         result = []
         for bu, branch_data in hierarchy.items():
             bu_total_cost = 0.0; bu_total_ctns = 0.0; bu_branches = []
             
-            for branch, group_data_dict in branch_data.items():
-                b_total_cost = 0.0; b_total_ctns = 0.0; branch_groups = []
+            for branch, princ_data in branch_data.items():
+                b_total_cost = 0.0; b_total_ctns = 0.0; branch_principals = []
                 
-                for group_val, data in group_data_dict.items():
-                    g_total_cost = data["cost"]; g_total_ctns = data["ctns"]
+                for princ, brand_data in princ_data.items():
+                    p_total_cost = 0.0; p_total_ctns = 0.0; princ_brands = []
                     
-                    g_dates = []
-                    for date, d_vals in data["dates"].items():
-                        d_avg_cost = d_vals["cost"] / d_vals["ctns"] if d_vals["ctns"] > 0 else 0
-                        g_dates.append({"date": date, "avg_cost": round(d_avg_cost, 2)})
+                    for brnd, item_data in brand_data.items():
+                        br_total_cost = 0.0; br_total_ctns = 0.0; br_items = []
+                        
+                        for itm, d_data in item_data.items():
+                            i_total_cost = d_data["cost"]; i_total_ctns = d_data["ctns"]
+                            
+                            i_dates = []
+                            for date, d_vals in d_data["dates"].items():
+                                d_avg_cost = d_vals["cost"] / d_vals["ctns"] if d_vals["ctns"] > 0 else 0
+                                i_dates.append({"date": date, "avg_cost": round(d_avg_cost, 2)})
+                            
+                            i_dates.sort(key=lambda x: x["date"], reverse=True)
+                            i_avg_cost = i_total_cost / i_total_ctns if i_total_ctns > 0 else 0
+                            
+                            br_items.append({
+                                "item_name": itm,
+                                "avg_cost": round(i_avg_cost, 2),
+                                "dates": i_dates
+                            })
+                            
+                            br_total_cost += i_total_cost
+                            br_total_ctns += i_total_ctns
+                        
+                        br_items.sort(key=lambda x: x["item_name"])
+                        br_avg_cost = br_total_cost / br_total_ctns if br_total_ctns > 0 else 0
+                        
+                        princ_brands.append({
+                            "brand": brnd,
+                            "avg_cost": round(br_avg_cost, 2),
+                            "items": br_items
+                        })
+                        
+                        p_total_cost += br_total_cost
+                        p_total_ctns += br_total_ctns
+                        
+                    princ_brands.sort(key=lambda x: x["brand"])
+                    p_avg_cost = p_total_cost / p_total_ctns if p_total_ctns > 0 else 0
                     
-                    g_dates.sort(key=lambda x: x["date"], reverse=True)
-                    g_avg_cost = g_total_cost / g_total_ctns if g_total_ctns > 0 else 0
-                    
-                    branch_groups.append({
-                        "name": group_val,
-                        "avg_cost": round(g_avg_cost, 2),
-                        "dates": g_dates
+                    branch_principals.append({
+                        "principal": princ,
+                        "avg_cost": round(p_avg_cost, 2),
+                        "brands": princ_brands
                     })
                     
-                    b_total_cost += g_total_cost
-                    b_total_ctns += g_total_ctns
+                    b_total_cost += p_total_cost
+                    b_total_ctns += p_total_ctns
                 
-                branch_groups.sort(key=lambda x: x["name"])
+                branch_principals.sort(key=lambda x: x["principal"])
                 b_avg_cost = b_total_cost / b_total_ctns if b_total_ctns > 0 else 0
                 
                 bu_branches.append({
                     "branch": branch,
                     "avg_cost": round(b_avg_cost, 2),
-                    "group_data": branch_groups
+                    "principals": branch_principals
                 })
                 
                 bu_total_cost += b_total_cost
@@ -3139,14 +3165,13 @@ def get_principal_brand_allocation(
     
 @app.get("/dashboard/third-party-allocation")
 def get_third_party_allocation(
-    view_by: str = Query("principal", description="Group by: principal, brand, or item_name"),
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     user: dict = Depends(require_permission("view_dashboard"))
 ):
     """
     Independent endpoint that fetches calculated third-party data 
-    and groups it dynamically: BU -> To_Loc (Branch) -> (Principal|Brand|Item) -> Date.
+    and groups it dynamically: BU -> To_Loc (Branch) -> Principal -> Brand -> Item Name -> Date.
     """
     try:
         conn = get_logistic_connection()
@@ -3184,14 +3209,9 @@ def get_third_party_allocation(
 
             for item in items:
                 bu = str(item.get("bu", "")).strip() or "UNKNOWN"
-                
-                # Determine the dynamic 3rd level based on the query parameter
-                if view_by == "brand":
-                    group_val = str(item.get("brand", "")).strip() or "UNKNOWN"
-                elif view_by == "item_name":
-                    group_val = str(item.get("name", "")).strip() or "UNKNOWN"
-                else:
-                    group_val = str(item.get("principal", "")).strip() or "UNKNOWN"
+                principal = str(item.get("principal", "")).strip() or "UNKNOWN"
+                brand = str(item.get("brand", "")).strip() or "UNKNOWN"
+                item_name = str(item.get("name", "")).strip() or "UNKNOWN"
 
                 try:
                     ctns = float(item.get("ctns", 0) or 0)
@@ -3201,56 +3221,87 @@ def get_third_party_allocation(
 
                 if ctns <= 0: continue
 
-                # Build dictionary: BU -> To Loc -> Group -> Date
+                # Build dictionary: BU -> To Loc -> Principal -> Brand -> Item Name -> Date
                 if bu not in hierarchy: hierarchy[bu] = {}
                 if to_loc not in hierarchy[bu]: hierarchy[bu][to_loc] = {}
-                if group_val not in hierarchy[bu][to_loc]:
-                    hierarchy[bu][to_loc][group_val] = {"ctns": 0.0, "cost": 0.0, "dates": {}}
+                if principal not in hierarchy[bu][to_loc]: hierarchy[bu][to_loc][principal] = {}
+                if brand not in hierarchy[bu][to_loc][principal]: hierarchy[bu][to_loc][principal][brand] = {}
+                if item_name not in hierarchy[bu][to_loc][principal][brand]:
+                    hierarchy[bu][to_loc][principal][brand][item_name] = {"ctns": 0.0, "cost": 0.0, "dates": {}}
                 
-                hierarchy[bu][to_loc][group_val]["ctns"] += ctns
-                hierarchy[bu][to_loc][group_val]["cost"] += cost
+                hierarchy[bu][to_loc][principal][brand][item_name]["ctns"] += ctns
+                hierarchy[bu][to_loc][principal][brand][item_name]["cost"] += cost
 
-                if target_date not in hierarchy[bu][to_loc][group_val]["dates"]:
-                    hierarchy[bu][to_loc][group_val]["dates"][target_date] = {"ctns": 0.0, "cost": 0.0}
+                if target_date not in hierarchy[bu][to_loc][principal][brand][item_name]["dates"]:
+                    hierarchy[bu][to_loc][principal][brand][item_name]["dates"][target_date] = {"ctns": 0.0, "cost": 0.0}
                 
-                hierarchy[bu][to_loc][group_val]["dates"][target_date]["ctns"] += ctns
-                hierarchy[bu][to_loc][group_val]["dates"][target_date]["cost"] += cost
+                hierarchy[bu][to_loc][principal][brand][item_name]["dates"][target_date]["ctns"] += ctns
+                hierarchy[bu][to_loc][principal][brand][item_name]["dates"][target_date]["cost"] += cost
 
         result = []
         for bu, branch_data in hierarchy.items():
             bu_total_cost = 0.0; bu_total_ctns = 0.0; bu_branches = []
             
-            for branch, group_data_dict in branch_data.items():
-                b_total_cost = 0.0; b_total_ctns = 0.0; branch_groups = []
+            for branch, princ_data in branch_data.items():
+                b_total_cost = 0.0; b_total_ctns = 0.0; branch_principals = []
                 
-                for group_val, data in group_data_dict.items():
-                    g_total_cost = data["cost"]; g_total_ctns = data["ctns"]
+                for princ, brand_data in princ_data.items():
+                    p_total_cost = 0.0; p_total_ctns = 0.0; princ_brands = []
                     
-                    g_dates = []
-                    for date, d_vals in data["dates"].items():
-                        d_avg_cost = d_vals["cost"] / d_vals["ctns"] if d_vals["ctns"] > 0 else 0
-                        g_dates.append({"date": date, "avg_cost": round(d_avg_cost, 2)})
+                    for brnd, item_data in brand_data.items():
+                        br_total_cost = 0.0; br_total_ctns = 0.0; br_items = []
+                        
+                        for itm, d_data in item_data.items():
+                            i_total_cost = d_data["cost"]; i_total_ctns = d_data["ctns"]
+                            
+                            i_dates = []
+                            for date, d_vals in d_data["dates"].items():
+                                d_avg_cost = d_vals["cost"] / d_vals["ctns"] if d_vals["ctns"] > 0 else 0
+                                i_dates.append({"date": date, "avg_cost": round(d_avg_cost, 2)})
+                            
+                            i_dates.sort(key=lambda x: x["date"], reverse=True)
+                            i_avg_cost = i_total_cost / i_total_ctns if i_total_ctns > 0 else 0
+                            
+                            br_items.append({
+                                "item_name": itm,
+                                "avg_cost": round(i_avg_cost, 2),
+                                "dates": i_dates
+                            })
+                            
+                            br_total_cost += i_total_cost
+                            br_total_ctns += i_total_ctns
+                        
+                        br_items.sort(key=lambda x: x["item_name"])
+                        br_avg_cost = br_total_cost / br_total_ctns if br_total_ctns > 0 else 0
+                        
+                        princ_brands.append({
+                            "brand": brnd,
+                            "avg_cost": round(br_avg_cost, 2),
+                            "items": br_items
+                        })
+                        
+                        p_total_cost += br_total_cost
+                        p_total_ctns += br_total_ctns
+                        
+                    princ_brands.sort(key=lambda x: x["brand"])
+                    p_avg_cost = p_total_cost / p_total_ctns if p_total_ctns > 0 else 0
                     
-                    g_dates.sort(key=lambda x: x["date"], reverse=True)
-                    g_avg_cost = g_total_cost / g_total_ctns if g_total_ctns > 0 else 0
-                    
-                    branch_groups.append({
-                        "name": group_val,
-                        "avg_cost": round(g_avg_cost, 2),
-                        "dates": g_dates
+                    branch_principals.append({
+                        "principal": princ,
+                        "avg_cost": round(p_avg_cost, 2),
+                        "brands": princ_brands
                     })
                     
-                    b_total_cost += g_total_cost
-                    b_total_ctns += g_total_ctns
+                    b_total_cost += p_total_cost
+                    b_total_ctns += p_total_ctns
                 
-                branch_groups.sort(key=lambda x: x["name"])
+                branch_principals.sort(key=lambda x: x["principal"])
                 b_avg_cost = b_total_cost / b_total_ctns if b_total_ctns > 0 else 0
                 
-                # Note: We keep the key named 'branch' so the React frontend maps it identically
                 bu_branches.append({
                     "branch": branch,
                     "avg_cost": round(b_avg_cost, 2),
-                    "group_data": branch_groups
+                    "principals": branch_principals
                 })
                 
                 bu_total_cost += b_total_cost
