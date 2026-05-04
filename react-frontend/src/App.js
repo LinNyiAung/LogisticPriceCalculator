@@ -1889,180 +1889,248 @@ const PricingApp = () => {
         }
     });
 
-    const allocationOverviewTable = (
-        <div className="mb-10 bg-white border rounded-lg shadow-sm">
-            <div className="p-4 border-b bg-gray-50 flex justify-between items-center rounded-t-lg">
-                <div className="flex flex-wrap items-center gap-4">
-                    <h2 className="text-xl font-bold text-gray-800">Allocation Overview</h2>
-                    
-                    <div className="flex items-center gap-2 bg-white px-2 py-1 border rounded shadow-sm">
-                        <input type="date" value={overviewStartDate} onChange={(e) => setOverviewStartDate(e.target.value)} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer" />
-                        <span className="text-gray-400">to</span>
-                        <input type="date" value={overviewEndDate} onChange={(e) => setOverviewEndDate(e.target.value)} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer" />
-                    </div>
-                </div>
-                <button 
-                    onClick={() => fetchPrincipalAllocation(overviewStartDate, overviewEndDate, activeDashboardTab)} 
-                    disabled={isPrincipalAllocationLoading}
-                    className="text-sm px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded font-semibold transition disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                    {isPrincipalAllocationLoading ? 'Loading...' : 'Refresh Data'}
-                </button>
-            </div>
-            
-            <div className={`overflow-auto max-h-[550px] relative ${activeFilterDropdown ? 'min-h-[300px]' : ''}`}>
-                {activeFilterDropdown && (
-                    <div className="fixed inset-0 z-40" onClick={() => setActiveFilterDropdown(null)}></div>
-                )}
-                
-                {principalAllocationData.length === 0 ? (
-                    <div className="text-center p-6 text-gray-500 italic">No allocation data available for this date range.</div>
-                ) : (
-                    <table className="w-full border-collapse text-xs relative">
-                        <thead className={`bg-gray-100 border-b-2 border-gray-200 sticky top-0 ${activeFilterDropdown ? 'z-50' : 'z-10'}`}>
-                            <tr>
-                                <th className="px-2 py-1 text-left font-bold text-teal-900 border bg-gray-100 align-middle relative w-24">
-                                    <div className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'bu' ? null : 'bu')}>
-                                        <span>BU</span>
-                                        <Filter size={14} className={overviewFilters.bu.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
-                                    </div>
-                                    {activeFilterDropdown === 'bu' && <ExcelFilterDropdown columnKey="bu" options={filterOptions.bu} selectedOptions={overviewFilters.bu} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
-                                </th>
-                                {maxDepth >= 2 && (
-                                    <th className="px-2 py-1 text-left font-bold text-blue-900 border bg-gray-100 align-middle relative transition-all duration-300 w-32">
-                                        <div className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'branch' ? null : 'branch')}>
-                                            <span>{activeDashboardTab === 'third_party' ? 'To Location' : 'Branch'}</span>
-                                            <Filter size={14} className={overviewFilters.branch.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
-                                        </div>
-                                        {activeFilterDropdown === 'branch' && <ExcelFilterDropdown columnKey="branch" options={filterOptions.branch} selectedOptions={overviewFilters.branch} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
-                                    </th>
-                                )}
-                                {maxDepth >= 3 && (
-                                    <th className="px-2 py-1 text-left font-bold text-indigo-900 border bg-gray-100 align-middle relative transition-all duration-300 w-32">
-                                        <div className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'principal' ? null : 'principal')}>
-                                            <span>Principal</span>
-                                            <Filter size={14} className={overviewFilters.principal.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
-                                        </div>
-                                        {activeFilterDropdown === 'principal' && <ExcelFilterDropdown columnKey="principal" options={filterOptions.principal} selectedOptions={overviewFilters.principal} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
-                                    </th>
-                                )}
-                                {maxDepth >= 4 && (
-                                    <th className="px-2 py-1 text-left font-bold text-purple-900 border bg-gray-100 align-middle relative transition-all duration-300 w-32">
-                                        <div className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'brand' ? null : 'brand')}>
-                                            <span>Brand</span>
-                                            <Filter size={14} className={overviewFilters.brand.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
-                                        </div>
-                                        {activeFilterDropdown === 'brand' && <ExcelFilterDropdown columnKey="brand" options={filterOptions.brand} selectedOptions={overviewFilters.brand} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
-                                    </th>
-                                )}
-                                {maxDepth >= 5 && (
-                                    <th className="px-2 py-1 text-left font-bold text-pink-900 border bg-gray-100 align-middle relative transition-all duration-300 min-w-[150px]">
-                                        <div className="flex items-center justify-between cursor-pointer hover:bg-gray-200 p-1 rounded transition" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'item' ? null : 'item')}>
-                                            <span>Item Name</span>
-                                            <Filter size={14} className={overviewFilters.item.length > 0 ? 'text-blue-600 fill-blue-100' : 'text-gray-400'} />
-                                        </div>
-                                        {activeFilterDropdown === 'item' && <ExcelFilterDropdown columnKey="item" options={filterOptions.item} selectedOptions={overviewFilters.item} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
-                                    </th>
-                                )}
-                                {maxDepth >= 6 && <th className="px-2 py-1 text-left font-bold text-gray-700 border bg-gray-100 transition-all duration-300 align-middle">Date</th>}
-                                <th 
-                                    className="px-2 py-1 text-right font-bold text-gray-700 border bg-gray-100 w-28 align-middle cursor-pointer hover:bg-gray-200 transition select-none"
-                                    onClick={() => {
-                                        if (avgCostSortOrder === null) setAvgCostSortOrder('desc');
-                                        else if (avgCostSortOrder === 'desc') setAvgCostSortOrder('asc');
-                                        else setAvgCostSortOrder(null);
-                                    }}
-                                    title="Click to sort by Avg Cost"
-                                >
-                                    <div className="flex items-center justify-end gap-1">
-                                        <span>Avg Cost</span>
-                                        <span className="text-gray-400 text-[10px] w-3 text-center">
-                                            {avgCostSortOrder === 'asc' ? '▲' : avgCostSortOrder === 'desc' ? '▼' : '⇅'}
-                                        </span>
-                                    </div>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {visibleRows.map((row) => (
-                                <tr key={row.key} className="hover:bg-gray-50 border-b transition-colors">
-                                    
-                                    {!row.buCell.isSkip && (
-                                        row.buCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                            <td rowSpan={row.buCell.rowSpan} onClick={() => toggleNode(row.buCell.id)} className="border px-2 py-1 font-bold text-teal-800 cursor-pointer align-top bg-white">
-                                                <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                    {row.buCell.isExpanded ? <ChevronDown size={14} className="text-teal-500 shrink-0"/> : <ChevronRight size={14} className="text-teal-500 shrink-0"/>}
-                                                    <span>{row.buCell.label}</span>
-                                                </div>
-                                            </td>
-                                        )
-                                    )}
-                                    
-                                    {maxDepth >= 2 && !row.branchCell.isSkip && (
-                                        row.branchCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                            <td rowSpan={row.branchCell.rowSpan} onClick={() => toggleNode(row.branchCell.id)} className="border px-2 py-1 font-semibold text-blue-800 cursor-pointer align-top bg-blue-50/30">
-                                                <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                    {row.branchCell.isExpanded ? <ChevronDown size={14} className="text-blue-500 shrink-0"/> : <ChevronRight size={14} className="text-blue-500 shrink-0"/>}
-                                                    <span>{row.branchCell.label}</span>
-                                                </div>
-                                            </td>
-                                        )
-                                    )}
+    // Helper function to format the display text of selected filters
+  const renderFilterValue = (selectedArr) => {
+      if (!selectedArr || selectedArr.length === 0) return 'All';
+      if (selectedArr.length === 1) return selectedArr[0];
+      if (selectedArr.length === 2) return `${selectedArr[0]}, ${selectedArr[1]}`;
+      return `${selectedArr[0]}, ${selectedArr[1]} +${selectedArr.length - 2}`;
+  };
 
-                                    {maxDepth >= 3 && !row.princCell.isSkip && (
-                                        row.princCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                            <td rowSpan={row.princCell.rowSpan} onClick={() => toggleNode(row.princCell.id)} className="border px-2 py-1 font-semibold text-indigo-800 cursor-pointer align-top bg-indigo-50/30 truncate" title={row.princCell.label}>
-                                                <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                    {row.princCell.isExpanded ? <ChevronDown size={14} className="text-indigo-500 shrink-0"/> : <ChevronRight size={14} className="text-indigo-500 shrink-0"/>}
-                                                    <span className="truncate">{row.princCell.label}</span>
-                                                </div>
-                                            </td>
-                                        )
-                                    )}
+  const allocationOverviewTable = (
+      <div className="mb-10 bg-white border rounded-lg shadow-sm">
+          {/* 1. Added relative and z-50 to this top bar so dropdowns sit above everything below */}
+          <div className="p-4 border-b bg-gray-50 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 rounded-t-lg relative z-50">
+              <div className="flex flex-wrap items-center gap-3 w-full">
+                  <h2 className="text-xl font-bold text-gray-800 mr-2">Allocation Overview</h2>
+                  
+                  {/* Date Range Filter */}
+                  <div className="flex items-center gap-2 bg-white px-2 py-1.5 border border-gray-300 rounded-lg shadow-sm shrink-0">
+                      <input type="date" value={overviewStartDate} onChange={(e) => setOverviewStartDate(e.target.value)} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer" />
+                      <span className="text-gray-400">to</span>
+                      <input type="date" value={overviewEndDate} onChange={(e) => setOverviewEndDate(e.target.value)} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer" />
+                  </div>
 
-                                    {maxDepth >= 4 && !row.brandCell.isSkip && (
-                                        row.brandCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                            <td rowSpan={row.brandCell.rowSpan} onClick={() => toggleNode(row.brandCell.id)} className="border px-2 py-1 font-semibold text-purple-800 cursor-pointer align-top bg-purple-50/30 truncate" title={row.brandCell.label}>
-                                                <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                    {row.brandCell.isExpanded ? <ChevronDown size={14} className="text-purple-500 shrink-0"/> : <ChevronRight size={14} className="text-purple-500 shrink-0"/>}
-                                                    <span className="truncate">{row.brandCell.label}</span>
-                                                </div>
-                                            </td>
-                                        )
-                                    )}
+                  {/* Column Filters as Dropdowns */}
+                  <div className="flex flex-wrap items-center gap-2 xl:border-l xl:pl-3 xl:ml-1 border-gray-300">
+                      
+                      {/* BU Filter */}
+                      <div className="relative">
+                          <button onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'bu' ? null : 'bu')} 
+                              className={`flex items-center justify-between gap-2 px-3 py-1 border rounded-lg shadow-sm text-sm transition w-32 ${overviewFilters.bu.length > 0 ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-300 hover:bg-gray-50'}`}>
+                              <div className="flex flex-col items-start overflow-hidden w-full">
+                                  <span className="text-[10px] text-gray-500 font-bold uppercase leading-tight">BU</span>
+                                  <span className="text-sm font-bold text-gray-800 truncate w-full text-left" title={overviewFilters.bu.length > 0 ? overviewFilters.bu.join(', ') : 'All'}>
+                                      {renderFilterValue(overviewFilters.bu)}
+                                  </span>
+                              </div>
+                              <Filter size={14} className={overviewFilters.bu.length > 0 ? 'text-blue-600 shrink-0' : 'text-gray-400 shrink-0'} />
+                          </button>
+                          {activeFilterDropdown === 'bu' && <ExcelFilterDropdown columnKey="bu" options={filterOptions.bu} selectedOptions={overviewFilters.bu} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
+                      </div>
 
-                                    {maxDepth >= 5 && !row.itemCell.isSkip && (
-                                        row.itemCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                            <td rowSpan={row.itemCell.rowSpan} onClick={() => toggleNode(row.itemCell.id)} className="border px-2 py-1 font-semibold text-pink-800 cursor-pointer align-top bg-pink-50/30 truncate max-w-[150px]" title={row.itemCell.label}>
-                                                <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                    {row.itemCell.isExpanded ? <ChevronDown size={14} className="text-pink-500 shrink-0"/> : <ChevronRight size={14} className="text-pink-500 shrink-0"/>}
-                                                    <span className="truncate">{row.itemCell.label}</span>
-                                                </div>
-                                            </td>
-                                        )
-                                    )}
+                      {/* Branch / To Location Filter */}
+                      {maxDepth >= 2 && (
+                          <div className="relative">
+                              <button onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'branch' ? null : 'branch')} 
+                                  className={`flex items-center justify-between gap-2 px-3 py-1 border rounded-lg shadow-sm text-sm transition w-36 ${overviewFilters.branch.length > 0 ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-300 hover:bg-gray-50'}`}>
+                                  <div className="flex flex-col items-start overflow-hidden w-full">
+                                      <span className="text-[10px] text-gray-500 font-bold uppercase leading-tight">{activeDashboardTab === 'third_party' ? 'To Loc' : 'Branch'}</span>
+                                      <span className="text-sm font-bold text-gray-800 truncate w-full text-left" title={overviewFilters.branch.length > 0 ? overviewFilters.branch.join(', ') : 'All'}>
+                                          {renderFilterValue(overviewFilters.branch)}
+                                      </span>
+                                  </div>
+                                  <Filter size={14} className={overviewFilters.branch.length > 0 ? 'text-blue-600 shrink-0' : 'text-gray-400 shrink-0'} />
+                              </button>
+                              {activeFilterDropdown === 'branch' && <ExcelFilterDropdown columnKey="branch" options={filterOptions.branch} selectedOptions={overviewFilters.branch} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
+                          </div>
+                      )}
 
-                                    {maxDepth >= 6 && !row.dateCell.isSkip && (
-                                        row.dateCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                            <td rowSpan={row.dateCell.rowSpan} className="border px-2 py-1 text-gray-700 font-medium align-top bg-gray-50/50">
-                                                <div className="whitespace-nowrap mt-0.5 ml-4">
-                                                    {row.dateCell.label}
-                                                </div>
-                                            </td>
-                                        )
-                                    )}
+                      {/* Principal Filter */}
+                      {maxDepth >= 3 && (
+                          <div className="relative">
+                              <button onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'principal' ? null : 'principal')} 
+                                  className={`flex items-center justify-between gap-2 px-3 py-1 border rounded-lg shadow-sm text-sm transition w-36 ${overviewFilters.principal.length > 0 ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-300 hover:bg-gray-50'}`}>
+                                  <div className="flex flex-col items-start overflow-hidden w-full">
+                                      <span className="text-[10px] text-gray-500 font-bold uppercase leading-tight">Principal</span>
+                                      <span className="text-sm font-bold text-gray-800 truncate w-full text-left" title={overviewFilters.principal.length > 0 ? overviewFilters.principal.join(', ') : 'All'}>
+                                          {renderFilterValue(overviewFilters.principal)}
+                                      </span>
+                                  </div>
+                                  <Filter size={14} className={overviewFilters.principal.length > 0 ? 'text-blue-600 shrink-0' : 'text-gray-400 shrink-0'} />
+                              </button>
+                              {activeFilterDropdown === 'principal' && <ExcelFilterDropdown columnKey="principal" options={filterOptions.principal} selectedOptions={overviewFilters.principal} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
+                          </div>
+                      )}
 
-                                    <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
-                                        <div className="mt-0.5">{row.avgCost !== null && row.avgCost !== undefined ? formatNumber(row.avgCost) : '-'}</div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
-            </div>
-        </div>
-    );
+                      {/* Brand Filter */}
+                      {maxDepth >= 4 && (
+                          <div className="relative">
+                              <button onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'brand' ? null : 'brand')} 
+                                  className={`flex items-center justify-between gap-2 px-3 py-1 border rounded-lg shadow-sm text-sm transition w-40 ${overviewFilters.brand.length > 0 ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-300 hover:bg-gray-50'}`}>
+                                  <div className="flex flex-col items-start overflow-hidden w-full">
+                                      <span className="text-[10px] text-gray-500 font-bold uppercase leading-tight">Brand</span>
+                                      <span className="text-sm font-bold text-gray-800 truncate w-full text-left" title={overviewFilters.brand.length > 0 ? overviewFilters.brand.join(', ') : 'All'}>
+                                          {renderFilterValue(overviewFilters.brand)}
+                                      </span>
+                                  </div>
+                                  <Filter size={14} className={overviewFilters.brand.length > 0 ? 'text-blue-600 shrink-0' : 'text-gray-400 shrink-0'} />
+                              </button>
+                              {activeFilterDropdown === 'brand' && <ExcelFilterDropdown columnKey="brand" options={filterOptions.brand} selectedOptions={overviewFilters.brand} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
+                          </div>
+                      )}
+
+                      {/* Item Filter */}
+                      {maxDepth >= 5 && (
+                          <div className="relative">
+                              <button onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'item' ? null : 'item')} 
+                                  className={`flex items-center justify-between gap-2 px-3 py-1 border rounded-lg shadow-sm text-sm transition w-48 ${overviewFilters.item.length > 0 ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-300 hover:bg-gray-50'}`}>
+                                  <div className="flex flex-col items-start overflow-hidden w-full">
+                                      <span className="text-[10px] text-gray-500 font-bold uppercase leading-tight">Item</span>
+                                      <span className="text-sm font-bold text-gray-800 truncate w-full text-left" title={overviewFilters.item.length > 0 ? overviewFilters.item.join(', ') : 'All'}>
+                                          {renderFilterValue(overviewFilters.item)}
+                                      </span>
+                                  </div>
+                                  <Filter size={14} className={overviewFilters.item.length > 0 ? 'text-blue-600 shrink-0' : 'text-gray-400 shrink-0'} />
+                              </button>
+                              {activeFilterDropdown === 'item' && <ExcelFilterDropdown columnKey="item" options={filterOptions.item} selectedOptions={overviewFilters.item} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
+                          </div>
+                      )}
+                      
+                      {/* Clear All Filters Button */}
+                      {(overviewFilters.bu.length > 0 || overviewFilters.branch.length > 0 || overviewFilters.principal.length > 0 || overviewFilters.brand.length > 0 || overviewFilters.item.length > 0) && (
+                           <button onClick={() => setOverviewFilters({ bu: [], branch: [], principal: [], brand: [], item: [] })} className="text-sm text-red-500 hover:text-red-700 font-semibold ml-2 underline">
+                              Clear Filters
+                           </button>
+                      )}
+                  </div>
+              </div>
+              <button 
+                  onClick={() => fetchPrincipalAllocation(overviewStartDate, overviewEndDate, activeDashboardTab)} 
+                  disabled={isPrincipalAllocationLoading}
+                  className="text-sm px-4 py-2 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg font-semibold transition disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
+              >
+                  {isPrincipalAllocationLoading ? 'Loading...' : 'Refresh Data'}
+              </button>
+          </div>
+          
+          {/* 3. Moved the invisible overlay OUT of the overflow-auto container */}
+          {activeFilterDropdown && (
+              <div className="fixed inset-0 z-40" onClick={() => setActiveFilterDropdown(null)}></div>
+          )}
+
+          <div className="overflow-auto max-h-[550px] relative">
+              {principalAllocationData.length === 0 ? (
+                  <div className="text-center p-6 text-gray-500 italic">No allocation data available for this date range.</div>
+              ) : (
+                  <table className="w-full border-collapse text-xs relative">
+                      {/* 2. Removed dynamic z-50 from thead. It now stays safely at z-10 */}
+                      <thead className="bg-gray-100 border-b-2 border-gray-200 sticky top-0 z-10">
+                          <tr>
+                              <th className="px-2 py-2 text-left font-bold text-teal-900 border bg-gray-100 align-middle w-24">BU</th>
+                              {maxDepth >= 2 && <th className="px-2 py-2 text-left font-bold text-blue-900 border bg-gray-100 align-middle transition-all duration-300 w-32">{activeDashboardTab === 'third_party' ? 'To Location' : 'Branch'}</th>}
+                              {maxDepth >= 3 && <th className="px-2 py-2 text-left font-bold text-indigo-900 border bg-gray-100 align-middle transition-all duration-300 w-32">Principal</th>}
+                              {maxDepth >= 4 && <th className="px-2 py-2 text-left font-bold text-purple-900 border bg-gray-100 align-middle transition-all duration-300 w-32">Brand</th>}
+                              {maxDepth >= 5 && <th className="px-2 py-2 text-left font-bold text-pink-900 border bg-gray-100 align-middle transition-all duration-300 min-w-[150px]">Item Name</th>}
+                              {maxDepth >= 6 && <th className="px-2 py-2 text-left font-bold text-gray-700 border bg-gray-100 transition-all duration-300 align-middle">Date</th>}
+                              <th 
+                                  className="px-2 py-2 text-right font-bold text-gray-700 border bg-gray-100 w-28 align-middle cursor-pointer hover:bg-gray-200 transition select-none"
+                                  onClick={() => {
+                                      if (avgCostSortOrder === null) setAvgCostSortOrder('desc');
+                                      else if (avgCostSortOrder === 'desc') setAvgCostSortOrder('asc');
+                                      else setAvgCostSortOrder(null);
+                                  }}
+                                  title="Click to sort by Avg Cost"
+                              >
+                                  <div className="flex items-center justify-end gap-1">
+                                      <span>Avg Cost</span>
+                                      <span className="text-gray-400 text-[10px] w-3 text-center">
+                                          {avgCostSortOrder === 'asc' ? '▲' : avgCostSortOrder === 'desc' ? '▼' : '⇅'}
+                                      </span>
+                                  </div>
+                              </th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          {visibleRows.map((row) => (
+                              <tr key={row.key} className="hover:bg-gray-50 border-b transition-colors">
+                                  
+                                  {!row.buCell.isSkip && (
+                                      row.buCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                          <td rowSpan={row.buCell.rowSpan} onClick={() => toggleNode(row.buCell.id)} className="border px-2 py-1 font-bold text-teal-800 cursor-pointer align-top bg-white">
+                                              <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                  {row.buCell.isExpanded ? <ChevronDown size={14} className="text-teal-500 shrink-0"/> : <ChevronRight size={14} className="text-teal-500 shrink-0"/>}
+                                                  <span>{row.buCell.label}</span>
+                                              </div>
+                                          </td>
+                                      )
+                                  )}
+                                  
+                                  {maxDepth >= 2 && !row.branchCell.isSkip && (
+                                      row.branchCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                          <td rowSpan={row.branchCell.rowSpan} onClick={() => toggleNode(row.branchCell.id)} className="border px-2 py-1 font-semibold text-blue-800 cursor-pointer align-top bg-blue-50/30">
+                                              <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                  {row.branchCell.isExpanded ? <ChevronDown size={14} className="text-blue-500 shrink-0"/> : <ChevronRight size={14} className="text-blue-500 shrink-0"/>}
+                                                  <span>{row.branchCell.label}</span>
+                                              </div>
+                                          </td>
+                                      )
+                                  )}
+
+                                  {maxDepth >= 3 && !row.princCell.isSkip && (
+                                      row.princCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                          <td rowSpan={row.princCell.rowSpan} onClick={() => toggleNode(row.princCell.id)} className="border px-2 py-1 font-semibold text-indigo-800 cursor-pointer align-top bg-indigo-50/30 truncate" title={row.princCell.label}>
+                                              <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                  {row.princCell.isExpanded ? <ChevronDown size={14} className="text-indigo-500 shrink-0"/> : <ChevronRight size={14} className="text-indigo-500 shrink-0"/>}
+                                                  <span className="truncate">{row.princCell.label}</span>
+                                              </div>
+                                          </td>
+                                      )
+                                  )}
+
+                                  {maxDepth >= 4 && !row.brandCell.isSkip && (
+                                      row.brandCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                          <td rowSpan={row.brandCell.rowSpan} onClick={() => toggleNode(row.brandCell.id)} className="border px-2 py-1 font-semibold text-purple-800 cursor-pointer align-top bg-purple-50/30 truncate" title={row.brandCell.label}>
+                                              <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                  {row.brandCell.isExpanded ? <ChevronDown size={14} className="text-purple-500 shrink-0"/> : <ChevronRight size={14} className="text-purple-500 shrink-0"/>}
+                                                  <span className="truncate">{row.brandCell.label}</span>
+                                              </div>
+                                          </td>
+                                      )
+                                  )}
+
+                                  {maxDepth >= 5 && !row.itemCell.isSkip && (
+                                      row.itemCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                          <td rowSpan={row.itemCell.rowSpan} onClick={() => toggleNode(row.itemCell.id)} className="border px-2 py-1 font-semibold text-pink-800 cursor-pointer align-top bg-pink-50/30 truncate max-w-[150px]" title={row.itemCell.label}>
+                                              <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
+                                                  {row.itemCell.isExpanded ? <ChevronDown size={14} className="text-pink-500 shrink-0"/> : <ChevronRight size={14} className="text-pink-500 shrink-0"/>}
+                                                  <span className="truncate">{row.itemCell.label}</span>
+                                              </div>
+                                          </td>
+                                      )
+                                  )}
+
+                                  {maxDepth >= 6 && !row.dateCell.isSkip && (
+                                      row.dateCell.isPadding ? <td className="border px-2 py-1"></td> : (
+                                          <td rowSpan={row.dateCell.rowSpan} className="border px-2 py-1 text-gray-700 font-medium align-top bg-gray-50/50">
+                                              <div className="whitespace-nowrap mt-0.5 ml-4">
+                                                  {row.dateCell.label}
+                                              </div>
+                                          </td>
+                                      )
+                                  )}
+
+                                  <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
+                                      <div className="mt-0.5">{row.avgCost !== null && row.avgCost !== undefined ? formatNumber(row.avgCost) : '-'}</div>
+                                  </td>
+                              </tr>
+                          ))}
+                      </tbody>
+                  </table>
+              )}
+          </div>
+      </div>
+  );
 
     return (
       <div className="min-h-screen bg-gray-50 p-6">
