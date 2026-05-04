@@ -1098,6 +1098,21 @@ const PricingApp = () => {
         setManualTotalCost(fullRecord.manual_total_cost || ''); 
         setAdditionalCharges(fullRecord.additional_charges || '');
         
+        // --- ADD THIS FIX HERE ---
+        // Find the matched gate to restore the calculationType state
+        const gateInfo = gates.find(g => 
+          g.gate_name === fullRecord.gate_name && 
+          g.from_loc === fullRecord.from_loc && 
+          g.to_loc === fullRecord.to_loc
+        );
+        
+        if (gateInfo) {
+            setCalculationType(gateInfo.calculation_type);
+        } else {
+            setCalculationType('');
+        }
+        // -------------------------
+
         let loadedFromPG = false;
         
         try {
