@@ -297,16 +297,9 @@ const PricingApp = () => {
   const [editingRateCart, setEditingRateCart] = useState(null);
 
   const [dailyReportDate, setDailyReportDate] = useState('');
-  const [dailyReportStartDate, setDailyReportStartDate] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-  }); 
-  const [dailyReportEndDate, setDailyReportEndDate] = useState(() => {
-    const now = new Date();
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
-  });
-  const [isDateRange, setIsDateRange] = useState(true); // Default to Date Range active
+  const [dailyReportStartDate, setDailyReportStartDate] = useState(''); 
+  const [dailyReportEndDate, setDailyReportEndDate] = useState('');
+  const [isDateRange, setIsDateRange] = useState(false);
   const [dailyReportData, setDailyReportData] = useState([]);
   const [dailyTownshipReportData, setDailyTownshipReportData] = useState([]);
   const [isDailyReportLoading, setIsDailyReportLoading] = useState(false);
@@ -1006,7 +999,6 @@ const PricingApp = () => {
     if (token && currentPage === 'daily_report' && permissions.includes('view_daily_report')) { 
         fetchDailyReport(dailyReportDate, dailyReportStartDate, dailyReportEndDate, isDateRange); 
         if(activeDailyTab === 'submitted' && submittedAllocationData.length === 0) {
-            // Pass the state dates so it filters by the default month on initial load
             fetchSubmittedAllocation(allocationStartDate, allocationEndDate);
         }
     }
