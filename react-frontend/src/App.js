@@ -142,30 +142,77 @@ const PricingApp = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
   });
 
+  // Dynamic Column Hierarchy State
+  const DEFAULT_COLUMN_ORDER = ['bu', 'branch', 'principal', 'brand', 'item', 'date'];
+  const [columnOrder, setColumnOrder] = useState(DEFAULT_COLUMN_ORDER);
+  const [showColumnReorder, setShowColumnReorder] = useState(false);
+  const [draggedCol, setDraggedCol] = useState(null);
+  const [dragOverCol, setDragOverCol] = useState(null);
+
   // Deep Excel-like Filter State for Tree Table
   const [overviewFilters, setOverviewFilters] = useState({ bu: [], branch: [], principal: [], brand: [], item: [] });
   const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
   const [avgCostSortOrder, setAvgCostSortOrder] = useState(null); 
 
-  const filterOptions = useMemo(() => {
-      const buSet = new Set(), branchSet = new Set(), princSet = new Set(), brandSet = new Set(), itemSet = new Set();
-
-      principalAllocationData.forEach(bu => {
-          buSet.add(bu.bu);
-          (bu.branches || []).forEach(b => {
-              branchSet.add(b.branch);
-              (b.principals || []).forEach(p => {
-                  princSet.add(p.principal);
-                  (p.brands || []).forEach(br => {
-                      brandSet.add(br.brand);
-                      (br.items || []).forEach(i => {
-                          itemSet.add(i.item_name);
+  // Flatten the nested API response into a list of leaf rows
+  const flattenHierarchy = (data) => {
+      const rows = [];
+      (data || []).forEach(buData => {
+          (buData.branches || []).forEach(bData => {
+              (bData.principals || []).forEach(pData => {
+                  (pData.brands || []).forEach(brData => {
+                      (brData.items || []).forEach(iData => {
+                          if ((iData.dates || []).length === 0) {
+                              rows.push({ bu: buData.bu, branch: bData.branch, principal: pData.principal, brand: brData.brand, item: iData.item_name, date: null, total_cost: iData.total_cost || 0, total_ctns: iData.total_ctns || 0 });
+                          } else {
+                              (iData.dates || []).forEach(dData => {
+                                  rows.push({ bu: buData.bu, branch: bData.branch, principal: pData.principal, brand: brData.brand, item: iData.item_name, date: dData.date, total_cost: dData.total_cost || 0, total_ctns: dData.total_ctns || 0 });
+                              });
+                          }
                       });
                   });
               });
           });
       });
+      return rows;
+  };
 
+  // Build a dynamic nested tree from flat rows based on columnOrder
+  const buildDynamicTree = (flatRows, order) => {
+      const buildNode = (rows, levelIdx) => {
+          if (levelIdx >= order.length) {
+              const tc = rows.reduce((s, r) => s + (r.total_cost || 0), 0);
+              const tn = rows.reduce((s, r) => s + (r.total_ctns || 0), 0);
+              return { avg_cost: tn > 0 ? tc / tn : 0, total_cost: tc, total_ctns: tn, children: [] };
+          }
+          const colKey = order[levelIdx];
+          const groups = {};
+          rows.forEach(row => {
+              const val = colKey === 'date' ? (row.date || '—') : (row[colKey] || '—');
+              if (!groups[val]) groups[val] = [];
+              groups[val].push(row);
+          });
+          const nodes = Object.entries(groups).map(([val, groupRows]) => {
+              const child = buildNode(groupRows, levelIdx + 1);
+              const tc = groupRows.reduce((s, r) => s + (r.total_cost || 0), 0);
+              const tn = groupRows.reduce((s, r) => s + (r.total_ctns || 0), 0);
+              const avg = tn > 0 ? tc / tn : 0;
+              return { key: val, label: val, avg_cost: Math.round(avg * 100) / 100, total_cost: tc, total_ctns: tn, children: child.children, isLeaf: levelIdx === order.length - 1 };
+          });
+          nodes.sort((a, b) => String(a.label).localeCompare(String(b.label)));
+          const tc2 = rows.reduce((s, r) => s + (r.total_cost || 0), 0);
+          const tn2 = rows.reduce((s, r) => s + (r.total_ctns || 0), 0);
+          return { avg_cost: tn2 > 0 ? tc2 / tn2 : 0, total_cost: tc2, total_ctns: tn2, children: nodes };
+      };
+      return buildNode(flatRows, 0).children;
+  };
+
+  const filterOptions = useMemo(() => {
+      const buSet = new Set(), branchSet = new Set(), princSet = new Set(), brandSet = new Set(), itemSet = new Set();
+      const flat = flattenHierarchy(principalAllocationData);
+      flat.forEach(r => {
+          buSet.add(r.bu); branchSet.add(r.branch); princSet.add(r.principal); brandSet.add(r.brand); itemSet.add(r.item);
+      });
       return {
           bu: Array.from(buSet).sort(),
           branch: Array.from(branchSet).sort(),
@@ -1725,169 +1772,93 @@ const PricingApp = () => {
     const selectedAllocRow = allocationData.find(r => r.brand === selectedAllocBrand) || allocationData[0];
     const selectedCalcRow = calculatedData.find(r => r.brand === selectedCalcBrand) || calculatedData[0];
 
-    // Calculate max depth dynamically for BU -> Branch -> Principal -> Brand -> Item -> Date
-    let maxDepth = 1;
-    Object.keys(expandedNodes).forEach(key => {
-        if (expandedNodes[key]) {
-            const parts = key.split('::');
-            maxDepth = Math.max(maxDepth, parts.length + 1);
-        }
+    // ---- Dynamic Hierarchy: flatten → filter → re-group by columnOrder ----
+    const COL_META = {
+        bu:        { label: 'BU',         filterKey: 'bu',        thClass: 'text-teal-900',   tdClass: 'font-bold text-teal-800 bg-white',        iconClass: 'text-teal-500' },
+        branch:    { label: 'Branch',      filterKey: 'branch',    thClass: 'text-blue-900',   tdClass: 'font-semibold text-blue-800 bg-blue-50/30', iconClass: 'text-blue-500' },
+        principal: { label: 'Principal',   filterKey: 'principal', thClass: 'text-indigo-900', tdClass: 'font-semibold text-indigo-800 bg-indigo-50/30', iconClass: 'text-indigo-500' },
+        brand:     { label: 'Brand',       filterKey: 'brand',     thClass: 'text-purple-900', tdClass: 'font-semibold text-purple-800 bg-purple-50/30', iconClass: 'text-purple-500' },
+        item:      { label: 'Item Name',   filterKey: 'item',      thClass: 'text-pink-900',   tdClass: 'font-semibold text-pink-800 bg-pink-50/30',   iconClass: 'text-pink-500' },
+        date:      { label: 'Date',        filterKey: null,        thClass: 'text-gray-700',   tdClass: 'text-gray-700 font-medium bg-gray-50/50',    iconClass: 'text-gray-400' },
+    };
+
+    // Flatten
+    let flatRows = flattenHierarchy(principalAllocationData);
+
+    // Apply filters
+    flatRows = flatRows.filter(r => {
+        if (overviewFilters.bu.length > 0 && !overviewFilters.bu.includes(r.bu)) return false;
+        if (overviewFilters.branch.length > 0 && !overviewFilters.branch.includes(r.branch)) return false;
+        if (overviewFilters.principal.length > 0 && !overviewFilters.principal.includes(r.principal)) return false;
+        if (overviewFilters.brand.length > 0 && !overviewFilters.brand.includes(r.brand)) return false;
+        if (overviewFilters.item.length > 0 && !overviewFilters.item.includes(r.item)) return false;
+        return true;
     });
 
-    // Filtering logic deeply nested
-    let filteredPrincipalData = principalAllocationData.map(buData => {
-        if (overviewFilters.bu.length > 0 && !overviewFilters.bu.includes(buData.bu)) return null;
+    // Build dynamic tree
+    const dynamicTree = buildDynamicTree(flatRows, columnOrder);
 
-        const filteredBranches = (buData.branches || []).map(bData => {
-            if (overviewFilters.branch.length > 0 && !overviewFilters.branch.includes(bData.branch)) return null;
+    // Build flat visible rows from dynamic tree
+    const buildVisibleRows = (nodes, levelIdx, parentId, inheritedCells) => {
+        const rows = [];
+        nodes.forEach(node => {
+            const nodeId = parentId ? `${parentId}::${node.key}` : node.key;
+            const isExpanded = !!expandedNodes[nodeId];
+            const isLastLevel = levelIdx === columnOrder.length - 1;
+            const hasChildren = node.children && node.children.length > 0;
 
-            const filteredPrincipals = (bData.principals || []).map(pData => {
-                if (overviewFilters.principal.length > 0 && !overviewFilters.principal.includes(pData.principal)) return null;
+            const cells = Array(columnOrder.length).fill(null).map((_, i) => {
+                if (i < levelIdx) return { isSkip: true };
+                if (i === levelIdx) return { id: nodeId, label: node.label, isExpanded: isExpanded && hasChildren, rowSpan: 1, isLeaf: isLastLevel || !hasChildren };
+                return { isPadding: true };
+            });
 
-                const filteredBrands = (pData.brands || []).map(brData => {
-                    if (overviewFilters.brand.length > 0 && !overviewFilters.brand.includes(brData.brand)) return null;
-
-                    const filteredItems = (brData.items || []).filter(iData => {
-                        if (overviewFilters.item.length > 0 && !overviewFilters.item.includes(iData.item_name)) return false;
-                        return true;
-                    }).map(iData => ({ ...iData, dates: [...(iData.dates || [])] }));
-
-                    if (overviewFilters.item.length > 0 && filteredItems.length === 0) return null;
-                    return { ...brData, items: filteredItems };
-                }).filter(Boolean);
-
-                if ((overviewFilters.brand.length > 0 || overviewFilters.item.length > 0) && filteredBrands.length === 0) return null;
-                return { ...pData, brands: filteredBrands };
-            }).filter(Boolean);
-
-            if ((overviewFilters.principal.length > 0 || overviewFilters.brand.length > 0 || overviewFilters.item.length > 0) && filteredPrincipals.length === 0) return null;
-            return { ...bData, principals: filteredPrincipals };
-        }).filter(Boolean);
-
-        if ((overviewFilters.branch.length > 0 || overviewFilters.principal.length > 0 || overviewFilters.brand.length > 0 || overviewFilters.item.length > 0) && filteredBranches.length === 0) return null;
-        return { ...buData, branches: filteredBranches };
-    }).filter(Boolean);
-
-    // Deep sorting logic
-    if (avgCostSortOrder) {
-        const modifier = avgCostSortOrder === 'desc' ? -1 : 1;
-        filteredPrincipalData.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
-        
-        filteredPrincipalData.forEach(bu => {
-            if (bu.branches) {
-                bu.branches.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
-                bu.branches.forEach(branch => {
-                    if (branch.principals) {
-                        branch.principals.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
-                        branch.principals.forEach(principal => {
-                            if (principal.brands) {
-                                principal.brands.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
-                                principal.brands.forEach(brand => {
-                                    if (brand.items) {
-                                        brand.items.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
-                                        brand.items.forEach(item => {
-                                            if (item.dates) item.dates.sort((a, b) => (a.avg_cost - b.avg_cost) * modifier);
-                                        });
-                                    }
-                                });
-                            }
-                        });
-                    }
-                });
+            if (!isExpanded || !hasChildren) {
+                rows.push({ key: nodeId, cells, avgCost: node.avg_cost });
+            } else {
+                const startIdx = rows.length;
+                const childRows = buildVisibleRows(node.children, levelIdx + 1, nodeId, inheritedCells);
+                childRows.forEach(r => rows.push(r));
+                // Set the rowspan for this node's cell
+                rows[startIdx].cells[levelIdx] = { id: nodeId, label: node.label, isExpanded: true, rowSpan: rows.length - startIdx };
             }
         });
-    }
 
-    const visibleRows = [];
-    
-    filteredPrincipalData.forEach(buData => {
-        const buId = buData.bu;
-        const isBuExpanded = !!expandedNodes[buId];
-
-        if (!isBuExpanded || !buData.branches || buData.branches.length === 0) {
-            visibleRows.push({
-                key: buId,
-                buCell: { id: buId, label: buData.bu, isExpanded: false, rowSpan: 1 },
-                branchCell: { isPadding: true }, princCell: { isPadding: true }, brandCell: { isPadding: true }, itemCell: { isPadding: true }, dateCell: { isPadding: true },
-                avgCost: buData.avg_cost
-            });
-        } else {
-            const buStartIdx = visibleRows.length;
-            buData.branches.forEach(bData => {
-                const branchId = `${buId}::${bData.branch}`;
-                const isBranchExpanded = !!expandedNodes[branchId];
-
-                if (!isBranchExpanded || !bData.principals || bData.principals.length === 0) {
-                    visibleRows.push({
-                        key: branchId, buCell: { isSkip: true },
-                        branchCell: { id: branchId, label: bData.branch, isExpanded: false, rowSpan: 1 },
-                        princCell: { isPadding: true }, brandCell: { isPadding: true }, itemCell: { isPadding: true }, dateCell: { isPadding: true },
-                        avgCost: bData.avg_cost
-                    });
-                } else {
-                    const branchStartIdx = visibleRows.length;
-                    bData.principals.forEach(pData => {
-                        const princId = `${branchId}::${pData.principal}`;
-                        const isPrincExpanded = !!expandedNodes[princId];
-
-                        if (!isPrincExpanded || !pData.brands || pData.brands.length === 0) {
-                            visibleRows.push({
-                                key: princId, buCell: { isSkip: true }, branchCell: { isSkip: true },
-                                princCell: { id: princId, label: pData.principal, isExpanded: false, rowSpan: 1 },
-                                brandCell: { isPadding: true }, itemCell: { isPadding: true }, dateCell: { isPadding: true },
-                                avgCost: pData.avg_cost
-                            });
-                        } else {
-                            const princStartIdx = visibleRows.length;
-                            pData.brands.forEach(brData => {
-                                const brandId = `${princId}::${brData.brand}`;
-                                const isBrandExpanded = !!expandedNodes[brandId];
-
-                                if (!isBrandExpanded || !brData.items || brData.items.length === 0) {
-                                    visibleRows.push({
-                                        key: brandId, buCell: { isSkip: true }, branchCell: { isSkip: true }, princCell: { isSkip: true },
-                                        brandCell: { id: brandId, label: brData.brand, isExpanded: false, rowSpan: 1 },
-                                        itemCell: { isPadding: true }, dateCell: { isPadding: true },
-                                        avgCost: brData.avg_cost
-                                    });
-                                } else {
-                                    const brandStartIdx = visibleRows.length;
-                                    brData.items.forEach(iData => {
-                                        const itemId = `${brandId}::${iData.item_name}`;
-                                        const isItemExpanded = !!expandedNodes[itemId];
-
-                                        if (!isItemExpanded || !iData.dates || iData.dates.length === 0) {
-                                            visibleRows.push({
-                                                key: itemId, buCell: { isSkip: true }, branchCell: { isSkip: true }, princCell: { isSkip: true }, brandCell: { isSkip: true },
-                                                itemCell: { id: itemId, label: iData.item_name, isExpanded: false, rowSpan: 1 },
-                                                dateCell: { isPadding: true },
-                                                avgCost: iData.avg_cost
-                                            });
-                                        } else {
-                                            const itemStartIdx = visibleRows.length;
-                                            iData.dates.forEach(dData => {
-                                                const dateId = `${itemId}::${dData.date}`;
-                                                visibleRows.push({
-                                                    key: dateId, buCell: { isSkip: true }, branchCell: { isSkip: true }, princCell: { isSkip: true }, brandCell: { isSkip: true }, itemCell: { isSkip: true },
-                                                    dateCell: { id: dateId, label: dData.date, rowSpan: 1 },
-                                                    avgCost: dData.avg_cost
-                                                });
-                                            });
-                                            visibleRows[itemStartIdx].itemCell = { id: itemId, label: iData.item_name, isExpanded: true, rowSpan: visibleRows.length - itemStartIdx };
-                                        }
-                                    });
-                                    visibleRows[brandStartIdx].brandCell = { id: brandId, label: brData.brand, isExpanded: true, rowSpan: visibleRows.length - brandStartIdx };
-                                }
-                            });
-                            visibleRows[princStartIdx].princCell = { id: princId, label: pData.principal, isExpanded: true, rowSpan: visibleRows.length - princStartIdx };
-                        }
-                    });
-                    visibleRows[branchStartIdx].branchCell = { id: branchId, label: bData.branch, isExpanded: true, rowSpan: visibleRows.length - branchStartIdx };
-                }
-            });
-            visibleRows[buStartIdx].buCell = { id: buId, label: buData.bu, isExpanded: true, rowSpan: visibleRows.length - buStartIdx };
+        // Apply avgCost sort
+        if (avgCostSortOrder && levelIdx === 0) {
+            const modifier = avgCostSortOrder === 'desc' ? -1 : 1;
+            // Re-sort at the tree level (already built) — simpler: rebuild with sorted nodes
         }
-    });
+
+        return rows;
+    };
+
+    // Sort tree nodes by avgCost if needed
+    const sortTree = (nodes) => {
+        if (!avgCostSortOrder) return nodes;
+        const mod = avgCostSortOrder === 'desc' ? -1 : 1;
+        return [...nodes].sort((a, b) => (a.avg_cost - b.avg_cost) * mod).map(n => ({ ...n, children: n.children ? sortTree(n.children) : [] }));
+    };
+
+    const sortedTree = sortTree(dynamicTree);
+    const visibleRows = buildVisibleRows(sortedTree, 0, '', []);
+
+    // Column reorder drag handlers
+    const handleDragStart = (col) => setDraggedCol(col);
+    const handleDragOver = (e, col) => { e.preventDefault(); setDragOverCol(col); };
+    const handleDrop = (col) => {
+        if (!draggedCol || draggedCol === col) { setDraggedCol(null); setDragOverCol(null); return; }
+        const newOrder = [...columnOrder];
+        const fromIdx = newOrder.indexOf(draggedCol);
+        const toIdx = newOrder.indexOf(col);
+        newOrder.splice(fromIdx, 1);
+        newOrder.splice(toIdx, 0, draggedCol);
+        setColumnOrder(newOrder);
+        setExpandedNodes({});
+        setDraggedCol(null);
+        setDragOverCol(null);
+    };
+    const handleDragEnd = () => { setDraggedCol(null); setDragOverCol(null); };
 
     // Helper function to format the display text of selected filters
   const renderFilterValue = (selectedArr) => {
@@ -1899,7 +1870,6 @@ const PricingApp = () => {
 
   const allocationOverviewTable = (
       <div className="mb-10 bg-white border rounded-lg shadow-sm">
-          {/* 1. Added relative and z-50 to this top bar so dropdowns sit above everything below */}
           <div className="p-4 border-b bg-gray-50 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 rounded-t-lg relative z-50">
               <div className="flex flex-wrap items-center gap-3 w-full">
                   <h2 className="text-xl font-bold text-gray-800 mr-2">Allocation Overview</h2>
@@ -1913,89 +1883,30 @@ const PricingApp = () => {
 
                   {/* Column Filters as Dropdowns */}
                   <div className="flex flex-wrap items-center gap-2 xl:border-l xl:pl-3 xl:ml-1 border-gray-300">
-                      
-                      {/* BU Filter */}
-                      <div className="relative">
-                          <button onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'bu' ? null : 'bu')} 
-                              className={`flex items-center justify-between gap-2 px-3 py-1 border rounded-lg shadow-sm text-sm transition w-32 ${overviewFilters.bu.length > 0 ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-300 hover:bg-gray-50'}`}>
-                              <div className="flex flex-col items-start overflow-hidden w-full">
-                                  <span className="text-[10px] text-gray-500 font-bold uppercase leading-tight">BU</span>
-                                  <span className="text-sm font-bold text-gray-800 truncate w-full text-left" title={overviewFilters.bu.length > 0 ? overviewFilters.bu.join(', ') : 'All'}>
-                                      {renderFilterValue(overviewFilters.bu)}
-                                  </span>
+                      {['bu','branch','principal','brand','item'].map(colKey => {
+                          const opts = filterOptions[colKey] || [];
+                          const sel = overviewFilters[colKey] || [];
+                          const label = COL_META[colKey]?.label || colKey;
+                          return (
+                              <div key={colKey} className="relative">
+                                  <button onClick={() => setActiveFilterDropdown(activeFilterDropdown === colKey ? null : colKey)} 
+                                      className={`flex items-center justify-between gap-2 px-3 py-1 border rounded-lg shadow-sm text-sm transition w-36 ${sel.length > 0 ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-300 hover:bg-gray-50'}`}>
+                                      <div className="flex flex-col items-start overflow-hidden w-full">
+                                          <span className="text-[10px] text-gray-500 font-bold uppercase leading-tight">{label}</span>
+                                          <span className="text-sm font-bold text-gray-800 truncate w-full text-left" title={sel.length > 0 ? sel.join(', ') : 'All'}>
+                                              {renderFilterValue(sel)}
+                                          </span>
+                                      </div>
+                                      <Filter size={14} className={sel.length > 0 ? 'text-blue-600 shrink-0' : 'text-gray-400 shrink-0'} />
+                                  </button>
+                                  {activeFilterDropdown === colKey && (
+                                      <ExcelFilterDropdown columnKey={colKey} options={opts} selectedOptions={sel} 
+                                          onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} 
+                                          onClose={() => setActiveFilterDropdown(null)} />
+                                  )}
                               </div>
-                              <Filter size={14} className={overviewFilters.bu.length > 0 ? 'text-blue-600 shrink-0' : 'text-gray-400 shrink-0'} />
-                          </button>
-                          {activeFilterDropdown === 'bu' && <ExcelFilterDropdown columnKey="bu" options={filterOptions.bu} selectedOptions={overviewFilters.bu} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
-                      </div>
-
-                      {/* Branch / To Location Filter */}
-                      {maxDepth >= 2 && (
-                          <div className="relative">
-                              <button onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'branch' ? null : 'branch')} 
-                                  className={`flex items-center justify-between gap-2 px-3 py-1 border rounded-lg shadow-sm text-sm transition w-36 ${overviewFilters.branch.length > 0 ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-300 hover:bg-gray-50'}`}>
-                                  <div className="flex flex-col items-start overflow-hidden w-full">
-                                      <span className="text-[10px] text-gray-500 font-bold uppercase leading-tight">{activeDashboardTab === 'third_party' ? 'To Loc' : 'Branch'}</span>
-                                      <span className="text-sm font-bold text-gray-800 truncate w-full text-left" title={overviewFilters.branch.length > 0 ? overviewFilters.branch.join(', ') : 'All'}>
-                                          {renderFilterValue(overviewFilters.branch)}
-                                      </span>
-                                  </div>
-                                  <Filter size={14} className={overviewFilters.branch.length > 0 ? 'text-blue-600 shrink-0' : 'text-gray-400 shrink-0'} />
-                              </button>
-                              {activeFilterDropdown === 'branch' && <ExcelFilterDropdown columnKey="branch" options={filterOptions.branch} selectedOptions={overviewFilters.branch} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
-                          </div>
-                      )}
-
-                      {/* Principal Filter */}
-                      {maxDepth >= 3 && (
-                          <div className="relative">
-                              <button onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'principal' ? null : 'principal')} 
-                                  className={`flex items-center justify-between gap-2 px-3 py-1 border rounded-lg shadow-sm text-sm transition w-36 ${overviewFilters.principal.length > 0 ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-300 hover:bg-gray-50'}`}>
-                                  <div className="flex flex-col items-start overflow-hidden w-full">
-                                      <span className="text-[10px] text-gray-500 font-bold uppercase leading-tight">Principal</span>
-                                      <span className="text-sm font-bold text-gray-800 truncate w-full text-left" title={overviewFilters.principal.length > 0 ? overviewFilters.principal.join(', ') : 'All'}>
-                                          {renderFilterValue(overviewFilters.principal)}
-                                      </span>
-                                  </div>
-                                  <Filter size={14} className={overviewFilters.principal.length > 0 ? 'text-blue-600 shrink-0' : 'text-gray-400 shrink-0'} />
-                              </button>
-                              {activeFilterDropdown === 'principal' && <ExcelFilterDropdown columnKey="principal" options={filterOptions.principal} selectedOptions={overviewFilters.principal} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
-                          </div>
-                      )}
-
-                      {/* Brand Filter */}
-                      {maxDepth >= 4 && (
-                          <div className="relative">
-                              <button onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'brand' ? null : 'brand')} 
-                                  className={`flex items-center justify-between gap-2 px-3 py-1 border rounded-lg shadow-sm text-sm transition w-40 ${overviewFilters.brand.length > 0 ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-300 hover:bg-gray-50'}`}>
-                                  <div className="flex flex-col items-start overflow-hidden w-full">
-                                      <span className="text-[10px] text-gray-500 font-bold uppercase leading-tight">Brand</span>
-                                      <span className="text-sm font-bold text-gray-800 truncate w-full text-left" title={overviewFilters.brand.length > 0 ? overviewFilters.brand.join(', ') : 'All'}>
-                                          {renderFilterValue(overviewFilters.brand)}
-                                      </span>
-                                  </div>
-                                  <Filter size={14} className={overviewFilters.brand.length > 0 ? 'text-blue-600 shrink-0' : 'text-gray-400 shrink-0'} />
-                              </button>
-                              {activeFilterDropdown === 'brand' && <ExcelFilterDropdown columnKey="brand" options={filterOptions.brand} selectedOptions={overviewFilters.brand} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
-                          </div>
-                      )}
-
-                      {/* Item Filter */}
-                      {maxDepth >= 5 && (
-                          <div className="relative">
-                              <button onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'item' ? null : 'item')} 
-                                  className={`flex items-center justify-between gap-2 px-3 py-1 border rounded-lg shadow-sm text-sm transition w-48 ${overviewFilters.item.length > 0 ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-300 hover:bg-gray-50'}`}>
-                                  <div className="flex flex-col items-start overflow-hidden w-full">
-                                      <span className="text-[10px] text-gray-500 font-bold uppercase leading-tight">Item</span>
-                                      <span className="text-sm font-bold text-gray-800 truncate w-full text-left" title={overviewFilters.item.length > 0 ? overviewFilters.item.join(', ') : 'All'}>
-                                          {renderFilterValue(overviewFilters.item)}
-                                      </span>
-                                  </div>
-                                  <Filter size={14} className={overviewFilters.item.length > 0 ? 'text-blue-600 shrink-0' : 'text-gray-400 shrink-0'} />
-                              </button>
-                              {activeFilterDropdown === 'item' && <ExcelFilterDropdown columnKey="item" options={filterOptions.item} selectedOptions={overviewFilters.item} onApply={(key, vals) => setOverviewFilters(prev => ({ ...prev, [key]: vals }))} onClose={() => setActiveFilterDropdown(null)} />}
-                          </div>
-                      )}
+                          );
+                      })}
                       
                       {/* Clear All Filters Button */}
                       {(overviewFilters.bu.length > 0 || overviewFilters.branch.length > 0 || overviewFilters.principal.length > 0 || overviewFilters.brand.length > 0 || overviewFilters.item.length > 0) && (
@@ -2004,6 +1915,16 @@ const PricingApp = () => {
                            </button>
                       )}
                   </div>
+
+                  {/* Column Reorder Toggle */}
+                  <button
+                      onClick={() => setShowColumnReorder(v => !v)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-semibold transition xl:border-l xl:ml-1 xl:pl-3 ${showColumnReorder ? 'bg-indigo-100 border-indigo-300 text-indigo-700' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                      title="Reorder columns"
+                  >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                      Reorder Columns
+                  </button>
               </div>
               <button 
                   onClick={() => fetchPrincipalAllocation(overviewStartDate, overviewEndDate, activeDashboardTab)} 
@@ -2013,8 +1934,37 @@ const PricingApp = () => {
                   {isPrincipalAllocationLoading ? 'Loading...' : 'Refresh Data'}
               </button>
           </div>
+
+          {/* Column Reorder Panel */}
+          {showColumnReorder && (
+              <div className="border-b bg-indigo-50 px-4 py-3 flex flex-wrap items-center gap-3">
+                  <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide shrink-0">Drag to reorder:</span>
+                  {columnOrder.map(col => (
+                      <div
+                          key={col}
+                          draggable
+                          onDragStart={() => handleDragStart(col)}
+                          onDragOver={(e) => handleDragOver(e, col)}
+                          onDrop={() => handleDrop(col)}
+                          onDragEnd={handleDragEnd}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 cursor-grab active:cursor-grabbing text-sm font-semibold select-none transition
+                              ${dragOverCol === col && draggedCol !== col ? 'border-indigo-500 bg-indigo-200 scale-105' : ''}
+                              ${draggedCol === col ? 'opacity-50 border-dashed border-gray-400 bg-gray-100' : 'border-white bg-white shadow-sm hover:shadow-md hover:border-indigo-300'}
+                              ${COL_META[col]?.thClass || 'text-gray-700'}
+                          `}
+                      >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-50"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+                          {COL_META[col]?.label || col}
+                      </div>
+                  ))}
+                  <button 
+                      onClick={() => { setColumnOrder(DEFAULT_COLUMN_ORDER); setExpandedNodes({}); }}
+                      className="text-xs text-red-500 hover:text-red-700 font-semibold underline ml-2"
+                  >Reset</button>
+              </div>
+          )}
           
-          {/* 3. Moved the invisible overlay OUT of the overflow-auto container */}
+          {/* Invisible overlay to close filter dropdowns */}
           {activeFilterDropdown && (
               <div className="fixed inset-0 z-40" onClick={() => setActiveFilterDropdown(null)}></div>
           )}
@@ -2024,15 +1974,13 @@ const PricingApp = () => {
                   <div className="text-center p-6 text-gray-500 italic">No allocation data available for this date range.</div>
               ) : (
                   <table className="w-full border-collapse text-xs relative">
-                      {/* 2. Removed dynamic z-50 from thead. It now stays safely at z-10 */}
                       <thead className="bg-gray-100 border-b-2 border-gray-200 sticky top-0 z-10">
                           <tr>
-                              <th className="px-2 py-2 text-left font-bold text-teal-900 border bg-gray-100 align-middle w-24">BU</th>
-                              {maxDepth >= 2 && <th className="px-2 py-2 text-left font-bold text-blue-900 border bg-gray-100 align-middle transition-all duration-300 w-32">{activeDashboardTab === 'third_party' ? 'To Location' : 'Branch'}</th>}
-                              {maxDepth >= 3 && <th className="px-2 py-2 text-left font-bold text-indigo-900 border bg-gray-100 align-middle transition-all duration-300 w-32">Principal</th>}
-                              {maxDepth >= 4 && <th className="px-2 py-2 text-left font-bold text-purple-900 border bg-gray-100 align-middle transition-all duration-300 w-32">Brand</th>}
-                              {maxDepth >= 5 && <th className="px-2 py-2 text-left font-bold text-pink-900 border bg-gray-100 align-middle transition-all duration-300 min-w-[150px]">Item Name</th>}
-                              {maxDepth >= 6 && <th className="px-2 py-2 text-left font-bold text-gray-700 border bg-gray-100 transition-all duration-300 align-middle">Date</th>}
+                              {columnOrder.map(col => (
+                                  <th key={col} className={`px-2 py-2 text-left font-bold border bg-gray-100 align-middle ${COL_META[col]?.thClass || ''} ${col === 'item' ? 'min-w-[150px]' : col === 'date' ? 'w-28' : 'w-28'}`}>
+                                      {col === 'branch' && activeDashboardTab === 'third_party' ? 'To Location' : COL_META[col]?.label || col}
+                                  </th>
+                              ))}
                               <th 
                                   className="px-2 py-2 text-right font-bold text-gray-700 border bg-gray-100 w-28 align-middle cursor-pointer hover:bg-gray-200 transition select-none"
                                   onClick={() => {
@@ -2054,72 +2002,33 @@ const PricingApp = () => {
                       <tbody>
                           {visibleRows.map((row) => (
                               <tr key={row.key} className="hover:bg-gray-50 border-b transition-colors">
-                                  
-                                  {!row.buCell.isSkip && (
-                                      row.buCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                          <td rowSpan={row.buCell.rowSpan} onClick={() => toggleNode(row.buCell.id)} className="border px-2 py-1 font-bold text-teal-800 cursor-pointer align-top bg-white">
-                                              <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                  {row.buCell.isExpanded ? <ChevronDown size={14} className="text-teal-500 shrink-0"/> : <ChevronRight size={14} className="text-teal-500 shrink-0"/>}
-                                                  <span>{row.buCell.label}</span>
-                                              </div>
-                                          </td>
-                                      )
-                                  )}
-                                  
-                                  {maxDepth >= 2 && !row.branchCell.isSkip && (
-                                      row.branchCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                          <td rowSpan={row.branchCell.rowSpan} onClick={() => toggleNode(row.branchCell.id)} className="border px-2 py-1 font-semibold text-blue-800 cursor-pointer align-top bg-blue-50/30">
-                                              <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                  {row.branchCell.isExpanded ? <ChevronDown size={14} className="text-blue-500 shrink-0"/> : <ChevronRight size={14} className="text-blue-500 shrink-0"/>}
-                                                  <span>{row.branchCell.label}</span>
-                                              </div>
-                                          </td>
-                                      )
-                                  )}
+                                  {row.cells.map((cell, colIdx) => {
+                                      const col = columnOrder[colIdx];
+                                      const meta = COL_META[col] || {};
+                                      const isDate = col === 'date';
 
-                                  {maxDepth >= 3 && !row.princCell.isSkip && (
-                                      row.princCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                          <td rowSpan={row.princCell.rowSpan} onClick={() => toggleNode(row.princCell.id)} className="border px-2 py-1 font-semibold text-indigo-800 cursor-pointer align-top bg-indigo-50/30 truncate" title={row.princCell.label}>
-                                              <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                  {row.princCell.isExpanded ? <ChevronDown size={14} className="text-indigo-500 shrink-0"/> : <ChevronRight size={14} className="text-indigo-500 shrink-0"/>}
-                                                  <span className="truncate">{row.princCell.label}</span>
+                                      if (cell.isSkip) return null;
+                                      if (cell.isPadding) return <td key={colIdx} className="border px-2 py-1"></td>;
+
+                                      return (
+                                          <td
+                                              key={colIdx}
+                                              rowSpan={cell.rowSpan}
+                                              onClick={!isDate && !cell.isLeaf ? () => toggleNode(cell.id) : undefined}
+                                              className={`border px-2 py-1 align-top ${meta.tdClass || ''} ${!isDate && !cell.isLeaf ? 'cursor-pointer' : ''} ${col === 'item' ? 'truncate max-w-[150px]' : ''}`}
+                                              title={cell.label}
+                                          >
+                                              <div className={`flex items-start gap-1 whitespace-nowrap mt-0.5 ${isDate ? 'ml-4' : ''}`}>
+                                                  {!isDate && !cell.isLeaf && (
+                                                      cell.isExpanded
+                                                          ? <ChevronDown size={14} className={`${meta.iconClass || 'text-gray-400'} shrink-0`} />
+                                                          : <ChevronRight size={14} className={`${meta.iconClass || 'text-gray-400'} shrink-0`} />
+                                                  )}
+                                                  <span className={col === 'item' ? 'truncate' : ''}>{cell.label}</span>
                                               </div>
                                           </td>
-                                      )
-                                  )}
-
-                                  {maxDepth >= 4 && !row.brandCell.isSkip && (
-                                      row.brandCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                          <td rowSpan={row.brandCell.rowSpan} onClick={() => toggleNode(row.brandCell.id)} className="border px-2 py-1 font-semibold text-purple-800 cursor-pointer align-top bg-purple-50/30 truncate" title={row.brandCell.label}>
-                                              <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                  {row.brandCell.isExpanded ? <ChevronDown size={14} className="text-purple-500 shrink-0"/> : <ChevronRight size={14} className="text-purple-500 shrink-0"/>}
-                                                  <span className="truncate">{row.brandCell.label}</span>
-                                              </div>
-                                          </td>
-                                      )
-                                  )}
-
-                                  {maxDepth >= 5 && !row.itemCell.isSkip && (
-                                      row.itemCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                          <td rowSpan={row.itemCell.rowSpan} onClick={() => toggleNode(row.itemCell.id)} className="border px-2 py-1 font-semibold text-pink-800 cursor-pointer align-top bg-pink-50/30 truncate max-w-[150px]" title={row.itemCell.label}>
-                                              <div className="flex items-start gap-1 whitespace-nowrap mt-0.5">
-                                                  {row.itemCell.isExpanded ? <ChevronDown size={14} className="text-pink-500 shrink-0"/> : <ChevronRight size={14} className="text-pink-500 shrink-0"/>}
-                                                  <span className="truncate">{row.itemCell.label}</span>
-                                              </div>
-                                          </td>
-                                      )
-                                  )}
-
-                                  {maxDepth >= 6 && !row.dateCell.isSkip && (
-                                      row.dateCell.isPadding ? <td className="border px-2 py-1"></td> : (
-                                          <td rowSpan={row.dateCell.rowSpan} className="border px-2 py-1 text-gray-700 font-medium align-top bg-gray-50/50">
-                                              <div className="whitespace-nowrap mt-0.5 ml-4">
-                                                  {row.dateCell.label}
-                                              </div>
-                                          </td>
-                                      )
-                                  )}
-
+                                      );
+                                  })}
                                   <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
                                       <div className="mt-0.5">{row.avgCost !== null && row.avgCost !== undefined ? formatNumber(row.avgCost) : '-'}</div>
                                   </td>

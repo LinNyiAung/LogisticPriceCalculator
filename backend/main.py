@@ -3099,7 +3099,12 @@ def get_principal_brand_allocation(
                             i_dates = []
                             for date, d_vals in d_data["dates"].items():
                                 d_avg_cost = d_vals["cost"] / d_vals["ctns"] if d_vals["ctns"] > 0 else 0
-                                i_dates.append({"date": date, "avg_cost": round(d_avg_cost, 2)})
+                                i_dates.append({
+                                    "date": date,
+                                    "avg_cost": round(d_avg_cost, 2),
+                                    "total_cost": round(d_vals["cost"], 2),
+                                    "total_ctns": round(d_vals["ctns"], 2)
+                                })
                             
                             i_dates.sort(key=lambda x: x["date"], reverse=True)
                             i_avg_cost = i_total_cost / i_total_ctns if i_total_ctns > 0 else 0
@@ -3107,6 +3112,8 @@ def get_principal_brand_allocation(
                             br_items.append({
                                 "item_name": itm,
                                 "avg_cost": round(i_avg_cost, 2),
+                                "total_cost": round(i_total_cost, 2),
+                                "total_ctns": round(i_total_ctns, 2),
                                 "dates": i_dates
                             })
                             
@@ -3119,6 +3126,8 @@ def get_principal_brand_allocation(
                         princ_brands.append({
                             "brand": brnd,
                             "avg_cost": round(br_avg_cost, 2),
+                            "total_cost": round(br_total_cost, 2),
+                            "total_ctns": round(br_total_ctns, 2),
                             "items": br_items
                         })
                         
@@ -3131,6 +3140,8 @@ def get_principal_brand_allocation(
                     branch_principals.append({
                         "principal": princ,
                         "avg_cost": round(p_avg_cost, 2),
+                        "total_cost": round(p_total_cost, 2),
+                        "total_ctns": round(p_total_ctns, 2),
                         "brands": princ_brands
                     })
                     
@@ -3143,6 +3154,8 @@ def get_principal_brand_allocation(
                 bu_branches.append({
                     "branch": branch,
                     "avg_cost": round(b_avg_cost, 2),
+                    "total_cost": round(b_total_cost, 2),
+                    "total_ctns": round(b_total_ctns, 2),
                     "principals": branch_principals
                 })
                 
@@ -3152,7 +3165,13 @@ def get_principal_brand_allocation(
             bu_branches.sort(key=lambda x: x["branch"])
             bu_avg_cost = bu_total_cost / bu_total_ctns if bu_total_ctns > 0 else 0
             
-            result.append({"bu": bu, "avg_cost": round(bu_avg_cost, 2), "branches": bu_branches})
+            result.append({
+                "bu": bu,
+                "avg_cost": round(bu_avg_cost, 2),
+                "total_cost": round(bu_total_cost, 2),
+                "total_ctns": round(bu_total_ctns, 2),
+                "branches": bu_branches
+            })
         
         result.sort(key=lambda x: x["bu"])
         return {"status": "success", "data": result}
@@ -3257,7 +3276,12 @@ def get_third_party_allocation(
                             i_dates = []
                             for date, d_vals in d_data["dates"].items():
                                 d_avg_cost = d_vals["cost"] / d_vals["ctns"] if d_vals["ctns"] > 0 else 0
-                                i_dates.append({"date": date, "avg_cost": round(d_avg_cost, 2)})
+                                i_dates.append({
+                                    "date": date,
+                                    "avg_cost": round(d_avg_cost, 2),
+                                    "total_cost": round(d_vals["cost"], 2),
+                                    "total_ctns": round(d_vals["ctns"], 2)
+                                })
                             
                             i_dates.sort(key=lambda x: x["date"], reverse=True)
                             i_avg_cost = i_total_cost / i_total_ctns if i_total_ctns > 0 else 0
@@ -3265,6 +3289,8 @@ def get_third_party_allocation(
                             br_items.append({
                                 "item_name": itm,
                                 "avg_cost": round(i_avg_cost, 2),
+                                "total_cost": round(i_total_cost, 2),
+                                "total_ctns": round(i_total_ctns, 2),
                                 "dates": i_dates
                             })
                             
@@ -3277,6 +3303,8 @@ def get_third_party_allocation(
                         princ_brands.append({
                             "brand": brnd,
                             "avg_cost": round(br_avg_cost, 2),
+                            "total_cost": round(br_total_cost, 2),
+                            "total_ctns": round(br_total_ctns, 2),
                             "items": br_items
                         })
                         
@@ -3289,6 +3317,8 @@ def get_third_party_allocation(
                     branch_principals.append({
                         "principal": princ,
                         "avg_cost": round(p_avg_cost, 2),
+                        "total_cost": round(p_total_cost, 2),
+                        "total_ctns": round(p_total_ctns, 2),
                         "brands": princ_brands
                     })
                     
@@ -3301,6 +3331,8 @@ def get_third_party_allocation(
                 bu_branches.append({
                     "branch": branch,
                     "avg_cost": round(b_avg_cost, 2),
+                    "total_cost": round(b_total_cost, 2),
+                    "total_ctns": round(b_total_ctns, 2),
                     "principals": branch_principals
                 })
                 
@@ -3310,7 +3342,13 @@ def get_third_party_allocation(
             bu_branches.sort(key=lambda x: x["branch"])
             bu_avg_cost = bu_total_cost / bu_total_ctns if bu_total_ctns > 0 else 0
             
-            result.append({"bu": bu, "avg_cost": round(bu_avg_cost, 2), "branches": bu_branches})
+            result.append({
+                "bu": bu,
+                "avg_cost": round(bu_avg_cost, 2),
+                "total_cost": round(bu_total_cost, 2),
+                "total_ctns": round(bu_total_ctns, 2),
+                "branches": bu_branches
+            })
         
         result.sort(key=lambda x: x["bu"])
         return {"status": "success", "data": result}
