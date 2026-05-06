@@ -1799,39 +1799,39 @@ const PricingApp = () => {
     const dynamicTree = buildDynamicTree(flatRows, columnOrder);
 
     // Build flat visible rows from dynamic tree
-    const buildVisibleRows = (nodes, levelIdx, parentId, inheritedCells) => {
-        const rows = [];
-        nodes.forEach(node => {
-            const nodeId = parentId ? `${parentId}::${node.key}` : node.key;
-            const isExpanded = !!expandedNodes[nodeId];
-            const isLastLevel = levelIdx === columnOrder.length - 1;
-            const hasChildren = node.children && node.children.length > 0;
+  const buildVisibleRows = (nodes, levelIdx, parentId, inheritedCells) => {
+      const rows = [];
+      nodes.forEach(node => {
+          const nodeId = parentId ? `${parentId}::${node.key}` : node.key;
+          const isExpanded = !!expandedNodes[nodeId];
+          const isLastLevel = levelIdx === columnOrder.length - 1;
+          const hasChildren = node.children && node.children.length > 0;
 
-            const cells = Array(columnOrder.length).fill(null).map((_, i) => {
-                if (i < levelIdx) return { isSkip: true };
-                if (i === levelIdx) return { id: nodeId, label: node.label, isExpanded: isExpanded && hasChildren, rowSpan: 1, isLeaf: isLastLevel || !hasChildren };
-                return { isPadding: true };
-            });
+          const cells = Array(columnOrder.length).fill(null).map((_, i) => {
+              if (i < levelIdx) return { isSkip: true };
+              if (i === levelIdx) return { id: nodeId, label: node.label, isExpanded: isExpanded && hasChildren, rowSpan: 1, isLeaf: isLastLevel || !hasChildren };
+              return { isPadding: true };
+          });
 
-            if (!isExpanded || !hasChildren) {
-                rows.push({ key: nodeId, cells, avgCost: node.avg_cost });
-            } else {
-                const startIdx = rows.length;
-                const childRows = buildVisibleRows(node.children, levelIdx + 1, nodeId, inheritedCells);
-                childRows.forEach(r => rows.push(r));
-                // Set the rowspan for this node's cell
-                rows[startIdx].cells[levelIdx] = { id: nodeId, label: node.label, isExpanded: true, rowSpan: rows.length - startIdx };
-            }
-        });
-
-        // Apply avgCost sort
-        if (avgCostSortOrder && levelIdx === 0) {
-            const modifier = avgCostSortOrder === 'desc' ? -1 : 1;
-            // Re-sort at the tree level (already built) — simpler: rebuild with sorted nodes
-        }
-
-        return rows;
-    };
+          if (!isExpanded || !hasChildren) {
+              // CHANGE HERE: Extract totalCost and totalCtns from the node
+              rows.push({ 
+                  key: nodeId, 
+                  cells, 
+                  avgCost: node.avg_cost,
+                  totalCost: node.total_cost, 
+                  totalCtns: node.total_ctns 
+              });
+          } else {
+              const startIdx = rows.length;
+              const childRows = buildVisibleRows(node.children, levelIdx + 1, nodeId, inheritedCells);
+              childRows.forEach(r => rows.push(r));
+              // Set the rowspan for this node's cell
+              rows[startIdx].cells[levelIdx] = { id: nodeId, label: node.label, isExpanded: true, rowSpan: rows.length - startIdx };
+          }
+      });
+      return rows;
+  };
 
     // Sort tree nodes by avgCost if needed
     const sortTree = (nodes) => {
@@ -1975,66 +1975,84 @@ const PricingApp = () => {
               ) : (
                   <table className="w-full border-collapse text-xs relative">
                       <thead className="bg-gray-100 border-b-2 border-gray-200 sticky top-0 z-10">
-                          <tr>
-                              {columnOrder.map(col => (
-                                  <th key={col} className={`px-2 py-2 text-left font-bold border bg-gray-100 align-middle ${COL_META[col]?.thClass || ''} ${col === 'item' ? 'min-w-[150px]' : col === 'date' ? 'w-28' : 'w-28'}`}>
-                                      {col === 'branch' && activeDashboardTab === 'third_party' ? 'To Location' : COL_META[col]?.label || col}
-                                  </th>
-                              ))}
-                              <th 
-                                  className="px-2 py-2 text-right font-bold text-gray-700 border bg-gray-100 w-28 align-middle cursor-pointer hover:bg-gray-200 transition select-none"
-                                  onClick={() => {
-                                      if (avgCostSortOrder === null) setAvgCostSortOrder('desc');
-                                      else if (avgCostSortOrder === 'desc') setAvgCostSortOrder('asc');
-                                      else setAvgCostSortOrder(null);
-                                  }}
-                                  title="Click to sort by Avg Cost"
-                              >
-                                  <div className="flex items-center justify-end gap-1">
-                                      <span>Avg Cost</span>
-                                      <span className="text-gray-400 text-[10px] w-3 text-center">
-                                          {avgCostSortOrder === 'asc' ? '▲' : avgCostSortOrder === 'desc' ? '▼' : '⇅'}
-                                      </span>
-                                  </div>
-                              </th>
-                          </tr>
-                      </thead>
+                        <tr>
+                            {columnOrder.map(col => (
+                                <th key={col} className={`px-2 py-2 text-left font-bold border bg-gray-100 align-middle ${COL_META[col]?.thClass || ''} ${col === 'item' ? 'min-w-[150px]' : col === 'date' ? 'w-28' : 'w-28'}`}>
+                                    {col === 'branch' && activeDashboardTab === 'third_party' ? 'To Location' : COL_META[col]?.label || col}
+                                </th>
+                            ))}
+                            
+                            {/* ADDED HEADERS: Total Cartons and Total Allocated Cost */}
+                            <th className="px-2 py-2 text-right font-bold text-gray-700 border bg-gray-100 w-28 align-middle">
+                                Total Cartons
+                            </th>
+                            <th className="px-2 py-2 text-right font-bold text-gray-700 border bg-gray-100 w-32 align-middle">
+                                Total Allocated Cost
+                            </th>
+
+                            <th 
+                                className="px-2 py-2 text-right font-bold text-gray-700 border bg-gray-100 w-28 align-middle cursor-pointer hover:bg-gray-200 transition select-none"
+                                onClick={() => {
+                                    if (avgCostSortOrder === null) setAvgCostSortOrder('desc');
+                                    else if (avgCostSortOrder === 'desc') setAvgCostSortOrder('asc');
+                                    else setAvgCostSortOrder(null);
+                                }}
+                                title="Click to sort by Avg Cost"
+                            >
+                                <div className="flex items-center justify-end gap-1">
+                                    <span>Avg Cost</span>
+                                    <span className="text-gray-400 text-[10px] w-3 text-center">
+                                        {avgCostSortOrder === 'asc' ? '▲' : avgCostSortOrder === 'desc' ? '▼' : '⇅'}
+                                    </span>
+                                </div>
+                            </th>
+                        </tr>
+                    </thead>
                       <tbody>
-                          {visibleRows.map((row) => (
-                              <tr key={row.key} className="hover:bg-gray-50 border-b transition-colors">
-                                  {row.cells.map((cell, colIdx) => {
-                                      const col = columnOrder[colIdx];
-                                      const meta = COL_META[col] || {};
-                                      const isDate = col === 'date';
+                        {visibleRows.map((row) => (
+                            <tr key={row.key} className="hover:bg-gray-50 border-b transition-colors">
+                                {row.cells.map((cell, colIdx) => {
+                                    const col = columnOrder[colIdx];
+                                    const meta = COL_META[col] || {};
+                                    const isDate = col === 'date';
 
-                                      if (cell.isSkip) return null;
-                                      if (cell.isPadding) return <td key={colIdx} className="border px-2 py-1"></td>;
+                                    if (cell.isSkip) return null;
+                                    if (cell.isPadding) return <td key={colIdx} className="border px-2 py-1"></td>;
 
-                                      return (
-                                          <td
-                                              key={colIdx}
-                                              rowSpan={cell.rowSpan}
-                                              onClick={!isDate && !cell.isLeaf ? () => toggleNode(cell.id) : undefined}
-                                              className={`border px-2 py-1 align-top ${meta.tdClass || ''} ${!isDate && !cell.isLeaf ? 'cursor-pointer' : ''} ${col === 'item' ? 'truncate max-w-[150px]' : ''}`}
-                                              title={cell.label}
-                                          >
-                                              <div className={`flex items-start gap-1 whitespace-nowrap mt-0.5 ${isDate ? 'ml-4' : ''}`}>
-                                                  {!isDate && !cell.isLeaf && (
-                                                      cell.isExpanded
-                                                          ? <ChevronDown size={14} className={`${meta.iconClass || 'text-gray-400'} shrink-0`} />
-                                                          : <ChevronRight size={14} className={`${meta.iconClass || 'text-gray-400'} shrink-0`} />
-                                                  )}
-                                                  <span className={col === 'item' ? 'truncate' : ''}>{cell.label}</span>
-                                              </div>
-                                          </td>
-                                      );
-                                  })}
-                                  <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
-                                      <div className="mt-0.5">{row.avgCost !== null && row.avgCost !== undefined ? formatNumber(row.avgCost) : '-'}</div>
-                                  </td>
-                              </tr>
-                          ))}
-                      </tbody>
+                                    return (
+                                        <td
+                                            key={colIdx}
+                                            rowSpan={cell.rowSpan}
+                                            onClick={!isDate && !cell.isLeaf ? () => toggleNode(cell.id) : undefined}
+                                            className={`border px-2 py-1 align-top ${meta.tdClass || ''} ${!isDate && !cell.isLeaf ? 'cursor-pointer' : ''} ${col === 'item' ? 'truncate max-w-[150px]' : ''}`}
+                                            title={cell.label}
+                                        >
+                                            <div className={`flex items-start gap-1 whitespace-nowrap mt-0.5 ${isDate ? 'ml-4' : ''}`}>
+                                                {!isDate && !cell.isLeaf && (
+                                                    cell.isExpanded
+                                                        ? <ChevronDown size={14} className={`${meta.iconClass || 'text-gray-400'} shrink-0`} />
+                                                        : <ChevronRight size={14} className={`${meta.iconClass || 'text-gray-400'} shrink-0`} />
+                                                )}
+                                                <span className={col === 'item' ? 'truncate' : ''}>{cell.label}</span>
+                                            </div>
+                                        </td>
+                                    );
+                                })}
+                                
+                                {/* ADDED CELLS: Formatted Cartons and Cost */}
+                                <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
+                                    <div className="mt-0.5">{row.totalCtns !== null && row.totalCtns !== undefined ? formatNumber(row.totalCtns) : '-'}</div>
+                                </td>
+                                <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
+                                    <div className="mt-0.5">{row.totalCost !== null && row.totalCost !== undefined ? formatNumber(row.totalCost) : '-'}</div>
+                                </td>
+                                
+                                <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
+                                    <div className="mt-0.5">{row.avgCost !== null && row.avgCost !== undefined ? formatNumber(row.avgCost) : '-'}</div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
                   </table>
               )}
           </div>
