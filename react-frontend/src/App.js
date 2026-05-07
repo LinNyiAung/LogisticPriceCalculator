@@ -2105,14 +2105,6 @@ const PricingApp = () => {
                                 </th>
                             ))}
                             
-                            {/* ADDED HEADERS: Total Cartons and Total Allocated Cost */}
-                            <th className="px-2 py-2 text-right font-bold text-gray-700 border bg-gray-100 w-28 align-middle">
-                                Total Cartons
-                            </th>
-                            <th className="px-2 py-2 text-right font-bold text-gray-700 border bg-gray-100 w-32 align-middle">
-                                Total Allocated Cost
-                            </th>
-
                             <th 
                                 className="px-2 py-2 text-right font-bold text-gray-700 border bg-gray-100 w-28 align-middle cursor-pointer hover:bg-gray-200 transition select-none"
                                 onClick={() => {
@@ -2128,6 +2120,12 @@ const PricingApp = () => {
                                         {avgCostSortOrder === 'asc' ? '▲' : avgCostSortOrder === 'desc' ? '▼' : '⇅'}
                                     </span>
                                 </div>
+                            </th>
+                            <th className="px-2 py-2 text-right font-bold text-gray-700 border bg-gray-100 w-28 align-middle">
+                                Total Cartons
+                            </th>
+                            <th className="px-2 py-2 text-right font-bold text-gray-700 border bg-gray-100 w-32 align-middle">
+                                Total Allocated Cost
                             </th>
                         </tr>
                     </thead>
@@ -2162,7 +2160,12 @@ const PricingApp = () => {
                                     );
                                 })}
                                 
-                                {/* ADDED CELLS: Formatted Cartons and Cost */}
+                                {/* MOVED: Avg Cost cell now comes first */}
+                                <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
+                                    <div className="mt-0.5">{row.avgCost !== null && row.avgCost !== undefined ? formatNumber(row.avgCost) : '-'}</div>
+                                </td>
+
+                                {/* MOVED: Cartons and Cost cells now come after Avg Cost */}
                                 <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
                                     <div className="mt-0.5">{row.totalCtns !== null && row.totalCtns !== undefined ? formatNumber(row.totalCtns) : '-'}</div>
                                 </td>
@@ -2170,9 +2173,6 @@ const PricingApp = () => {
                                     <div className="mt-0.5">{row.totalCost !== null && row.totalCost !== undefined ? formatNumber(row.totalCost) : '-'}</div>
                                 </td>
                                 
-                                <td className="border px-2 py-1 text-right font-medium text-gray-600 align-top">
-                                    <div className="mt-0.5">{row.avgCost !== null && row.avgCost !== undefined ? formatNumber(row.avgCost) : '-'}</div>
-                                </td>
                             </tr>
                         ))}
                     </tbody>
