@@ -184,16 +184,6 @@ def startup_db():
                 [name] TEXT UNIQUE
             )
         """)
-        
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Location_Mappings (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [gate_location] TEXT,
-                [rate_cart_location] TEXT,
-                UNIQUE([gate_location], [rate_cart_location])
-            )
-        """)
 
         # --- Branch Code Mapping Table ---
         cursor.execute("""
@@ -260,6 +250,27 @@ def startup_db():
                 FOREIGN KEY([location]) REFERENCES Rate_Cart([location])
             )
         """)
+        
+        
+        # --- Location Mapping Table ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Location_Mapping (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [to_location] TEXT UNIQUE,
+                [branch_code] TEXT
+            )
+        """)
+        
+        # Pre-seed with existing defaults to save you time
+        cursor.execute("SELECT COUNT(*) FROM Location_Mapping")
+        if cursor.fetchone()[0] == 0:
+            default_mappings = [
+                ("Yangon", "YGN"), ("Mandalay", "MDY"), ("Naypyitaw", "NPT"),
+                ("Magaway", "MGW"), ("Taunggyi", "TGI"), ("Taunggu", "TGU"),
+                ("Pathein", "PTN"), ("Mawlamyine", "MLM"), ("Bago", "BGO")
+            ]
+            cursor.executemany("INSERT INTO Location_Mapping (to_location, branch_code) VALUES (?, ?)", default_mappings)
+            
         
         # --- SEED DEFAULTS AND MIGRATE TO GRANULAR PERMISSIONS ---
         cursor.execute("SELECT COUNT(*) FROM Roles")
@@ -433,6 +444,10 @@ def cleanup_old_activity_logs():
 
 # --- Pydantic Models ---
 
+class LocationMappingItem(BaseModel):
+    to_location: str
+    branch_code: str
+
 class RateCartData(BaseModel):
     location: str
     cost: float
@@ -500,10 +515,6 @@ class CalculationSaveRequest(BaseModel):
 
 class ReferenceItem(BaseModel):
     name: str
-
-class GateRateCartMappingCreate(BaseModel):
-    gate_location: str
-    rate_cart_location: str
 
 class UserCreate(BaseModel):
     username: str
@@ -1716,49 +1727,46 @@ def delete_ref_channel(name: str, user: dict = Depends(require_permission("delet
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
     
     
-@app.get("/references/gate-ratecart-mappings")
-def get_ref_Location_Mappings():
+    
+@app.get("/references/location-mappings")
+def get_ref_location_mappings():
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, gate_location, rate_cart_location FROM Location_Mappings ORDER BY gate_location")
+        cursor.execute("SELECT to_location, branch_code FROM Location_Mapping ORDER BY to_location")
         rows = cursor.fetchall()
         conn.close()
-        return [{"id": row[0], "gate_location": row[1], "rate_cart_location": row[2]} for row in rows]
+        return [{"to_location": row[0], "branch_code": row[1]} for row in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-@app.post("/references/gate-ratecart-mappings")
-def add_ref_gate_ratecart_mapping(item: GateRateCartMappingCreate, user: dict = Depends(require_permission("add_reference"))):
+@app.post("/references/location-mappings")
+def add_ref_location_mapping(item: LocationMappingItem, user: dict = Depends(require_permission("add_reference"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
         try:
-            cursor.execute("INSERT INTO Location_Mappings (gate_location, rate_cart_location) VALUES (?, ?)", (item.gate_location, item.rate_cart_location))
+            cursor.execute("INSERT INTO Location_Mapping (to_location, branch_code) VALUES (?, ?)", (item.to_location, item.branch_code))
             conn.commit()
         except sqlite3.IntegrityError:
-            conn.close()
-            raise HTTPException(status_code=400, detail="Mapping already exists")
+            # If it already exists, update it
+            cursor.execute("UPDATE Location_Mapping SET branch_code = ? WHERE to_location = ?", (item.branch_code, item.to_location))
+            conn.commit()
         conn.close()
-        log_user_activity(user['username'], "ADD_REFERENCE", f"Added Gate-RateCart mapping: {item.gate_location} -> {item.rate_cart_location}")
-        return {"message": "Added successfully"}
-    except HTTPException: raise
+        log_user_activity(user['username'], "ADD_REFERENCE", f"Mapped {item.to_location} to {item.branch_code}")
+        return {"message": "Mapping saved successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-@app.delete("/references/gate-ratecart-mappings/{mapping_id}")
-def delete_ref_gate_ratecart_mapping(mapping_id: int, user: dict = Depends(require_permission("delete_reference"))):
+@app.delete("/references/location-mappings/{to_location}")
+def delete_ref_location_mapping(to_location: str, user: dict = Depends(require_permission("delete_reference"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM Location_Mappings WHERE id = ?", (mapping_id,))
-        if cursor.rowcount == 0:
-             conn.close()
-             raise HTTPException(status_code=404, detail="Not found")
+        cursor.execute("DELETE FROM Location_Mapping WHERE to_location = ?", (to_location,))
         conn.commit()
         conn.close()
-        log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted Gate-RateCart mapping ID: {mapping_id}")
+        log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted mapping for: {to_location}")
         return {"message": "Deleted successfully"}
-    except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 # --- Calculation History Endpoints ---
@@ -3416,6 +3424,190 @@ def get_third_party_allocation(
     except Exception as e:
         logger.error(f"Error generating third party allocation hierarchy: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating hierarchy data: {str(e)}")
+    
+    
+    
+# --- Cost Comparison Report Endpoint ---
+
+@app.get("/dashboard/cost-comparison")
+def get_cost_comparison(
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    user: dict = Depends(require_permission("view_dashboard"))
+):
+    """
+    Endpoint for the combined Logistics Cost comparison tab.
+    Merges Rate Cart (Daily Report) and Calculated Cost (Third Party) data using DocDate.
+    """
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        
+        # 1. Fetch Rate Cart Data (Already uses target_date/doc date)
+        rc_query = "SELECT target_date, item_report_json FROM Daily_Report_History WHERE 1=1"
+        rc_params = []
+        if start_date and end_date:
+            rc_query += " AND target_date BETWEEN ? AND ?"
+            rc_params.extend([start_date, end_date])
+        elif start_date:
+            rc_query += " AND target_date >= ?"
+            rc_params.append(start_date)
+        elif end_date:
+            rc_query += " AND target_date <= ?"
+            rc_params.append(end_date)
+            
+        cursor.execute(rc_query, rc_params)
+        rc_rows = cursor.fetchall()
+        
+        # 2. Fetch Calculated Cost Data
+        # We NO LONGER filter by submitted_at in SQL because we need to check the doc_date inside the JSON
+        cc_query = "SELECT submitted_at, to_loc, calculated_products FROM Calculation_History WHERE status IN ('submitted', 'claimed')"
+        cursor.execute(cc_query)
+        cc_rows = cursor.fetchall()
+        
+        # 3. Fetch Location Mappings 
+        cursor.execute("SELECT to_location, branch_code FROM Location_Mapping")
+        mapping_rows = cursor.fetchall()
+        
+        LOCATION_MAP = {}
+        DISPLAY_MAP = {} 
+        
+        for row in mapping_rows:
+            if row[0] and row[1]:
+                raw_to_loc = str(row[0]).strip()
+                raw_branch = str(row[1]).strip()
+                LOCATION_MAP[raw_to_loc.upper()] = raw_branch.upper()
+                DISPLAY_MAP[raw_branch.upper()] = raw_to_loc
+        
+        conn.close()
+        
+        comparison_dict = {}
+        
+        # --- Process Rate Cart Data ---
+        for row in rc_rows:
+            date = row[0]
+            if not date: continue
+            
+            try:
+                items = json.loads(row[1])
+            except Exception:
+                continue
+                
+            for item in items:
+                bu = str(item.get("bu", "")).strip() or "UNKNOWN"
+                branch = str(item.get("branch", "")).strip().upper() or "UNKNOWN"
+                principal = str(item.get("principal", "")).strip() or "UNKNOWN"
+                brand = str(item.get("brand", "")).strip() or "UNKNOWN"
+                item_code = str(item.get("item_code", "")).strip() or "UNKNOWN"
+                item_name = str(item.get("item_name", "")).strip() or "UNKNOWN"
+                
+                try:
+                    ctns = float(item.get("ctns", 0) or 0)
+                    cost = float(item.get("allocated_cost", 0) or 0)
+                except ValueError:
+                    continue
+                    
+                if ctns <= 0: continue
+                
+                key = (date, bu, branch, principal, brand, item_code, item_name)
+                if key not in comparison_dict:
+                    comparison_dict[key] = {"rc_ctns": 0.0, "rc_cost": 0.0, "cc_ctns": 0.0, "cc_cost": 0.0}
+                
+                comparison_dict[key]["rc_ctns"] += ctns
+                comparison_dict[key]["rc_cost"] += cost
+                
+        # --- Process Calculated Cost Data ---
+        for row in cc_rows:
+            submitted_at = row[0]
+            fallback_date = submitted_at[:10] if submitted_at else ""
+            raw_to_loc = str(row[1] or "UNKNOWN").strip().upper()
+            
+            try:
+                items = json.loads(row[2])
+            except Exception:
+                continue
+                
+            for item in items:
+                # --- NEW DOC DATE LOGIC ---
+                doc_date_raw = str(item.get("doc_date", "")).strip()
+                # Use doc_date if available, otherwise fallback to submitted_at
+                item_date = doc_date_raw[:10] if len(doc_date_raw) >= 10 else fallback_date
+                
+                if not item_date: 
+                    continue
+                    
+                # Apply Date Filtering in Python based on the exact Doc Date
+                if start_date and item_date < start_date:
+                    continue
+                if end_date and item_date > end_date:
+                    continue
+                # --------------------------
+
+                bu = str(item.get("bu", "")).strip() or "UNKNOWN"
+                branch = LOCATION_MAP.get(raw_to_loc, raw_to_loc)
+                principal = str(item.get("principal", "")).strip() or "UNKNOWN"
+                brand = str(item.get("brand", "")).strip() or "UNKNOWN"
+                item_code = str(item.get("code", "")).strip() or "UNKNOWN"
+                item_name = str(item.get("name", "")).strip() or "UNKNOWN"
+                
+                try:
+                    ctns = float(item.get("ctns", 0) or 0)
+                    cost = float(item.get("total_cost", 0) or 0)
+                except ValueError:
+                    continue
+                    
+                if ctns <= 0: continue
+                
+                # Group by item_date (doc_date) instead of submitted date
+                key = (item_date, bu, branch, principal, brand, item_code, item_name)
+                if key not in comparison_dict:
+                    comparison_dict[key] = {"rc_ctns": 0.0, "rc_cost": 0.0, "cc_ctns": 0.0, "cc_cost": 0.0}
+                    
+                comparison_dict[key]["cc_ctns"] += ctns
+                comparison_dict[key]["cc_cost"] += cost
+                
+        # --- Format Final Results ---
+        result = []
+        for key, val in comparison_dict.items():
+            date, bu, branch, principal, brand, item_code, item_name = key
+            
+            rc_avg = val["rc_cost"] / val["rc_ctns"] if val["rc_ctns"] > 0 else None
+            cc_avg = val["cc_cost"] / val["cc_ctns"] if val["cc_ctns"] > 0 else None
+            
+            if rc_avg is None and cc_avg is None:
+                continue
+                
+            total_avg = 0.0
+            if rc_avg is not None: total_avg += rc_avg
+            if cc_avg is not None: total_avg += cc_avg
+            
+            display_branch = branch
+            if branch in DISPLAY_MAP:
+                display_branch = f"{branch} / {DISPLAY_MAP[branch]}"
+                
+            result.append({
+                "date": date,
+                "bu": bu,
+                "branch": display_branch, 
+                "principal": principal,
+                "brand": brand,
+                "item_code": item_code,
+                "item_name": item_name,
+                "avg_cost_rate_cart": round(rc_avg, 2) if rc_avg is not None else None,
+                "avg_cost_calculated": round(cc_avg, 2) if cc_avg is not None else None,
+                "total_avg_cost": round(total_avg, 2)
+            })
+            
+        result.sort(key=lambda x: (x["date"], x["branch"], x["item_code"]), reverse=True)
+        
+        return {
+            "status": "success",
+            "data": result
+        }
+
+    except Exception as e:
+        logger.error(f"Error generating cost comparison report: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating comparison data: {str(e)}")
     
     
 # --- Daily Report Excel Export Endpoints ---

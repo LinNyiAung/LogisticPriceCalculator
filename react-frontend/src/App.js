@@ -127,6 +127,56 @@ const PricingApp = () => {
   const [calculatedData, setCalculatedData] = useState([]);
   const [selectedAllocBrand, setSelectedAllocBrand] = useState(''); 
   const [selectedCalcBrand, setSelectedCalcBrand] = useState('');
+
+
+
+  // NEW: Cost Comparison State
+  const [costComparisonData, setCostComparisonData] = useState([]);
+  const [isComparisonLoading, setIsComparisonLoading] = useState(false);
+  const [activeCompFilterDropdown, setActiveCompFilterDropdown] = useState(null); // Tracks open dropdown
+  const [comparisonStartDate, setComparisonStartDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [comparisonEndDate, setComparisonEndDate] = useState(() => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
+  });
+  
+  // Use arrays for multi-select Excel-style filtering
+  const [comparisonFilters, setComparisonFilters] = useState({ 
+    bu: [], branch: [], principal: [], brand: [], item_code: [], item_name: [] 
+  });
+
+
+  // Generate unique options for the Excel filters in Cost Comparison
+  const compFilterOptions = useMemo(() => {
+      const dateSet = new Set(), buSet = new Set(), branchSet = new Set();
+      const princSet = new Set(), brandSet = new Set(), codeSet = new Set(), nameSet = new Set();
+      
+      costComparisonData.forEach(r => {
+          if (r.date) dateSet.add(r.date);
+          if (r.bu) buSet.add(r.bu);
+          if (r.branch) branchSet.add(r.branch);
+          if (r.principal) princSet.add(r.principal);
+          if (r.brand) brandSet.add(r.brand);
+          if (r.item_code) codeSet.add(r.item_code);
+          if (r.item_name) nameSet.add(r.item_name);
+      });
+      
+      return {
+          date: Array.from(dateSet).sort(),
+          bu: Array.from(buSet).sort(),
+          branch: Array.from(branchSet).sort(),
+          principal: Array.from(princSet).sort(),
+          brand: Array.from(brandSet).sort(),
+          item_code: Array.from(codeSet).sort(),
+          item_name: Array.from(nameSet).sort()
+      };
+  }, [costComparisonData]);
+
+
   
   // Independent Deep Tree Table State
   const [principalAllocationData, setPrincipalAllocationData] = useState([]);
@@ -401,11 +451,9 @@ const PricingApp = () => {
   const [refChannels, setRefChannels] = useState([]); 
   const [selectedChannel, setSelectedChannel] = useState(''); 
   const [newRefValue, setNewRefValue] = useState('');
-
-
-  const [refMappings, setRefMappings] = useState([]);
-  const [newMappingGateLoc, setNewMappingGateLoc] = useState('');
-  const [newMappingRCLoc, setNewMappingRCLoc] = useState('');
+  const [refLocationMappings, setRefLocationMappings] = useState([]);
+  const [newMapToLoc, setNewMapToLoc] = useState('');
+  const [newMapBranch, setNewMapBranch] = useState('');
 
   const [showLogModal, setShowLogModal] = useState(false);
   const [logsData, setLogsData] = useState([]);
@@ -434,8 +482,12 @@ const PricingApp = () => {
     allocation: INITIAL_LOAD_COUNT,
     items: INITIAL_LOAD_COUNT,
     dailyItem: INITIAL_LOAD_COUNT,
-    dailyTownship: INITIAL_LOAD_COUNT
+    dailyTownship: INITIAL_LOAD_COUNT,
+    comparison: INITIAL_LOAD_COUNT // <-- Add this
   });
+
+  // Add the reset effect for the new filters
+  useEffect(() => { setVisibleCounts(prev => ({ ...prev, comparison: INITIAL_LOAD_COUNT })); }, [comparisonFilters]);
 
   const loadMore = (key) => {
     setVisibleCounts(prev => ({ ...prev, [key]: prev[key] + INITIAL_LOAD_COUNT }));
@@ -705,11 +757,39 @@ const PricingApp = () => {
           const chanResp = await authFetch(`${API_URL}/references/channels`);
           if (chanResp.ok) setRefChannels(await chanResp.json());
 
-          // --- ADD THIS API CALL ---
-          const mapResp = await authFetch(`${API_URL}/references/gate-ratecart-mappings`);
-          if (mapResp.ok) setRefMappings(await mapResp.json());
+          // NEW API CALL
+          const mapResp = await authFetch(`${API_URL}/references/location-mappings`);
+          if (mapResp.ok) setRefLocationMappings(await mapResp.json());
 
       } catch (error) { showNotification('Error loading reference data', 'error'); }
+  }
+
+  // Add these two functions right below addReference and deleteReference
+  const saveLocationMapping = async () => {
+      if (!newMapToLoc || !newMapBranch) { showNotification('Both fields required', 'warning'); return; }
+      setIsSaving(true);
+      try {
+          const response = await authFetch(`${API_URL}/references/location-mappings`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ to_location: newMapToLoc, branch_code: newMapBranch })
+          });
+          if(response.ok) { 
+              showNotification('Mapping saved successfully', 'success'); 
+              setNewMapToLoc(''); setNewMapBranch(''); 
+              loadReferenceData(); 
+          } else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+      finally { setIsSaving(false); }
+  }
+
+  const deleteLocationMapping = async (toLoc) => {
+      if(!window.confirm(`Delete mapping for ${toLoc}?`)) return;
+      setIsDeleting(true);
+      try {
+          const response = await authFetch(`${API_URL}/references/location-mappings/${encodeURIComponent(toLoc)}`, { method: 'DELETE' });
+          if(response.ok) { showNotification('Deleted successfully', 'success'); loadReferenceData(); }
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+      finally { setIsDeleting(false); }
   }
 
   const loadRateCarts = async () => {
@@ -750,8 +830,9 @@ const PricingApp = () => {
     }
   };
 
+// Fetches data for Rate Cart and Third Party tabs
   useEffect(() => {
-    if (currentPage === 'dashboard') {
+    if (currentPage === 'dashboard' && activeDashboardTab !== 'cost_comparison') {
         fetchPrincipalAllocation(overviewStartDate, overviewEndDate, activeDashboardTab);
         setOverviewFilters({ bu: [], branch: [], principal: [], brand: [], item: [] }); 
     }
@@ -799,6 +880,38 @@ const PricingApp = () => {
       setIsDashboardLoading(false);
     }
   };
+
+
+  const fetchCostComparison = async (start = comparisonStartDate, end = comparisonEndDate) => {
+    setIsComparisonLoading(true);
+    try {
+        let url = `${API_URL}/dashboard/cost-comparison?`;
+        if (start) url += `&start_date=${start}`;
+        if (end) url += `&end_date=${end}`;
+        
+        const response = await authFetch(url);
+        if (response.ok) {
+            const result = await response.json();
+            setCostComparisonData(result.data || []);
+        } else {
+            const error = await response.json();
+            showNotification(getErrorMessage(error), 'error');
+        }
+    } catch (error) {
+        showNotification(`Error fetching comparison data: ${error.message}`, 'error');
+    } finally {
+        setIsComparisonLoading(false);
+    }
+  };
+
+
+// Auto-fetches Cost Comparison data when dates change
+  useEffect(() => {
+      if (currentPage === 'dashboard' && activeDashboardTab === 'cost_comparison') {
+          fetchCostComparison(comparisonStartDate, comparisonEndDate);
+      }
+  }, [comparisonStartDate, comparisonEndDate, activeDashboardTab, currentPage]);
+  
 
   const fetchDailyReport = async (targetDateVal, startDateVal = '', endDateVal = '', useRange = false) => {
       setIsDailyReportLoading(true);
@@ -880,37 +993,6 @@ const PricingApp = () => {
       setIsDeleting(true);
       try {
           const response = await authFetch(`${API_URL}/references/${type}/${value}`, { method: 'DELETE' });
-          if(response.ok) loadReferenceData();
-      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
-      finally { setIsDeleting(false); }
-  }
-
-
-  // --- ADD THESE FUNCTIONS ---
-  const addMappingReference = async () => {
-      if(!newMappingGateLoc || !newMappingRCLoc) { showNotification('Please select both locations', 'error'); return; }
-      setIsSaving(true);
-      try {
-          const response = await authFetch(`${API_URL}/references/gate-ratecart-mappings`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-              body: JSON.stringify({ gate_location: newMappingGateLoc, rate_cart_location: newMappingRCLoc })
-          });
-          if(response.ok) { 
-              showNotification('Added successfully', 'success'); 
-              setNewMappingGateLoc(''); 
-              setNewMappingRCLoc(''); 
-              loadReferenceData(); 
-          } 
-          else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
-      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
-      finally { setIsSaving(false); }
-  }
-
-  const deleteMappingReference = async (id, gateLoc, rcLoc) => {
-      if(!window.confirm(`Delete mapping ${gateLoc} -> ${rcLoc}?`)) return;
-      setIsDeleting(true);
-      try {
-          const response = await authFetch(`${API_URL}/references/gate-ratecart-mappings/${id}`, { method: 'DELETE' });
           if(response.ok) loadReferenceData();
       } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
       finally { setIsDeleting(false); }
@@ -2100,6 +2182,20 @@ const PricingApp = () => {
       </div>
   );
 
+  
+    // Filter logic for Excel-style multi-select 
+    const filteredComparisonData = costComparisonData.filter(row => {
+        if (comparisonFilters.bu.length > 0 && !comparisonFilters.bu.includes(row.bu)) return false;
+        if (comparisonFilters.branch.length > 0 && !comparisonFilters.branch.includes(row.branch)) return false;
+        if (comparisonFilters.principal.length > 0 && !comparisonFilters.principal.includes(row.principal)) return false;
+        if (comparisonFilters.brand.length > 0 && !comparisonFilters.brand.includes(row.brand)) return false;
+        if (comparisonFilters.item_code.length > 0 && !comparisonFilters.item_code.includes(row.item_code)) return false;
+        if (comparisonFilters.item_name.length > 0 && !comparisonFilters.item_name.includes(row.item_name)) return false;
+        return true;
+    });
+    
+    const displayedComparison = filteredComparisonData.slice(0, visibleCounts.comparison);
+
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
@@ -2133,6 +2229,19 @@ const PricingApp = () => {
                 >
                     Third Party (Calculated Cost)
                 </button>
+
+
+                {/* NEW Cost Comparison Tab Button */}
+              <button
+                  className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${
+                      activeDashboardTab === 'cost_comparison' 
+                          ? 'border-purple-600 text-purple-600 bg-purple-50' 
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                  }`}
+                  onClick={() => setActiveDashboardTab('cost_comparison')}
+              >
+                  Cost Comparison
+              </button>
             </div>
 
             {activeDashboardTab === 'rate_cart' && (
@@ -2384,6 +2493,141 @@ const PricingApp = () => {
                         </div>
                         )}
                     </div>
+                </div>
+            )}
+
+
+            {activeDashboardTab === 'cost_comparison' && (
+                <div className="animation-fade-in bg-white border rounded-lg shadow-sm mb-10">
+                    
+                    {/* Top Filter Bar */}
+                    <div className="p-4 border-b bg-gray-50 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 rounded-t-lg relative z-50">
+                        <div className="flex flex-wrap items-center gap-3 w-full">
+                            <h2 className="text-xl font-bold text-gray-800 mr-2">Rate Cart vs Calculated Cost</h2>
+                            
+                            {/* Date Range Selector */}
+                            <div className="flex items-center gap-2 bg-white px-2 py-1.5 border border-gray-300 rounded-lg shadow-sm shrink-0">
+                                <input type="date" value={comparisonStartDate} onChange={(e) => setComparisonStartDate(e.target.value)} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer" />
+                                <span className="text-gray-400">to</span>
+                                <input type="date" value={comparisonEndDate} onChange={(e) => setComparisonEndDate(e.target.value)} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer" />
+                            </div>
+
+                            {/* Excel-Style Dropdown Filters */}
+                            <div className="flex flex-wrap items-center gap-2 xl:border-l xl:pl-3 xl:ml-1 border-gray-300">
+                                {['bu', 'branch', 'principal', 'brand', 'item_code', 'item_name'].map(colKey => {
+                                    const opts = compFilterOptions[colKey] || [];
+                                    const sel = comparisonFilters[colKey] || [];
+                                    const label = { 
+                                        bu: 'BU', branch: 'Branch/To Loc', 
+                                        principal: 'Principal', brand: 'Brand', 
+                                        item_code: 'Item Code', item_name: 'Item Name' 
+                                    }[colKey];
+                                    
+                                    return (
+                                        <div key={colKey} className="relative">
+                                            <button onClick={() => setActiveCompFilterDropdown(activeCompFilterDropdown === colKey ? null : colKey)} 
+                                                className={`flex items-center justify-between gap-2 px-3 py-1 border rounded-lg shadow-sm text-sm transition w-36 ${sel.length > 0 ? 'bg-purple-50 border-purple-300' : 'bg-white border-gray-300 hover:bg-gray-50'}`}>
+                                                <div className="flex flex-col items-start overflow-hidden w-full">
+                                                    <span className="text-[10px] text-gray-500 font-bold uppercase leading-tight">{label}</span>
+                                                    <span className="text-sm font-bold text-gray-800 truncate w-full text-left" title={sel.length > 0 ? sel.join(', ') : 'All'}>
+                                                        {renderFilterValue(sel)}
+                                                    </span>
+                                                </div>
+                                                <Filter size={14} className={sel.length > 0 ? 'text-purple-600 shrink-0' : 'text-gray-400 shrink-0'} />
+                                            </button>
+                                            
+                                            {/* Render the Dropdown Component */}
+                                            {activeCompFilterDropdown === colKey && (
+                                                <ExcelFilterDropdown 
+                                                    columnKey={colKey} 
+                                                    options={opts} 
+                                                    selectedOptions={sel} 
+                                                    onApply={(key, vals) => setComparisonFilters(prev => ({ ...prev, [key]: vals }))} 
+                                                    onClose={() => setActiveCompFilterDropdown(null)} 
+                                                />
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                                
+                                {/* Clear All Filters Button */}
+                                {(comparisonFilters.bu.length > 0 || comparisonFilters.branch.length > 0 || comparisonFilters.principal.length > 0 || comparisonFilters.brand.length > 0 || comparisonFilters.item_code.length > 0 || comparisonFilters.item_name.length > 0) && (
+                                    <button onClick={() => setComparisonFilters({ bu: [], branch: [], principal: [], brand: [], item_code: [], item_name: [] })} className="text-sm text-red-500 hover:text-red-700 font-semibold ml-2 underline">
+                                        Clear Filters
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        
+                        <button 
+                            onClick={() => fetchCostComparison(comparisonStartDate, comparisonEndDate)} 
+                            disabled={isComparisonLoading} 
+                            className="text-sm px-4 py-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg font-semibold transition disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
+                        >
+                            {isComparisonLoading ? 'Loading...' : 'Refresh Data'}
+                        </button>
+                    </div>
+
+                    {/* Invisible overlay to close filter dropdowns when clicking outside */}
+                    {activeCompFilterDropdown && (
+                        <div className="fixed inset-0 z-40" onClick={() => setActiveCompFilterDropdown(null)}></div>
+                    )}
+
+                    {/* Table Area */}
+                    <div className="overflow-x-auto relative">
+                        <table className="w-full border-collapse">
+                            <thead className="bg-gray-100 border-b-2 border-gray-200 sticky top-0 z-10">
+                                <tr>
+                                    <th className="px-2 py-2 text-left font-bold border bg-gray-100 align-middle text-gray-700">Date</th>
+                                    <th className="px-2 py-2 text-left font-bold border bg-gray-100 align-middle text-gray-700">BU</th>
+                                    <th className="px-2 py-2 text-left font-bold border bg-gray-100 align-middle text-gray-700">Branch/To Loc</th>
+                                    <th className="px-2 py-2 text-left font-bold border bg-gray-100 align-middle text-gray-700">Principal</th>
+                                    <th className="px-2 py-2 text-left font-bold border bg-gray-100 align-middle text-gray-700">Brand</th>
+                                    <th className="px-2 py-2 text-left font-bold border bg-gray-100 align-middle text-gray-700">Item Code</th>
+                                    <th className="px-2 py-2 text-left font-bold border bg-gray-100 align-middle text-gray-700">Item Name</th>
+                                    
+                                    <th className="px-2 py-2 text-right border font-bold text-blue-700 w-28 align-middle bg-blue-50">Avg Cost (Rate Cart)</th>
+                                    <th className="px-2 py-2 text-right border font-bold text-green-700 w-28 align-middle bg-green-50">Avg Cost (Calculated)</th>
+                                    <th className="px-2 py-2 text-right border font-bold text-purple-700 w-28 align-middle bg-purple-50">Total Avg Cost</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {isComparisonLoading ? (
+                                    <tr><td colSpan="10" className="text-center p-8 text-gray-500 font-medium">Loading comparison data...</td></tr>
+                                ) : displayedComparison.length === 0 ? (
+                                    <tr><td colSpan="10" className="text-center p-8 text-gray-500 italic">No data found matching your filters.</td></tr>
+                                ) : (
+                                    displayedComparison.map((row, idx) => (
+                                        <tr key={idx} className="hover:bg-gray-50 text-sm border-b transition-colors">
+                                            <td className="border px-2 py-2 whitespace-nowrap text-gray-600 font-medium">{row.date}</td>
+                                            <td className="border px-2 py-2 font-bold text-gray-700">{row.bu}</td>
+                                            <td className="border px-2 py-2 text-gray-700">{row.branch}</td>
+                                            <td className="border px-2 py-2">{row.principal}</td>
+                                            <td className="border px-2 py-2">{row.brand}</td>
+                                            <td className="border px-2 py-2">{row.item_code}</td>
+                                            <td className="border px-2 py-2 max-w-[200px] truncate" title={row.item_name}>{row.item_name}</td>
+                                            <td className="border px-2 py-2 text-right text-blue-700 font-medium align-top">
+                                                {row.avg_cost_rate_cart !== null ? formatNumber(row.avg_cost_rate_cart) : '-'}
+                                            </td>
+                                            <td className="border px-2 py-2 text-right text-green-700 font-medium align-top">
+                                                {row.avg_cost_calculated !== null ? formatNumber(row.avg_cost_calculated) : '-'}
+                                            </td>
+                                            <td className="border px-2 py-2 text-right text-purple-700 font-bold bg-purple-50/30 align-top">
+                                                {formatNumber(row.total_avg_cost)}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    {visibleCounts.comparison < filteredComparisonData.length && (
+                        <div className="flex justify-center p-4 border-t">
+                            <button onClick={() => loadMore('comparison')} className="px-6 py-2 bg-purple-100 text-purple-700 font-semibold rounded-lg hover:bg-purple-200 transition">
+                                Load More ({filteredComparisonData.length - visibleCounts.comparison} remaining)
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
           </div>
@@ -2999,7 +3243,6 @@ const PricingApp = () => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                     
-                    {/* 1. Gate Locations */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-blue-700">Gate Locations</h2>
                         {permissions.includes('add_reference') && (
@@ -3018,7 +3261,6 @@ const PricingApp = () => {
                         </div>
                     </div>
 
-                    {/* 2. Rate Cart Locations */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-emerald-700">Rate Cart Locations</h2>
                         {permissions.includes('add_reference') && (
@@ -3037,7 +3279,76 @@ const PricingApp = () => {
                         </div>
                     </div>
 
-                    {/* 3. Units of Measure */}
+                    {/* NEW MAPPING CARD */}
+                    <div className="bg-white rounded-lg shadow-md p-6 xl:col-span-2">
+                        <h2 className="text-xl font-bold mb-4 text-rose-700">Location to Branch Mapping</h2>
+                        <p className="text-sm text-gray-500 mb-4">Map full destination names to short branch codes (e.g. "Yangon" &rarr; "YGN") for accurate Dashboard comparison.</p>
+                        
+                        {permissions.includes('add_reference') && (
+                            <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                                <select 
+                                    disabled={isSaving} 
+                                    value={newMapToLoc} 
+                                    onChange={(e) => setNewMapToLoc(e.target.value)} 
+                                    className="border p-2 rounded flex-1 bg-white"
+                                >
+                                    <option value="">-- Select Gate Location --</option>
+                                    {refLocations.map((loc, i) => (
+                                        <option key={i} value={loc}>{loc}</option>
+                                    ))}
+                                </select>
+                                
+                                <span className="hidden sm:flex items-center text-gray-400">&rarr;</span>
+                                
+                                <select 
+                                    disabled={isSaving} 
+                                    value={newMapBranch} 
+                                    onChange={(e) => setNewMapBranch(e.target.value)} 
+                                    className="border p-2 rounded w-full sm:w-1/3 bg-white"
+                                >
+                                    <option value="">-- Select Rate Cart Location --</option>
+                                    {refRateCartLocations.map((loc, i) => (
+                                        <option key={i} value={loc}>{loc}</option>
+                                    ))}
+                                </select>
+                                
+                                <button 
+                                    disabled={isSaving || !newMapToLoc || !newMapBranch} 
+                                    onClick={saveLocationMapping} 
+                                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap"
+                                >
+                                    Save Map
+                                </button>
+                            </div>
+                        )}
+                        
+                        <div className="border rounded max-h-96 overflow-y-auto">
+                            <table className="w-full text-left text-sm border-collapse">
+                                <thead className="bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th className="p-3 border-b">To Location</th>
+                                        <th className="p-3 border-b">Mapped Branch Code</th>
+                                        <th className="p-3 border-b w-12"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {refLocationMappings.length === 0 ? (<tr><td colSpan="3" className="p-4 text-center text-gray-500">No mappings set.</td></tr>) : 
+                                    refLocationMappings.map((mapItem, i) => (
+                                        <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                                            <td className="p-3 font-medium text-gray-700">{mapItem.to_location}</td>
+                                            <td className="p-3">
+                                                <span className="bg-rose-100 text-rose-800 px-2 py-1 rounded font-bold">{mapItem.branch_code}</span>
+                                            </td>
+                                            <td className="p-3 text-right">
+                                                {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteLocationMapping(mapItem.to_location)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-purple-700">Units of Measure</h2>
                         {permissions.includes('add_reference') && (
@@ -3056,7 +3367,6 @@ const PricingApp = () => {
                         </div>
                     </div>
 
-                    {/* 4. Channels */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-orange-700">Channels</h2>
                         {permissions.includes('add_reference') && (
@@ -3072,47 +3382,6 @@ const PricingApp = () => {
                                     {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteReference('channels', c)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
                                 </div>
                             ))}
-                        </div>
-                    </div>
-
-                    {/* 5. Mappings (Now INSIDE the grid, spanning multiple columns) */}
-                    <div className="bg-white rounded-lg shadow-md p-6 col-span-1 md:col-span-2 xl:col-span-4">
-                        <h2 className="text-xl font-bold mb-4 text-indigo-700">Gate Location &rarr; Rate Cart Location Mapping</h2>
-                        {permissions.includes('add_reference') && (
-                            <div className="flex flex-col md:flex-row gap-4 mb-4">
-                                <select disabled={isSaving} value={newMappingGateLoc} onChange={(e) => setNewMappingGateLoc(e.target.value)} className="border p-2 rounded flex-1">
-                                    <option value="">-- Select Gate Location --</option>
-                                    {refLocations.map((loc, i) => <option key={i} value={loc}>{loc}</option>)}
-                                </select>
-                                
-                                <div className="flex items-center justify-center text-gray-400 font-bold">&rarr;</div>
-                                
-                                <select disabled={isSaving} value={newMappingRCLoc} onChange={(e) => setNewMappingRCLoc(e.target.value)} className="border p-2 rounded flex-1">
-                                    <option value="">-- Select Rate Cart Location --</option>
-                                    {refRateCartLocations.map((loc, i) => <option key={i} value={loc}>{loc}</option>)}
-                                </select>
-                                
-                                <button disabled={isSaving} onClick={addMappingReference} className="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700 disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap">
-                                    Add Mapping
-                                </button>
-                            </div>
-                        )}
-                        <div className="border rounded max-h-96 overflow-y-auto">
-                            {refMappings.map((mapping) => (
-                                <div key={mapping.id} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
-                                    <span className="flex items-center gap-4 text-sm">
-                                        <span className="font-semibold text-blue-700 w-48 text-right">{mapping.gate_location}</span> 
-                                        <span className="text-gray-400">&rarr;</span> 
-                                        <span className="font-semibold text-emerald-700 w-48">{mapping.rate_cart_location}</span>
-                                    </span>
-                                    {permissions.includes('delete_reference') && (
-                                        <button disabled={isDeleting} onClick={() => deleteMappingReference(mapping.id, mapping.gate_location, mapping.rate_cart_location)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed">
-                                            <X size={18} />
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
-                            {refMappings.length === 0 && <div className="p-4 text-gray-500 italic text-center">No mappings established yet.</div>}
                         </div>
                     </div>
 
