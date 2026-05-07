@@ -184,6 +184,16 @@ def startup_db():
                 [name] TEXT UNIQUE
             )
         """)
+        
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Location_Mappings (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [gate_location] TEXT,
+                [rate_cart_location] TEXT,
+                UNIQUE([gate_location], [rate_cart_location])
+            )
+        """)
 
         # --- Branch Code Mapping Table ---
         cursor.execute("""
@@ -490,6 +500,10 @@ class CalculationSaveRequest(BaseModel):
 
 class ReferenceItem(BaseModel):
     name: str
+
+class GateRateCartMappingCreate(BaseModel):
+    gate_location: str
+    rate_cart_location: str
 
 class UserCreate(BaseModel):
     username: str
@@ -1697,6 +1711,52 @@ def delete_ref_channel(name: str, user: dict = Depends(require_permission("delet
         conn.commit()
         conn.close()
         log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted channel: {name}")
+        return {"message": "Deleted successfully"}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+    
+    
+@app.get("/references/gate-ratecart-mappings")
+def get_ref_Location_Mappings():
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, gate_location, rate_cart_location FROM Location_Mappings ORDER BY gate_location")
+        rows = cursor.fetchall()
+        conn.close()
+        return [{"id": row[0], "gate_location": row[1], "rate_cart_location": row[2]} for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.post("/references/gate-ratecart-mappings")
+def add_ref_gate_ratecart_mapping(item: GateRateCartMappingCreate, user: dict = Depends(require_permission("add_reference"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("INSERT INTO Location_Mappings (gate_location, rate_cart_location) VALUES (?, ?)", (item.gate_location, item.rate_cart_location))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.close()
+            raise HTTPException(status_code=400, detail="Mapping already exists")
+        conn.close()
+        log_user_activity(user['username'], "ADD_REFERENCE", f"Added Gate-RateCart mapping: {item.gate_location} -> {item.rate_cart_location}")
+        return {"message": "Added successfully"}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.delete("/references/gate-ratecart-mappings/{mapping_id}")
+def delete_ref_gate_ratecart_mapping(mapping_id: int, user: dict = Depends(require_permission("delete_reference"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM Location_Mappings WHERE id = ?", (mapping_id,))
+        if cursor.rowcount == 0:
+             conn.close()
+             raise HTTPException(status_code=404, detail="Not found")
+        conn.commit()
+        conn.close()
+        log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted Gate-RateCart mapping ID: {mapping_id}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")

@@ -402,6 +402,11 @@ const PricingApp = () => {
   const [selectedChannel, setSelectedChannel] = useState(''); 
   const [newRefValue, setNewRefValue] = useState('');
 
+
+  const [refMappings, setRefMappings] = useState([]);
+  const [newMappingGateLoc, setNewMappingGateLoc] = useState('');
+  const [newMappingRCLoc, setNewMappingRCLoc] = useState('');
+
   const [showLogModal, setShowLogModal] = useState(false);
   const [logsData, setLogsData] = useState([]);
   const [currentLogGateName, setCurrentLogGateName] = useState('');
@@ -699,6 +704,11 @@ const PricingApp = () => {
 
           const chanResp = await authFetch(`${API_URL}/references/channels`);
           if (chanResp.ok) setRefChannels(await chanResp.json());
+
+          // --- ADD THIS API CALL ---
+          const mapResp = await authFetch(`${API_URL}/references/gate-ratecart-mappings`);
+          if (mapResp.ok) setRefMappings(await mapResp.json());
+
       } catch (error) { showNotification('Error loading reference data', 'error'); }
   }
 
@@ -870,6 +880,37 @@ const PricingApp = () => {
       setIsDeleting(true);
       try {
           const response = await authFetch(`${API_URL}/references/${type}/${value}`, { method: 'DELETE' });
+          if(response.ok) loadReferenceData();
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+      finally { setIsDeleting(false); }
+  }
+
+
+  // --- ADD THESE FUNCTIONS ---
+  const addMappingReference = async () => {
+      if(!newMappingGateLoc || !newMappingRCLoc) { showNotification('Please select both locations', 'error'); return; }
+      setIsSaving(true);
+      try {
+          const response = await authFetch(`${API_URL}/references/gate-ratecart-mappings`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+              body: JSON.stringify({ gate_location: newMappingGateLoc, rate_cart_location: newMappingRCLoc })
+          });
+          if(response.ok) { 
+              showNotification('Added successfully', 'success'); 
+              setNewMappingGateLoc(''); 
+              setNewMappingRCLoc(''); 
+              loadReferenceData(); 
+          } 
+          else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+      finally { setIsSaving(false); }
+  }
+
+  const deleteMappingReference = async (id, gateLoc, rcLoc) => {
+      if(!window.confirm(`Delete mapping ${gateLoc} -> ${rcLoc}?`)) return;
+      setIsDeleting(true);
+      try {
+          const response = await authFetch(`${API_URL}/references/gate-ratecart-mappings/${id}`, { method: 'DELETE' });
           if(response.ok) loadReferenceData();
       } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
       finally { setIsDeleting(false); }
@@ -2958,6 +2999,7 @@ const PricingApp = () => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                     
+                    {/* 1. Gate Locations */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-blue-700">Gate Locations</h2>
                         {permissions.includes('add_reference') && (
@@ -2976,6 +3018,7 @@ const PricingApp = () => {
                         </div>
                     </div>
 
+                    {/* 2. Rate Cart Locations */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-emerald-700">Rate Cart Locations</h2>
                         {permissions.includes('add_reference') && (
@@ -2994,6 +3037,7 @@ const PricingApp = () => {
                         </div>
                     </div>
 
+                    {/* 3. Units of Measure */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-purple-700">Units of Measure</h2>
                         {permissions.includes('add_reference') && (
@@ -3012,6 +3056,7 @@ const PricingApp = () => {
                         </div>
                     </div>
 
+                    {/* 4. Channels */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                         <h2 className="text-xl font-bold mb-4 text-orange-700">Channels</h2>
                         {permissions.includes('add_reference') && (
@@ -3027,6 +3072,47 @@ const PricingApp = () => {
                                     {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteReference('channels', c)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
                                 </div>
                             ))}
+                        </div>
+                    </div>
+
+                    {/* 5. Mappings (Now INSIDE the grid, spanning multiple columns) */}
+                    <div className="bg-white rounded-lg shadow-md p-6 col-span-1 md:col-span-2 xl:col-span-4">
+                        <h2 className="text-xl font-bold mb-4 text-indigo-700">Gate Location &rarr; Rate Cart Location Mapping</h2>
+                        {permissions.includes('add_reference') && (
+                            <div className="flex flex-col md:flex-row gap-4 mb-4">
+                                <select disabled={isSaving} value={newMappingGateLoc} onChange={(e) => setNewMappingGateLoc(e.target.value)} className="border p-2 rounded flex-1">
+                                    <option value="">-- Select Gate Location --</option>
+                                    {refLocations.map((loc, i) => <option key={i} value={loc}>{loc}</option>)}
+                                </select>
+                                
+                                <div className="flex items-center justify-center text-gray-400 font-bold">&rarr;</div>
+                                
+                                <select disabled={isSaving} value={newMappingRCLoc} onChange={(e) => setNewMappingRCLoc(e.target.value)} className="border p-2 rounded flex-1">
+                                    <option value="">-- Select Rate Cart Location --</option>
+                                    {refRateCartLocations.map((loc, i) => <option key={i} value={loc}>{loc}</option>)}
+                                </select>
+                                
+                                <button disabled={isSaving} onClick={addMappingReference} className="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700 disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap">
+                                    Add Mapping
+                                </button>
+                            </div>
+                        )}
+                        <div className="border rounded max-h-96 overflow-y-auto">
+                            {refMappings.map((mapping) => (
+                                <div key={mapping.id} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
+                                    <span className="flex items-center gap-4 text-sm">
+                                        <span className="font-semibold text-blue-700 w-48 text-right">{mapping.gate_location}</span> 
+                                        <span className="text-gray-400">&rarr;</span> 
+                                        <span className="font-semibold text-emerald-700 w-48">{mapping.rate_cart_location}</span>
+                                    </span>
+                                    {permissions.includes('delete_reference') && (
+                                        <button disabled={isDeleting} onClick={() => deleteMappingReference(mapping.id, mapping.gate_location, mapping.rate_cart_location)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed">
+                                            <X size={18} />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                            {refMappings.length === 0 && <div className="p-4 text-gray-500 italic text-center">No mappings established yet.</div>}
                         </div>
                     </div>
 
