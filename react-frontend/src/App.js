@@ -2586,8 +2586,8 @@ const PricingApp = () => {
                                     <th className="px-2 py-2 text-left font-bold border bg-gray-100 align-middle text-gray-700">Item Code</th>
                                     <th className="px-2 py-2 text-left font-bold border bg-gray-100 align-middle text-gray-700">Item Name</th>
                                     
-                                    <th className="px-2 py-2 text-right border font-bold text-blue-700 w-28 align-middle bg-blue-50">Avg Cost (Rate Cart)</th>
-                                    <th className="px-2 py-2 text-right border font-bold text-green-700 w-28 align-middle bg-green-50">Avg Cost (Calculated)</th>
+                                    <th className="px-2 py-2 text-right border font-bold text-blue-700 w-28 align-middle bg-blue-50">Avg Cost <span className="text-xs font-normal">(WH to Customer - PG Logistic)</span></th>
+                                    <th className="px-2 py-2 text-right border font-bold text-green-700 w-28 align-middle bg-green-50">Avg Cost <span className="text-xs font-normal">(WH to Branch - Third Party)</span></th>
                                     <th className="px-2 py-2 text-right border font-bold text-purple-700 w-28 align-middle bg-purple-50">Total Avg Cost</th>
                                 </tr>
                             </thead>
