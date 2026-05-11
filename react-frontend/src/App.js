@@ -1276,21 +1276,21 @@ const PricingApp = () => {
     if (!docNum) return;
     if (selectedDocNums.includes(docNum)) { showNotification('Doc Num already selected', 'info'); return; }
     const newSelection = [...selectedDocNums, docNum];
-    setSelectedDocNums(newSelection); setSelectedFrom(''); setSelectedTo(''); setSelectedGate(''); setSelectedChannel(''); setCalculationType(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setAdditionalCharges('');
+    setSelectedDocNums(newSelection); setSelectedFrom(''); setSelectedTo(''); setSelectedGate(''); setSelectedChannel(''); setCalculationType(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setAdditionalCharges(''); setCurrentHistoryId(null);
     fetchAggregatedProducts(newSelection);
   };
   const handleRemoveDocNum = (docNum) => {
     const newSelection = selectedDocNums.filter(id => id !== docNum);
-    setSelectedDocNums(newSelection); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null);
+    setSelectedDocNums(newSelection); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setCurrentHistoryId(null);
     fetchAggregatedProducts(newSelection);
   };
   const handleFromChange = (val) => {
-    setSelectedFrom(val); setSelectedTo(''); setSelectedGate(''); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost('');
+    setSelectedFrom(val); setSelectedTo(''); setSelectedGate(''); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null);
     if (val) loadToLocations(val); else setToLocations([]);
   };
-  const handleToChange = (val) => { setSelectedTo(val); setSelectedGate(''); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); };
+  const handleToChange = (val) => { setSelectedTo(val); setSelectedGate(''); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null); };
   const handleGateChange = (gateName) => {
-    setSelectedGate(gateName); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost('');
+    setSelectedGate(gateName); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null);
     const gateInfo = gates.find(g => g.gate_name === gateName && g.from_loc === selectedFrom && g.to_loc === selectedTo);
     if (gateInfo) setCalculationType(gateInfo.calculation_type);
   };
@@ -3809,14 +3809,30 @@ const PricingApp = () => {
                 <div className="bg-white rounded-lg border p-6 mb-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className={`block text-sm font-semibold mb-2 ${!isManualTotalCostEnabled ? 'text-gray-400' : 'text-gray-700'}`}>Total Cost (Manual Override)</label>
-                      <input type="number" value={manualTotalCost} onChange={(e) => setManualTotalCost(e.target.value)} placeholder={isManualTotalCostEnabled ? "Enter base transport amount..." : "Not applicable for selected items"} className={`w-full p-3 border rounded-lg ${!isManualTotalCostEnabled ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`} disabled={!isManualTotalCostEnabled} />
-                      <p className={`text-xs mt-1 ${!isManualTotalCostEnabled ? 'text-gray-400' : 'text-gray-500'}`}>{isManualTotalCostEnabled ? "Overrides calculated item costs." : "Only enabled if selected items have specific transport costs."}</p>
+                      <label className={`block text-sm font-semibold mb-2 ${(!isManualTotalCostEnabled || currentHistoryId !== null) ? 'text-gray-400' : 'text-gray-700'}`}>Total Cost (Manual Override)</label>
+                      <input 
+                        type="number" 
+                        value={manualTotalCost} 
+                        onChange={(e) => setManualTotalCost(e.target.value)} 
+                        placeholder={isManualTotalCostEnabled ? "Enter base transport amount..." : "Not applicable for selected items"} 
+                        className={`w-full p-3 border rounded-lg ${(!isManualTotalCostEnabled || currentHistoryId !== null) ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`} 
+                        disabled={!isManualTotalCostEnabled || currentHistoryId !== null} 
+                      />
+                      <p className={`text-xs mt-1 ${(!isManualTotalCostEnabled || currentHistoryId !== null) ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {isManualTotalCostEnabled ? "Overrides calculated item costs." : "Only enabled if selected items have specific transport costs."}
+                      </p>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Additional Charges (Optional)</label>
-                      <input type="number" value={additionalCharges} onChange={(e) => setAdditionalCharges(e.target.value)} placeholder="e.g. Labor, Toll fees..." className="w-full p-3 border rounded-lg" />
-                      <p className="text-xs text-gray-500 mt-1">Added to the final total.</p>
+                      <label className={`block text-sm font-semibold mb-2 ${currentHistoryId !== null ? 'text-gray-400' : 'text-gray-700'}`}>Additional Charges (Optional)</label>
+                      <input 
+                        type="number" 
+                        value={additionalCharges} 
+                        onChange={(e) => setAdditionalCharges(e.target.value)} 
+                        placeholder="e.g. Labor, Toll fees..." 
+                        className={`w-full p-3 border rounded-lg ${currentHistoryId !== null ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`} 
+                        disabled={currentHistoryId !== null} 
+                      />
+                      <p className={`text-xs mt-1 ${currentHistoryId !== null ? 'text-gray-400' : 'text-gray-500'}`}>Added to the final total.</p>
                     </div>
                     {estimatedTotalCost !== null && (manualTotalCost || additionalCharges) && (
                       <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col justify-center col-span-1 md:col-span-2">
