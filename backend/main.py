@@ -21,6 +21,9 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import Request 
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- Auth Configuration ---
 SECRET_KEY = "CHANGE_THIS_TO_A_SUPER_SECRET_KEY"  # IMPORTANT: Change this!
@@ -392,11 +395,22 @@ logger = logging.getLogger(__name__)
 
 def get_dwbi_connection():
     """Create and return a SQL Server connection to DWBI (Read-Only Source)"""
+    
+    # Securely fetch credentials from the .env file
+    db_user = os.getenv("DWBI_USER")
+    db_password = os.getenv("DWBI_PASSWORD")
+    
+    # Optional but recommended: Safety check to ensure variables loaded correctly
+    if not db_user or not db_password:
+        logger.error("Missing DWBI database credentials in .env file!")
+        raise ValueError("Database credentials are not configured properly.")
+
     conn_str = (
         'DRIVER={ODBC Driver 17 for SQL Server};'
         'SERVER=phm\\reportingsvr;'
         'DATABASE=DWBI;'
-        'Trusted_Connection=yes;'
+        f'UID={db_user};'
+        f'PWD={db_password};'
     )
     return pyodbc.connect(conn_str)
 
