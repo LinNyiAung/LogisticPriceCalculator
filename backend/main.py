@@ -303,14 +303,32 @@ def startup_db():
         except Exception as mig_err2:
             logger.warning(f"Legacy Daily_Report migration skipped: {mig_err2}")
         
-        # --- User Table ---
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Users (
-                username TEXT PRIMARY KEY,
-                hashed_password TEXT,
-                role TEXT
-            )
-        """)
+        # --- User Table with Auto-Incrementing ID & Migration ---
+        cursor.execute("PRAGMA table_info(Users)")
+        user_columns = [row[1] for row in cursor.fetchall()]
+        
+        if user_columns and "id" not in user_columns:
+            logger.info("Migrating Users table to use 'id' as primary key...")
+            cursor.execute("""
+                CREATE TABLE Users_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE,
+                    hashed_password TEXT,
+                    role TEXT
+                )
+            """)
+            cursor.execute("INSERT INTO Users_new (username, hashed_password, role) SELECT username, hashed_password, role FROM Users")
+            cursor.execute("DROP TABLE Users")
+            cursor.execute("ALTER TABLE Users_new RENAME TO Users")
+        elif not user_columns:
+            cursor.execute("""
+                CREATE TABLE Users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE,
+                    hashed_password TEXT,
+                    role TEXT
+                )
+            """)
 
         # --- Roles Table ---
         cursor.execute("""
@@ -701,6 +719,7 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
 
 class UserResponse(BaseModel):
+    id: int
     username: str
     role: str
 
@@ -721,6 +740,7 @@ class Token(BaseModel):
     role: str
     username: str
     permissions: List[str]
+    id: int
     
 class ChangePasswordRequest(BaseModel):
     old_password: str
@@ -758,11 +778,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        user_id: int = payload.get("id")
         role: str = payload.get("role")
         permissions: list = payload.get("permissions", [])
         if username is None:
             raise credentials_exception
-        return {"username": username, "role": role, "permissions": permissions}
+        return {"id": user_id, "username": username, "role": role, "permissions": permissions}
     except JWTError:
         raise credentials_exception
 
@@ -780,7 +801,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     conn = get_logistic_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT u.username, u.hashed_password, u.role, r.permissions 
+        SELECT u.id, u.username, u.hashed_password, u.role, r.permissions 
         FROM Users u
         LEFT JOIN Roles r ON u.role = r.name
         WHERE u.username = ?
@@ -788,20 +809,19 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     user = cursor.fetchone()
     conn.close()
     
-    if not user or not verify_password(form_data.password, user[1]):
+    if not user or not verify_password(form_data.password, user[2]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    permissions = json.loads(user[3]) if user[3] else []
-    access_token = create_access_token(data={"sub": user[0], "role": user[2], "permissions": permissions})
+    permissions = json.loads(user[4]) if user[4] else []
+    access_token = create_access_token(data={"sub": user[1], "id": user[0], "role": user[3], "permissions": permissions})
     
-    # Log successful login
-    log_user_activity(user[0], "LOGIN", "User authenticated successfully")
+    log_user_activity(user[1], "LOGIN", "User authenticated successfully")
     
-    return {"access_token": access_token, "token_type": "bearer", "role": user[2], "username": user[0], "permissions": permissions}
+    return {"access_token": access_token, "token_type": "bearer", "role": user[3], "username": user[1], "permissions": permissions, "id": user[0]}
 
 # --- System Activity Log Endpoint ---
 
@@ -934,12 +954,13 @@ def get_all_users(user: dict = Depends(require_permission("view_users"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT username, role FROM Users ORDER BY username")
+        cursor.execute("SELECT id, username, role FROM Users ORDER BY username")
         rows = cursor.fetchall()
         conn.close()
-        return [{"username": row[0], "role": row[1]} for row in rows]
+        return [{"id": row[0], "username": row[1], "role": row[2]} for row in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
+    
 
 @app.post("/users")
 def create_user(user_data: UserCreate, user: dict = Depends(require_permission("add_user"))):
@@ -963,50 +984,55 @@ def create_user(user_data: UserCreate, user: dict = Depends(require_permission("
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating user: {str(e)}")
 
-@app.put("/users/{username}")
-def update_user(username: str, user_data: UserUpdate, user: dict = Depends(require_permission("edit_user"))):
+@app.put("/users/{user_id}")
+def update_user(user_id: int, user_data: UserUpdate, user: dict = Depends(require_permission("edit_user"))):
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT username FROM Users WHERE username = ?", (username,))
-        if not cursor.fetchone():
+        cursor.execute("SELECT username FROM Users WHERE id = ?", (user_id,))
+        target_user = cursor.fetchone()
+        if not target_user:
             conn.close()
             raise HTTPException(status_code=404, detail="User not found")
             
         changes = []
         if user_data.password:
             hashed_pw = pwd_context.hash(user_data.password)
-            cursor.execute("UPDATE Users SET hashed_password = ? WHERE username = ?", (hashed_pw, username))
+            cursor.execute("UPDATE Users SET hashed_password = ? WHERE id = ?", (hashed_pw, user_id))
             changes.append("password")
         if user_data.role:
-            cursor.execute("UPDATE Users SET role = ? WHERE username = ?", (user_data.role, username))
+            cursor.execute("UPDATE Users SET role = ? WHERE id = ?", (user_data.role, user_id))
             changes.append(f"role to {user_data.role}")
             
         conn.commit()
         conn.close()
         
-        log_user_activity(user['username'], "UPDATE_USER", f"Updated user: {username} ({', '.join(changes)})")
+        log_user_activity(user['username'], "UPDATE_USER", f"Updated user: {target_user[0]} ({', '.join(changes)})")
         return {"message": "User updated successfully"}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating user: {str(e)}")
 
-@app.delete("/users/{username}")
-def delete_user(username: str, user: dict = Depends(require_permission("delete_user"))):
-    if username == user["username"]:
+@app.delete("/users/{user_id}")
+def delete_user(user_id: int, user: dict = Depends(require_permission("delete_user"))):
+    if user_id == user.get("id"):
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM Users WHERE username = ?", (username,))
+        
+        cursor.execute("SELECT username FROM Users WHERE id = ?", (user_id,))
+        target_user = cursor.fetchone()
+        
+        cursor.execute("DELETE FROM Users WHERE id = ?", (user_id,))
         if cursor.rowcount == 0:
             conn.close()
             raise HTTPException(status_code=404, detail="User not found")
         conn.commit()
         conn.close()
         
-        log_user_activity(user['username'], "DELETE_USER", f"Deleted user: {username}")
+        log_user_activity(user['username'], "DELETE_USER", f"Deleted user: {target_user[0]}")
         return {"message": "User deleted successfully"}
     except HTTPException:
         raise
