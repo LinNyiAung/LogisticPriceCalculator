@@ -455,30 +455,30 @@ def startup_db():
             
         
         # --- SEED DEFAULTS AND MIGRATE TO GRANULAR PERMISSIONS ---
-        cursor.execute("SELECT COUNT(*) FROM Roles")
-        if cursor.fetchone()[0] == 0:
-            default_roles = [
-                ('admin', json.dumps([
-                    'view_calculator', 'view_history',
-                    'view_users', 'add_user', 'edit_user', 'delete_user',
-                    'view_roles', 'add_role', 'edit_role', 'delete_role',
-                    'view_gates', 'add_gate', 'edit_gate', 'delete_gate',
-                    'view_items', 'add_item', 'edit_item', 'delete_item',
-                    'view_references', 'add_reference', 'delete_reference',
-                    'view_all_history', 'delete_history', 'claim_calculation', 'submit_calculation',
-                    'view_rate_carts', 'add_rate_cart', 'edit_rate_cart', 'delete_rate_cart',
-                    'view_daily_report', 'view_dashboard', 'view_activity_logs' 
-                ])),
-                ('account', json.dumps([
-                    'view_calculator', 'view_history',
-                    'view_gates', 'add_gate', 'edit_gate', 
-                    'view_items', 'add_item', 'edit_item', 
-                    'view_references', 'add_reference', 'delete_reference',
-                    'claim_calculation', 'view_rate_carts', 'add_rate_cart', 'edit_rate_cart'
-                ])),
-                ('logistic', json.dumps(['view_calculator', 'view_history', 'submit_calculation', 'view_gates', 'view_items', 'view_references', 'view_rate_carts']))
-            ]
-            cursor.executemany("INSERT INTO Roles (name, permissions) VALUES (?, ?)", default_roles)
+        # cursor.execute("SELECT COUNT(*) FROM Roles")
+        # if cursor.fetchone()[0] == 0:
+        #     default_roles = [
+        #         ('admin', json.dumps([
+        #             'view_calculator', 'view_history',
+        #             'view_users', 'add_user', 'edit_user', 'delete_user',
+        #             'view_roles', 'add_role', 'edit_role', 'delete_role',
+        #             'view_gates', 'add_gate', 'edit_gate', 'delete_gate',
+        #             'view_items', 'add_item', 'edit_item', 'delete_item',
+        #             'view_references', 'add_reference', 'delete_reference',
+        #             'view_all_history', 'delete_history', 'claim_calculation', 'submit_calculation',
+        #             'view_rate_carts', 'add_rate_cart', 'edit_rate_cart', 'delete_rate_cart',
+        #             'view_daily_report', 'view_dashboard', 'view_activity_logs' 
+        #         ])),
+        #         ('account', json.dumps([
+        #             'view_calculator', 'view_history',
+        #             'view_gates', 'add_gate', 'edit_gate', 
+        #             'view_items', 'add_item', 'edit_item', 
+        #             'view_references', 'add_reference', 'delete_reference',
+        #             'claim_calculation', 'view_rate_carts', 'add_rate_cart', 'edit_rate_cart'
+        #         ])),
+        #         ('logistics', json.dumps(['view_calculator', 'view_history', 'submit_calculation', 'view_gates', 'view_items', 'view_references', 'view_rate_carts']))
+        #     ]
+        #     cursor.executemany("INSERT INTO Roles (name, permissions) VALUES (?, ?)", default_roles)
 
         # Create default users
         cursor.execute("SELECT * FROM Users WHERE username = 'account'")
@@ -956,8 +956,8 @@ def update_role(role_name: str, role_data: RoleUpdate, user: dict = Depends(requ
 
 @app.delete("/roles/{role_name}")
 def delete_role(role_name: str, user: dict = Depends(require_permission("delete_role"))):
-    if role_name in ['admin', 'account', 'logistic']:
-        raise HTTPException(status_code=400, detail="Cannot delete default system roles")
+    # if role_name in ['admin', 'account', 'logistics']:
+    #     raise HTTPException(status_code=400, detail="Cannot delete default system roles")
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
