@@ -87,8 +87,38 @@ def startup_db():
                 [submitted_by] TEXT,
                 [submitted_at] TEXT,
                 [claimed_by] TEXT,
-                [claimed_at] TEXT,
-                [calculated_products] TEXT
+                [claimed_at] TEXT
+            )
+        """)
+
+        # Calculation Products Table (replaces calculated_products JSON column)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Calculation_Products (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [calc_id] INTEGER NOT NULL,
+                [code] TEXT,
+                [name] TEXT,
+                [uom] TEXT,
+                [weight] REAL,
+                [doc_date] TEXT,
+                [sin_no] TEXT,
+                [principal] TEXT,
+                [brand] TEXT,
+                [ctns] REAL,
+                [bu] TEXT,
+                [b_code] TEXT,
+                [b_name] TEXT,
+                [b_dept] TEXT,
+                [b_principal] TEXT,
+                [b_desc] TEXT,
+                [s_dept] TEXT,
+                [s_principal] TEXT,
+                [calculation_type] TEXT,
+                [system_rate] REAL,
+                [unit_cost] REAL,
+                [total_cost] REAL,
+                [standard_unit_cost] REAL,
+                FOREIGN KEY([calc_id]) REFERENCES Calculation_History([id])
             )
         """)
 
@@ -101,13 +131,55 @@ def startup_db():
             )
         """)
         
-        # Daily Report History Table
+        # Daily Report History Table (metadata only — rows live in child tables)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS Daily_Report_History (
                 [target_date] TEXT PRIMARY KEY,
-                [item_report_json] TEXT,
-                [township_report_json] TEXT,
                 [created_at] TEXT
+            )
+        """)
+
+        # Daily Item Report Table (replaces item_report_json)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Daily_Item_Report (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [target_date] TEXT NOT NULL,
+                [bu] TEXT,
+                [branch] TEXT,
+                [driver_name] TEXT,
+                [item_code] TEXT,
+                [item_name] TEXT,
+                [principal] TEXT,
+                [brand] TEXT,
+                [ctns] REAL,
+                [allocated_cost] REAL,
+                [cost_per_carton] REAL,
+                [driver_total_ctns] REAL,
+                [branch_cost] REAL,
+                [sales_amount] REAL,
+                FOREIGN KEY([target_date]) REFERENCES Daily_Report_History([target_date])
+            )
+        """)
+
+        # Daily Township Report Table (replaces township_report_json)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Daily_Township_Report (
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [target_date] TEXT NOT NULL,
+                [branch] TEXT,
+                [driver_name] TEXT,
+                [township] TEXT,
+                [customer_code] TEXT,
+                [contact_person] TEXT,
+                [ctns] REAL,
+                [driver_total_ctns] REAL,
+                [branch_cost] REAL,
+                [cost_per_carton] REAL,
+                [allocated_cost] REAL,
+                [total_drop_points] REAL,
+                [cost_per_drop_point] REAL,
+                [sales_amount] REAL,
+                FOREIGN KEY([target_date]) REFERENCES Daily_Report_History([target_date])
             )
         """)
         
@@ -137,10 +209,99 @@ def startup_db():
         except sqlite3.OperationalError: pass
         try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [claimed_at] TEXT")
         except sqlite3.OperationalError: pass
-        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [calculated_products] TEXT")
-        except sqlite3.OperationalError: pass
         try: cursor.execute("ALTER TABLE Item_Pricing ADD COLUMN [BU] TEXT")
         except sqlite3.OperationalError: pass
+
+        # --- Migrate legacy calculated_products JSON to Calculation_Products table ---
+        try:
+            cursor.execute("SELECT id, calculated_products FROM Calculation_History WHERE calculated_products IS NOT NULL AND calculated_products != '[]' AND calculated_products != ''")
+            legacy_rows = cursor.fetchall()
+            migrated = 0
+            for calc_id, cp_json in legacy_rows:
+                cursor.execute("SELECT COUNT(*) FROM Calculation_Products WHERE calc_id = ?", (calc_id,))
+                if cursor.fetchone()[0] > 0:
+                    continue  # already migrated
+                import json as _json
+                try:
+                    products = _json.loads(cp_json)
+                    for p in products:
+                        cursor.execute("""
+                            INSERT INTO Calculation_Products
+                            (calc_id, code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
+                             b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
+                             calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost)
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        """, (
+                            calc_id,
+                            p.get('code', ''), p.get('name', ''), p.get('uom', ''),
+                            p.get('weight', 0), p.get('doc_date', ''), p.get('sin_no', ''),
+                            p.get('principal', ''), p.get('brand', ''), p.get('ctns', 0),
+                            p.get('bu', ''), p.get('b_code', ''), p.get('b_name', ''),
+                            p.get('b_dept', ''), p.get('b_principal', ''), p.get('b_desc', ''),
+                            p.get('s_dept', ''), p.get('s_principal', ''),
+                            p.get('calculation_type', ''), p.get('system_rate'),
+                            p.get('unit_cost', 0), p.get('total_cost', 0),
+                            p.get('standard_unit_cost')
+                        ))
+                    migrated += 1
+                except Exception:
+                    pass
+            if migrated > 0:
+                conn.commit()
+                logger.info(f"Migrated {migrated} legacy calculation records to Calculation_Products table")
+        except Exception as mig_err:
+            logger.warning(f"Legacy Calculation_Products migration skipped: {mig_err}")
+
+        # --- Migrate legacy Daily_Report_History JSON to Daily_Item_Report / Daily_Township_Report ---
+        try:
+            cursor.execute("PRAGMA table_info(Daily_Report_History)")
+            drh_cols = [row[1] for row in cursor.fetchall()]
+            if 'item_report_json' in drh_cols:
+                cursor.execute("SELECT target_date, item_report_json, township_report_json FROM Daily_Report_History WHERE item_report_json IS NOT NULL")
+                legacy_daily = cursor.fetchall()
+                migrated_daily = 0
+                import json as _json2
+                for target_date, ir_json, tr_json in legacy_daily:
+                    cursor.execute("SELECT COUNT(*) FROM Daily_Item_Report WHERE target_date = ?", (target_date,))
+                    if cursor.fetchone()[0] > 0:
+                        continue
+                    try:
+                        items = _json2.loads(ir_json) if ir_json else []
+                        for it in items:
+                            cursor.execute("""
+                                INSERT INTO Daily_Item_Report
+                                (target_date, bu, branch, driver_name, item_code, item_name, principal, brand,
+                                 ctns, allocated_cost, cost_per_carton, driver_total_ctns, branch_cost, sales_amount)
+                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            """, (
+                                target_date, it.get('bu',''), it.get('branch',''), it.get('driver_name',''),
+                                it.get('item_code',''), it.get('item_name',''), it.get('principal',''), it.get('brand',''),
+                                it.get('ctns',0), it.get('allocated_cost',0), it.get('cost_per_carton',0),
+                                it.get('driver_total_ctns',0), it.get('branch_cost',0), it.get('sales_amount',0)
+                            ))
+                        townships = _json2.loads(tr_json) if tr_json else []
+                        for tw in townships:
+                            cursor.execute("""
+                                INSERT INTO Daily_Township_Report
+                                (target_date, branch, driver_name, township, customer_code, contact_person,
+                                 ctns, driver_total_ctns, branch_cost, cost_per_carton, allocated_cost,
+                                 total_drop_points, cost_per_drop_point, sales_amount)
+                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            """, (
+                                target_date, tw.get('branch',''), tw.get('driver_name',''), tw.get('township',''),
+                                tw.get('customer_code',''), tw.get('contact_person',''),
+                                tw.get('ctns',0), tw.get('driver_total_ctns',0), tw.get('branch_cost',0),
+                                tw.get('cost_per_carton',0), tw.get('allocated_cost',0),
+                                tw.get('total_drop_points',0), tw.get('cost_per_drop_point',0), tw.get('sales_amount',0)
+                            ))
+                        migrated_daily += 1
+                    except Exception:
+                        pass
+                if migrated_daily > 0:
+                    conn.commit()
+                    logger.info(f"Migrated {migrated_daily} legacy daily reports to normalized tables")
+        except Exception as mig_err2:
+            logger.warning(f"Legacy Daily_Report migration skipped: {mig_err2}")
         
         # --- User Table ---
         cursor.execute("""
@@ -1382,25 +1543,51 @@ def generate_and_save_daily_report(target_date: str):
     try:
         data = _get_daily_report_data(target_date)
         if not data["item_report"] and not data["township_report"]:
-            return 
+            return
 
         conn = get_logistic_connection()
         cursor = conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
+        # Upsert metadata row
         cursor.execute("""
-            INSERT INTO Daily_Report_History (target_date, item_report_json, township_report_json, created_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(target_date) DO UPDATE SET
-                item_report_json = excluded.item_report_json,
-                township_report_json = excluded.township_report_json,
-                created_at = excluded.created_at
-        """, (
-            target_date, 
-            json.dumps(data["item_report"]), 
-            json.dumps(data["township_report"]),
-            now_str
-        ))
+            INSERT INTO Daily_Report_History (target_date, created_at)
+            VALUES (?, ?)
+            ON CONFLICT(target_date) DO UPDATE SET created_at = excluded.created_at
+        """, (target_date, now_str))
+
+        # Replace item report rows
+        cursor.execute("DELETE FROM Daily_Item_Report WHERE target_date = ?", (target_date,))
+        for it in data["item_report"]:
+            cursor.execute("""
+                INSERT INTO Daily_Item_Report
+                (target_date, bu, branch, driver_name, item_code, item_name, principal, brand,
+                 ctns, allocated_cost, cost_per_carton, driver_total_ctns, branch_cost, sales_amount)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                target_date, it.get("bu",""), it.get("branch",""), it.get("driver_name",""),
+                it.get("item_code",""), it.get("item_name",""), it.get("principal",""), it.get("brand",""),
+                it.get("ctns",0), it.get("allocated_cost",0), it.get("cost_per_carton",0),
+                it.get("driver_total_ctns",0), it.get("branch_cost",0), it.get("sales_amount",0)
+            ))
+
+        # Replace township report rows
+        cursor.execute("DELETE FROM Daily_Township_Report WHERE target_date = ?", (target_date,))
+        for tw in data["township_report"]:
+            cursor.execute("""
+                INSERT INTO Daily_Township_Report
+                (target_date, branch, driver_name, township, customer_code, contact_person,
+                 ctns, driver_total_ctns, branch_cost, cost_per_carton, allocated_cost,
+                 total_drop_points, cost_per_drop_point, sales_amount)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                target_date, tw.get("branch",""), tw.get("driver_name",""), tw.get("township",""),
+                tw.get("customer_code",""), tw.get("contact_person",""),
+                tw.get("ctns",0), tw.get("driver_total_ctns",0), tw.get("branch_cost",0),
+                tw.get("cost_per_carton",0), tw.get("allocated_cost",0),
+                tw.get("total_drop_points",0), tw.get("cost_per_drop_point",0), tw.get("sales_amount",0)
+            ))
+
         conn.commit()
         conn.close()
         logger.info(f"Successfully generated and saved report for {target_date}")
@@ -1418,25 +1605,38 @@ def get_or_generate_daily_report(target_date: str):
     """Fetches daily report from local history DB, or generates it if not found."""
     conn = get_logistic_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT item_report_json, township_report_json FROM Daily_Report_History WHERE target_date = ?", (target_date,))
+    cursor.execute("SELECT target_date FROM Daily_Report_History WHERE target_date = ?", (target_date,))
     row = cursor.fetchone()
-    conn.close()
 
     if row:
-        item_report = json.loads(row[0])
-        township_report = json.loads(row[1])
+        cursor.execute("""
+            SELECT bu, branch, driver_name, item_code, item_name, principal, brand,
+                   ctns, allocated_cost, cost_per_carton, driver_total_ctns, branch_cost, sales_amount
+            FROM Daily_Item_Report WHERE target_date = ?
+        """, (target_date,))
+        ir_cols = ["bu","branch","driver_name","item_code","item_name","principal","brand",
+                   "ctns","allocated_cost","cost_per_carton","driver_total_ctns","branch_cost","sales_amount"]
+        item_report = [dict(zip(ir_cols, r)) for r in cursor.fetchall()]
+        for it in item_report:
+            it["target_date"] = target_date
 
-        # Inject target_date for backward compatibility with existing saved records
-        for item in item_report:
-            item["target_date"] = target_date
+        cursor.execute("""
+            SELECT branch, driver_name, township, customer_code, contact_person,
+                   ctns, driver_total_ctns, branch_cost, cost_per_carton, allocated_cost,
+                   total_drop_points, cost_per_drop_point, sales_amount
+            FROM Daily_Township_Report WHERE target_date = ?
+        """, (target_date,))
+        tr_cols = ["branch","driver_name","township","customer_code","contact_person",
+                   "ctns","driver_total_ctns","branch_cost","cost_per_carton","allocated_cost",
+                   "total_drop_points","cost_per_drop_point","sales_amount"]
+        township_report = [dict(zip(tr_cols, r)) for r in cursor.fetchall()]
         for tw in township_report:
             tw["target_date"] = target_date
 
-        return {
-            "item_report": item_report,
-            "township_report": township_report
-        }
+        conn.close()
+        return {"item_report": item_report, "township_report": township_report}
     else:
+        conn.close()
         return _get_daily_report_data(target_date)
 
 def _aggregate_reports(daily_datas: List[dict]):
@@ -1791,8 +1991,29 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
         conn = get_logistic_connection()
         cursor = conn.cursor()
         doc_nums_json = json.dumps(data.doc_nums)
-        calculated_products_json = json.dumps(data.calculated_products)
         created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        def _upsert_products(calc_id, products):
+            cursor.execute("DELETE FROM Calculation_Products WHERE calc_id = ?", (calc_id,))
+            for p in products:
+                cursor.execute("""
+                    INSERT INTO Calculation_Products
+                    (calc_id, code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
+                     b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
+                     calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """, (
+                    calc_id,
+                    p.get("code", ""), p.get("name", ""), p.get("uom", ""),
+                    p.get("weight", 0), p.get("doc_date", ""), p.get("sin_no", ""),
+                    p.get("principal", ""), p.get("brand", ""), p.get("ctns", 0),
+                    p.get("bu", ""), p.get("b_code", ""), p.get("b_name", ""),
+                    p.get("b_dept", ""), p.get("b_principal", ""), p.get("b_desc", ""),
+                    p.get("s_dept", ""), p.get("s_principal", ""),
+                    p.get("calculation_type", ""), p.get("system_rate"),
+                    p.get("unit_cost", 0), p.get("total_cost", 0),
+                    p.get("standard_unit_cost")
+                ))
 
         if data.id:
             cursor.execute("SELECT id FROM Calculation_History WHERE id = ?", (data.id,))
@@ -1803,13 +2024,14 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
                 UPDATE Calculation_History 
                 SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
                     doc_nums = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?, channel = ?,
-                    status = ?, calculated_products = ?
+                    status = ?
                 WHERE id = ?
             """, (
                 created_at, data.gate_name, data.from_loc, data.to_loc,
-                doc_nums_json, data.manual_total_cost, data.additional_charges, 
-                data.final_total_cost, data.channel, data.status, calculated_products_json, data.id
+                doc_nums_json, data.manual_total_cost, data.additional_charges,
+                data.final_total_cost, data.channel, data.status, data.id
             ))
+            _upsert_products(data.id, data.calculated_products)
             message = "Calculation updated successfully"
             log_user_activity(user['username'], "UPDATE_CALCULATION", f"Updated saved calculation ID: {data.id}")
         else:
@@ -1822,16 +2044,17 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
             cursor.execute("""
                 INSERT INTO Calculation_History 
                 ([id], [created_at], [gate_name], [from_loc], [to_loc], 
-                 [doc_nums], [manual_total_cost], [additional_charges], [final_total_cost], [channel], [status], [created_by], [calculated_products])
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 [doc_nums], [manual_total_cost], [additional_charges], [final_total_cost], [channel], [status], [created_by])
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 new_id, created_at, data.gate_name, data.from_loc, data.to_loc,
-                doc_nums_json, data.manual_total_cost, data.additional_charges, data.final_total_cost, 
-                data.channel, data.status, user["username"], calculated_products_json
+                doc_nums_json, data.manual_total_cost, data.additional_charges, data.final_total_cost,
+                data.channel, data.status, user["username"]
             ))
+            _upsert_products(new_id, data.calculated_products)
             message = "Calculation saved successfully"
             log_user_activity(user['username'], "SAVE_CALCULATION", f"Saved new calculation ID: {new_id}")
-        
+
         conn.commit()
         conn.close()
         return {"message": message}
@@ -1878,14 +2101,27 @@ def get_history_record(record_id: int, user: dict = Depends(require_permission("
         cursor.execute("SELECT * FROM Calculation_History WHERE id = ?", (record_id,))
         row = cursor.fetchone()
         if not row:
+            conn.close()
             raise HTTPException(status_code=404, detail="Record not found")
-        
+
         columns = [desc[0] for desc in cursor.description]
         record = dict(zip(columns, row))
         record['doc_nums'] = json.loads(record['doc_nums']) if record['doc_nums'] else []
-        record['calculated_products'] = json.loads(record['calculated_products']) if record.get('calculated_products') else []
+
+        cursor.execute("""
+            SELECT code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
+                   b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
+                   calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost
+            FROM Calculation_Products WHERE calc_id = ?
+        """, (record_id,))
+        prod_rows = cursor.fetchall()
+        prod_cols = ["code","name","uom","weight","doc_date","sin_no","principal","brand","ctns","bu",
+                     "b_code","b_name","b_dept","b_principal","b_desc","s_dept","s_principal",
+                     "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost"]
+        record['calculated_products'] = [dict(zip(prod_cols, r)) for r in prod_rows]
         conn.close()
         return record
+    except HTTPException: raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1915,8 +2151,6 @@ def get_history(user: dict = Depends(require_permission("view_history"))):
         for row in rows:
             record_dict = dict(zip(columns, row))
             record_dict["doc_nums"] = json.loads(record_dict["doc_nums"]) if record_dict["doc_nums"] else []
-            if "calculated_products" in record_dict:
-                del record_dict["calculated_products"]
             history.append(record_dict)
         conn.close()
         return {"history": history}
@@ -1927,10 +2161,12 @@ def delete_history_item(record_id: int, user: dict = Depends(require_permission(
     try:
         conn = get_logistic_connection()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM Calculation_History WHERE id = ?", (record_id,))
-        if cursor.rowcount == 0:
+        cursor.execute("SELECT id FROM Calculation_History WHERE id = ?", (record_id,))
+        if not cursor.fetchone():
             conn.close()
             raise HTTPException(status_code=404, detail="Record not found")
+        cursor.execute("DELETE FROM Calculation_Products WHERE calc_id = ?", (record_id,))
+        cursor.execute("DELETE FROM Calculation_History WHERE id = ?", (record_id,))
         conn.commit()
         conn.close()
         log_user_activity(user['username'], "DELETE_CALCULATION", f"Deleted calculation ID: {record_id}")
@@ -1955,6 +2191,7 @@ def download_history_excel(record_id: int, user: dict = Depends(require_permissi
         record['doc_nums'] = json.loads(record['doc_nums']) if record['doc_nums'] else []
         conn.close()
 
+        # Try to re-calculate live; fall back to persisted Calculation_Products rows
         products = []
         try:
             calc_result = _perform_calculation_logic(
@@ -1964,8 +2201,18 @@ def download_history_excel(record_id: int, user: dict = Depends(require_permissi
             )
             products = calc_result['calculated_products']
         except Exception as e:
-            if record.get('calculated_products'):
-                products = json.loads(record['calculated_products'])
+            cursor.execute("""
+                SELECT code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
+                       b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
+                       calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost
+                FROM Calculation_Products WHERE calc_id = ?
+            """, (record_id,))
+            prod_rows = cursor.fetchall()
+            if prod_rows:
+                prod_cols = ["code","name","uom","weight","doc_date","sin_no","principal","brand","ctns","bu",
+                             "b_code","b_name","b_dept","b_principal","b_desc","s_dept","s_principal",
+                             "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost"]
+                products = [dict(zip(prod_cols, r)) for r in prod_rows]
             else:
                 raise HTTPException(status_code=500, detail=f"Data purged from DWBI and no local save found: {str(e)}")
 
@@ -2704,94 +2951,65 @@ def get_submitted_allocation_report(
         conn = get_logistic_connection()
         cursor = conn.cursor()
 
-        # Query to fetch all submitted/claimed calculations with explicit submitted_at
+        # Query flattened product rows joined with parent calculation
         query = """
-            SELECT 
-                id, 
-                submitted_at, 
-                gate_name, 
-                from_loc, 
-                to_loc, 
-                channel, 
-                calculated_products 
-            FROM Calculation_History 
-            WHERE status IN ('submitted', 'claimed')
+            SELECT
+                ch.id, ch.submitted_at, ch.gate_name, ch.from_loc, ch.to_loc, ch.channel,
+                cp.doc_date, cp.sin_no, cp.bu, cp.code, cp.name, cp.principal, cp.brand,
+                cp.b_code, cp.b_name, cp.b_desc, cp.s_dept, cp.s_principal,
+                cp.ctns, cp.weight, cp.total_cost, cp.unit_cost, cp.calculation_type
+            FROM Calculation_History ch
+            JOIN Calculation_Products cp ON cp.calc_id = ch.id
+            WHERE ch.status IN ('submitted', 'claimed')
         """
         params = []
 
-        # Apply date filters if provided
         if start_date and end_date:
             try:
-                # Validate date format implicitly
                 datetime.datetime.strptime(start_date, "%Y-%m-%d")
                 datetime.datetime.strptime(end_date, "%Y-%m-%d")
-                
-                query += " AND SUBSTR(submitted_at, 1, 10) BETWEEN ? AND ?"
+                query += " AND SUBSTR(ch.submitted_at, 1, 10) BETWEEN ? AND ?"
                 params.extend([start_date, end_date])
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
-        
-        query += " ORDER BY submitted_at DESC"
-        
+
+        query += " ORDER BY ch.submitted_at DESC"
+
         cursor.execute(query, params)
         rows = cursor.fetchall()
         conn.close()
 
         allocation_data = []
-
-        # Flatten the calculated_products JSON into a tabular format
         for row in rows:
-            calc_id = row[0]
-            submitted_at = row[1]
-            gate_name = row[2]
-            from_loc = row[3]
-            to_loc = row[4]
-            channel = row[5]
-            products_json = row[6]
-
-            if not products_json:
+            ctns = float(row[18] or 0)
+            cost = float(row[20] or 0)
+            if ctns <= 0 and cost <= 0:
                 continue
-            
-            try:
-                products = json.loads(products_json)
-            except Exception as e:
-                logger.error(f"Failed to parse calculated_products for ID {calc_id}: {str(e)}")
-                continue
-            
-            for p in products:
-                ctns = float(p.get("ctns", 0) or 0)
-                cost = float(p.get("total_cost", 0) or 0)
-                weight = float(p.get("weight", 0) or 0)
-                
-                # Skip items with no cost or cartons to keep the report clean
-                if ctns <= 0 and cost <= 0:
-                    continue 
-                    
-                allocation_data.append({
-                    "calc_id": calc_id,
-                    "submitted_at": submitted_at,
-                    "doc_date": p.get("doc_date", ""),
-                    "sin_no": p.get("sin_no", ""),
-                    "gate_name": gate_name,
-                    "from_loc": from_loc,
-                    "to_loc": to_loc,
-                    "channel": channel,
-                    "bu": p.get("bu", ""),
-                    "item_code": p.get("code", ""),
-                    "item_name": p.get("name", ""),
-                    "principal": p.get("principal", ""),
-                    "brand": p.get("brand", ""),
-                    "b_code": p.get("b_code", ""),
-                    "b_name": p.get("b_name", ""),
-                    "b_desc": p.get("b_desc", ""),
-                    "s_dept": p.get("s_dept", ""),
-                    "s_principal": p.get("s_principal", ""),
-                    "ctns": ctns,
-                    "weight": weight,
-                    "total_cost": cost,
-                    "unit_cost": p.get("unit_cost", 0),
-                    "calculation_type": p.get("calculation_type", "")
-                })
+            allocation_data.append({
+                "calc_id": row[0],
+                "submitted_at": row[1],
+                "gate_name": row[2],
+                "from_loc": row[3],
+                "to_loc": row[4],
+                "channel": row[5],
+                "doc_date": row[6] or "",
+                "sin_no": row[7] or "",
+                "bu": row[8] or "",
+                "item_code": row[9] or "",
+                "item_name": row[10] or "",
+                "principal": row[11] or "",
+                "brand": row[12] or "",
+                "b_code": row[13] or "",
+                "b_name": row[14] or "",
+                "b_desc": row[15] or "",
+                "s_dept": row[16] or "",
+                "s_principal": row[17] or "",
+                "ctns": ctns,
+                "weight": float(row[19] or 0),
+                "total_cost": cost,
+                "unit_cost": row[21] or 0,
+                "calculation_type": row[22] or ""
+            })
 
         return {
             "status": "success", 
@@ -2836,8 +3054,9 @@ def _generate_allocation_data(target_month: str, target_branch: Optional[str] = 
     conn = get_logistic_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT target_date, item_report_json 
-        FROM Daily_Report_History 
+        SELECT target_date, bu, branch, driver_name, item_code, item_name, principal, brand,
+               ctns, allocated_cost, cost_per_carton, driver_total_ctns, branch_cost, sales_amount
+        FROM Daily_Item_Report
         WHERE target_date >= ? AND target_date <= ?
     """, (start_date, end_date))
     rows = cursor.fetchall()
@@ -2849,15 +3068,17 @@ def _generate_allocation_data(target_month: str, target_branch: Optional[str] = 
     for row in rows:
         target_date_str = row[0]
         task_month = target_date_str[:7]
-        
+
         if task_month not in valid_months:
             continue
 
-        try:
-            report_items = json.loads(row[1])
-        except Exception:
-            continue
-            
+        report_items = [{
+            "bu": row[1], "branch": row[2], "driver_name": row[3], "item_code": row[4],
+            "item_name": row[5], "principal": row[6], "brand": row[7],
+            "ctns": row[8], "allocated_cost": row[9], "cost_per_carton": row[10],
+            "driver_total_ctns": row[11], "branch_cost": row[12], "sales_amount": row[13]
+        }]
+
         for item in report_items:
             brand = item.get("brand", "").strip() or "UNKNOWN"
             branch = item.get("branch", "").strip() or "UNKNOWN"
@@ -2935,11 +3156,13 @@ def _generate_calculated_data(target_month: str, target_to_loc: Optional[str] = 
 
     conn = get_logistic_connection()
     cursor = conn.cursor()
-    
+
     cursor.execute("""
-        SELECT calculated_products, COALESCE(submitted_at, created_at), to_loc 
-        FROM Calculation_History 
-        WHERE status IN ('submitted', 'claimed')
+        SELECT cp.brand, cp.ctns, cp.total_cost, cp.doc_date,
+               COALESCE(ch.submitted_at, ch.created_at) AS fallback_date, ch.to_loc
+        FROM Calculation_Products cp
+        JOIN Calculation_History ch ON cp.calc_id = ch.id
+        WHERE ch.status IN ('submitted', 'claimed')
     """)
     rows = cursor.fetchall()
     conn.close()
@@ -2948,50 +3171,37 @@ def _generate_calculated_data(target_month: str, target_to_loc: Optional[str] = 
     available_to_locs = set()
 
     for row in rows:
-        if not row[0]:
-            continue
-        
+        brand = (row[0] or "").strip() or "UNKNOWN"
         try:
-            products = json.loads(row[0])
-        except Exception:
+            ctns = float(row[1] or 0)
+            cost = float(row[2] or 0)
+        except ValueError:
             continue
-        
-        fallback_date = row[1][:10] if row[1] else "" 
-        to_loc = row[2].strip() if row[2] else "UNKNOWN"
-        
-        # Collect unique locations for the frontend dropdown
+        if ctns <= 0:
+            continue
+
+        doc_date_str = str(row[3] or "")
+        fallback_date = row[4][:10] if row[4] else ""
+        to_loc = (row[5] or "UNKNOWN").strip()
+
         available_to_locs.add(to_loc)
 
-        # Apply location filter if provided
         if target_to_loc and target_to_loc.strip().lower() != to_loc.lower():
             continue
-        
-        for p in products:
-            brand = p.get("brand", "").strip() or "UNKNOWN"
-            
-            try:
-                ctns = float(p.get("ctns", 0) or 0)
-                cost = float(p.get("total_cost", 0) or 0)
-            except ValueError:
-                continue
 
-            if ctns <= 0:
-                continue
-                
-            doc_date_str = str(p.get("doc_date", ""))
-            if len(doc_date_str) >= 7:
-                task_month = doc_date_str[:7]
-            elif len(fallback_date) >= 7:
-                task_month = fallback_date[:7]
-            else:
-                continue
+        if len(doc_date_str) >= 7:
+            task_month = doc_date_str[:7]
+        elif len(fallback_date) >= 7:
+            task_month = fallback_date[:7]
+        else:
+            continue
 
-            if task_month in valid_months:
-                if brand not in brands_data:
-                    brands_data[brand] = {m: {"cost": 0.0, "ctns": 0.0} for m in months_list}
+        if task_month in valid_months:
+            if brand not in brands_data:
+                brands_data[brand] = {m: {"cost": 0.0, "ctns": 0.0} for m in months_list}
 
-                brands_data[brand][task_month]["cost"] += cost
-                brands_data[brand][task_month]["ctns"] += ctns
+            brands_data[brand][task_month]["cost"] += cost
+            brands_data[brand][task_month]["ctns"] += ctns
 
     dashboard_results = []
     for brand, data in brands_data.items():
@@ -3103,10 +3313,12 @@ def get_principal_brand_allocation(
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        query = "SELECT target_date, item_report_json FROM Daily_Report_History"
+        query = """
+            SELECT target_date, bu, branch, item_name, principal, brand, ctns, allocated_cost
+            FROM Daily_Item_Report
+        """
         params = []
-        
-        # Apply date filters
+
         if start_date and end_date:
             query += " WHERE target_date BETWEEN ? AND ?"
             params.extend([start_date, end_date])
@@ -3116,7 +3328,7 @@ def get_principal_brand_allocation(
         elif end_date:
             query += " WHERE target_date <= ?"
             params.append(end_date)
-            
+
         cursor.execute(query, params)
         rows = cursor.fetchall()
         conn.close()
@@ -3126,11 +3338,22 @@ def get_principal_brand_allocation(
         for row in rows:
             target_date = row[0]
             if not target_date: continue
-            
-            try: items = json.loads(row[1])
-            except Exception: continue
 
-            for item in items:
+            bu = str(row[1] or "").strip() or "UNKNOWN"
+            branch = str(row[2] or "").strip() or "UNKNOWN"
+            item_name = str(row[3] or "").strip() or "UNKNOWN"
+            principal = str(row[4] or "").strip() or "UNKNOWN"
+            brand = str(row[5] or "").strip() or "UNKNOWN"
+            try:
+                ctns = float(row[6] or 0)
+                cost = float(row[7] or 0)
+            except ValueError:
+                continue
+
+            if ctns <= 0: continue
+
+            for item in [{"bu": bu, "branch": branch, "principal": principal, "brand": brand,
+                          "item_name": item_name, "ctns": ctns, "allocated_cost": cost}]:
                 bu = str(item.get("bu", "")).strip() or "UNKNOWN"
                 branch = str(item.get("branch", "")).strip() or "UNKNOWN"
                 principal = str(item.get("principal", "")).strip() or "UNKNOWN"
@@ -3278,20 +3501,25 @@ def get_third_party_allocation(
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        query = "SELECT submitted_at, to_loc, calculated_products FROM Calculation_History WHERE status IN ('submitted', 'claimed')"
+        query = """
+            SELECT ch.submitted_at, ch.to_loc, cp.bu, cp.principal, cp.brand, cp.name,
+                   cp.ctns, cp.total_cost
+            FROM Calculation_History ch
+            JOIN Calculation_Products cp ON cp.calc_id = ch.id
+            WHERE ch.status IN ('submitted', 'claimed')
+        """
         params = []
-        
-        # Apply date filters
+
         if start_date and end_date:
-            query += " AND SUBSTR(submitted_at, 1, 10) BETWEEN ? AND ?"
+            query += " AND SUBSTR(ch.submitted_at, 1, 10) BETWEEN ? AND ?"
             params.extend([start_date, end_date])
         elif start_date:
-            query += " AND SUBSTR(submitted_at, 1, 10) >= ?"
+            query += " AND SUBSTR(ch.submitted_at, 1, 10) >= ?"
             params.append(start_date)
         elif end_date:
-            query += " AND SUBSTR(submitted_at, 1, 10) <= ?"
+            query += " AND SUBSTR(ch.submitted_at, 1, 10) <= ?"
             params.append(end_date)
-            
+
         cursor.execute(query, params)
         rows = cursor.fetchall()
         conn.close()
@@ -3302,13 +3530,23 @@ def get_third_party_allocation(
             submitted_at = row[0]
             target_date = submitted_at[:10] if submitted_at else ""
             if not target_date: continue
-            
-            to_loc = str(row[1] or "UNKNOWN").strip()
-            
-            try: items = json.loads(row[2])
-            except Exception: continue
 
-            for item in items:
+            to_loc = str(row[1] or "UNKNOWN").strip()
+            bu = str(row[2] or "").strip() or "UNKNOWN"
+            principal = str(row[3] or "").strip() or "UNKNOWN"
+            brand = str(row[4] or "").strip() or "UNKNOWN"
+            item_name = str(row[5] or "").strip() or "UNKNOWN"
+
+            try:
+                ctns = float(row[6] or 0)
+                cost = float(row[7] or 0)
+            except ValueError:
+                continue
+
+            if ctns <= 0: continue
+
+            # dummy loop wrapper so indent below is unchanged
+            for item in [{"bu": bu, "principal": principal, "brand": brand, "name": item_name, "ctns": ctns, "total_cost": cost}]:
                 bu = str(item.get("bu", "")).strip() or "UNKNOWN"
                 principal = str(item.get("principal", "")).strip() or "UNKNOWN"
                 brand = str(item.get("brand", "")).strip() or "UNKNOWN"
@@ -3457,8 +3695,12 @@ def get_cost_comparison(
         conn = get_logistic_connection()
         cursor = conn.cursor()
         
-        # 1. Fetch Rate Cart Data (Already uses target_date/doc date)
-        rc_query = "SELECT target_date, item_report_json FROM Daily_Report_History WHERE 1=1"
+        # 1. Fetch Rate Cart Data from Daily_Item_Report (normalized)
+        rc_query = """
+            SELECT target_date, bu, branch, principal, brand, item_code, item_name, ctns, allocated_cost
+            FROM Daily_Item_Report
+            WHERE 1=1
+        """
         rc_params = []
         if start_date and end_date:
             rc_query += " AND target_date BETWEEN ? AND ?"
@@ -3469,13 +3711,18 @@ def get_cost_comparison(
         elif end_date:
             rc_query += " AND target_date <= ?"
             rc_params.append(end_date)
-            
+
         cursor.execute(rc_query, rc_params)
         rc_rows = cursor.fetchall()
-        
-        # 2. Fetch Calculated Cost Data
-        # We NO LONGER filter by submitted_at in SQL because we need to check the doc_date inside the JSON
-        cc_query = "SELECT submitted_at, to_loc, calculated_products FROM Calculation_History WHERE status IN ('submitted', 'claimed')"
+
+        # 2. Fetch Calculated Cost Data from Calculation_Products (normalized)
+        cc_query = """
+            SELECT ch.submitted_at, ch.to_loc, cp.doc_date, cp.bu, cp.principal, cp.brand,
+                   cp.code, cp.name, cp.ctns, cp.total_cost
+            FROM Calculation_History ch
+            JOIN Calculation_Products cp ON cp.calc_id = ch.id
+            WHERE ch.status IN ('submitted', 'claimed')
+        """
         cursor.execute(cc_query)
         cc_rows = cursor.fetchall()
         
@@ -3501,84 +3748,62 @@ def get_cost_comparison(
         for row in rc_rows:
             date = row[0]
             if not date: continue
-            
+
+            bu = str(row[1] or "").strip() or "UNKNOWN"
+            branch = str(row[2] or "").strip().upper() or "UNKNOWN"
+            principal = str(row[3] or "").strip() or "UNKNOWN"
+            brand = str(row[4] or "").strip() or "UNKNOWN"
+            item_code = str(row[5] or "").strip() or "UNKNOWN"
+            item_name = str(row[6] or "").strip() or "UNKNOWN"
             try:
-                items = json.loads(row[1])
-            except Exception:
+                ctns = float(row[7] or 0)
+                cost = float(row[8] or 0)
+            except ValueError:
                 continue
-                
-            for item in items:
-                bu = str(item.get("bu", "")).strip() or "UNKNOWN"
-                branch = str(item.get("branch", "")).strip().upper() or "UNKNOWN"
-                principal = str(item.get("principal", "")).strip() or "UNKNOWN"
-                brand = str(item.get("brand", "")).strip() or "UNKNOWN"
-                item_code = str(item.get("item_code", "")).strip() or "UNKNOWN"
-                item_name = str(item.get("item_name", "")).strip() or "UNKNOWN"
-                
-                try:
-                    ctns = float(item.get("ctns", 0) or 0)
-                    cost = float(item.get("allocated_cost", 0) or 0)
-                except ValueError:
-                    continue
-                    
-                if ctns <= 0: continue
-                
-                key = (date, bu, branch, principal, brand, item_code, item_name)
-                if key not in comparison_dict:
-                    comparison_dict[key] = {"rc_ctns": 0.0, "rc_cost": 0.0, "cc_ctns": 0.0, "cc_cost": 0.0}
-                
-                comparison_dict[key]["rc_ctns"] += ctns
-                comparison_dict[key]["rc_cost"] += cost
+
+            if ctns <= 0: continue
+
+            key = (date, bu, branch, principal, brand, item_code, item_name)
+            if key not in comparison_dict:
+                comparison_dict[key] = {"rc_ctns": 0.0, "rc_cost": 0.0, "cc_ctns": 0.0, "cc_cost": 0.0}
+
+            comparison_dict[key]["rc_ctns"] += ctns
+            comparison_dict[key]["rc_cost"] += cost
                 
         # --- Process Calculated Cost Data ---
         for row in cc_rows:
             submitted_at = row[0]
             fallback_date = submitted_at[:10] if submitted_at else ""
             raw_to_loc = str(row[1] or "UNKNOWN").strip().upper()
-            
-            try:
-                items = json.loads(row[2])
-            except Exception:
-                continue
-                
-            for item in items:
-                # --- NEW DOC DATE LOGIC ---
-                doc_date_raw = str(item.get("doc_date", "")).strip()
-                # Use doc_date if available, otherwise fallback to submitted_at
-                item_date = doc_date_raw[:10] if len(doc_date_raw) >= 10 else fallback_date
-                
-                if not item_date: 
-                    continue
-                    
-                # Apply Date Filtering in Python based on the exact Doc Date
-                if start_date and item_date < start_date:
-                    continue
-                if end_date and item_date > end_date:
-                    continue
-                # --------------------------
 
-                bu = str(item.get("bu", "")).strip() or "UNKNOWN"
-                branch = LOCATION_MAP.get(raw_to_loc, raw_to_loc)
-                principal = str(item.get("principal", "")).strip() or "UNKNOWN"
-                brand = str(item.get("brand", "")).strip() or "UNKNOWN"
-                item_code = str(item.get("code", "")).strip() or "UNKNOWN"
-                item_name = str(item.get("name", "")).strip() or "UNKNOWN"
-                
-                try:
-                    ctns = float(item.get("ctns", 0) or 0)
-                    cost = float(item.get("total_cost", 0) or 0)
-                except ValueError:
-                    continue
-                    
-                if ctns <= 0: continue
-                
-                # Group by item_date (doc_date) instead of submitted date
-                key = (item_date, bu, branch, principal, brand, item_code, item_name)
-                if key not in comparison_dict:
-                    comparison_dict[key] = {"rc_ctns": 0.0, "rc_cost": 0.0, "cc_ctns": 0.0, "cc_cost": 0.0}
-                    
-                comparison_dict[key]["cc_ctns"] += ctns
-                comparison_dict[key]["cc_cost"] += cost
+            doc_date_raw = str(row[2] or "").strip()
+            item_date = doc_date_raw[:10] if len(doc_date_raw) >= 10 else fallback_date
+            if not item_date: continue
+
+            if start_date and item_date < start_date: continue
+            if end_date and item_date > end_date: continue
+
+            bu = str(row[3] or "").strip() or "UNKNOWN"
+            branch = LOCATION_MAP.get(raw_to_loc, raw_to_loc)
+            principal = str(row[4] or "").strip() or "UNKNOWN"
+            brand = str(row[5] or "").strip() or "UNKNOWN"
+            item_code = str(row[6] or "").strip() or "UNKNOWN"
+            item_name = str(row[7] or "").strip() or "UNKNOWN"
+
+            try:
+                ctns = float(row[8] or 0)
+                cost = float(row[9] or 0)
+            except ValueError:
+                continue
+
+            if ctns <= 0: continue
+
+            key = (item_date, bu, branch, principal, brand, item_code, item_name)
+            if key not in comparison_dict:
+                comparison_dict[key] = {"rc_ctns": 0.0, "rc_cost": 0.0, "cc_ctns": 0.0, "cc_cost": 0.0}
+
+            comparison_dict[key]["cc_ctns"] += ctns
+            comparison_dict[key]["cc_cost"] += cost
                 
         # --- Format Final Results ---
         result = []
