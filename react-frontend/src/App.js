@@ -440,6 +440,8 @@ const PricingApp = () => {
   const [usersList, setUsersList] = useState([]);
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  // Add this new state line:
+  const [userFilters, setUserFilters] = useState({ username: '', role: '' });
 
   const [rolesList, setRolesList] = useState([]);
   const [showRoleModal, setShowRoleModal] = useState(false);
@@ -2659,6 +2661,13 @@ const PricingApp = () => {
   }
 
   if (currentPage === 'users' && permissions.includes('view_users')) {
+      // 1. Apply the filter logic
+      const filteredUsers = usersList.filter(u => {
+          const matchUsername = (u.username || '').toLowerCase().includes(userFilters.username.toLowerCase());
+          const matchRole = (u.role || '').toLowerCase().includes(userFilters.role.toLowerCase());
+          return matchUsername && matchRole;
+      });
+
       return (
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-7xl mx-auto">
@@ -2670,9 +2679,40 @@ const PricingApp = () => {
                         {permissions.includes('add_user') && <button onClick={() => { setEditingUser(null); setShowUserModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add User</button>}
                     </div>
                     <div className="overflow-x-auto">
-                        <table className="w-full border-collapse border">
-                            <thead className="bg-gray-100"><tr><th className="border p-3 text-left">Username</th><th className="border p-3 text-left">Role</th><th className="border p-3 text-center w-32">Actions</th></tr></thead>
-                            <tbody>{usersList.map((u, index) => (<tr key={index} className="hover:bg-gray-50"><td className="border p-3 font-semibold text-gray-700">{u.username}</td><td className="border p-3"><span className="px-2 py-1 rounded text-xs font-bold uppercase bg-blue-100 text-blue-700">{u.role}</span></td><td className="border p-3 text-center"><div className="flex justify-center gap-2">{permissions.includes('edit_user') && <button onClick={() => { setEditingUser(u); setShowUserModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}{permissions.includes('delete_user') && u.username !== username && (<button onClick={() => deleteUser(u.username)} disabled={isDeleting} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>)}</div></td></tr>))}</tbody>
+                        <table className="w-full border-collapse border text-sm">
+                            <thead className="bg-gray-100">
+                                <tr>
+                                    {/* 2. Update Headers with Inputs */}
+                                    <th className="border p-2 text-left">
+                                        <div>Username</div>
+                                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={userFilters.username} onChange={(e) => setUserFilters({...userFilters, username: e.target.value})} />
+                                    </th>
+                                    <th className="border p-2 text-left">
+                                        <div>Role</div>
+                                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={userFilters.role} onChange={(e) => setUserFilters({...userFilters, role: e.target.value})} />
+                                    </th>
+                                    <th className="border p-2 text-center w-32 align-top">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {/* 3. Map over filteredUsers instead of usersList */}
+                                {filteredUsers.length === 0 ? (
+                                    <tr><td colSpan="3" className="text-center p-4 text-gray-500 italic">No users found matching your filters.</td></tr>
+                                ) : (
+                                    filteredUsers.map((u, index) => (
+                                        <tr key={index} className="hover:bg-gray-50">
+                                            <td className="border p-3 font-semibold text-gray-700">{u.username}</td>
+                                            <td className="border p-3"><span className="px-2 py-1 rounded text-xs font-bold uppercase bg-blue-100 text-blue-700">{u.role}</span></td>
+                                            <td className="border p-3 text-center">
+                                                <div className="flex justify-center gap-2">
+                                                    {permissions.includes('edit_user') && <button onClick={() => { setEditingUser(u); setShowUserModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
+                                                    {permissions.includes('delete_user') && u.username !== username && (<button onClick={() => deleteUser(u.username)} disabled={isDeleting} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>)}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
                         </table>
                     </div>
                 </div>
