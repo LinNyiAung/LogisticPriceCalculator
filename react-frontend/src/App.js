@@ -1116,7 +1116,7 @@ const PricingApp = () => {
     try {
         let url = `${API_URL}/users`;
         let method = 'POST';
-        if (editingUser) { url += `/${editingUser.username}`; method = 'PUT'; }
+        if (editingUser) { url += `/${editingUser.id}`; method = 'PUT'; }
         const response = await authFetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(userData) });
         if (response.ok) { showNotification(editingUser ? 'User updated' : 'User created', 'success'); loadUsers(); setShowUserModal(false); setEditingUser(null); } 
         else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
@@ -1124,14 +1124,14 @@ const PricingApp = () => {
     finally { setIsSaving(false); }
   };
 
-  const deleteUser = async (userToDelete) => {
-    if (userToDelete === username) return; 
+  const deleteUser = async (userObj) => {
+    if (userObj.username === username) return; 
     setConfirmDialog({
-        message: `Delete user "${userToDelete}"?`,
+        message: `Delete user "${userObj.username}"?`,
         onConfirm: async () => {
             setIsDeleting(true);
             try {
-                const response = await authFetch(`${API_URL}/users/${userToDelete}`, { method: 'DELETE' });
+                const response = await authFetch(`${API_URL}/users/${userObj.id}`, { method: 'DELETE' });
                 if (response.ok) { showNotification('User deleted', 'success'); loadUsers(); } 
                 else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
             } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
@@ -2706,7 +2706,11 @@ const PricingApp = () => {
                                             <td className="border p-3 text-center">
                                                 <div className="flex justify-center gap-2">
                                                     {permissions.includes('edit_user') && <button onClick={() => { setEditingUser(u); setShowUserModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
-                                                    {permissions.includes('delete_user') && u.username !== username && (<button onClick={() => deleteUser(u.username)} disabled={isDeleting} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>)}
+                                                    {permissions.includes('delete_user') && u.username !== username && (
+                                                        <button onClick={() => deleteUser(u)} disabled={isDeleting} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed">
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
