@@ -769,6 +769,7 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+# Replace your existing get_current_user function with this updated version:
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -779,13 +780,39 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         user_id: int = payload.get("id")
-        role: str = payload.get("role")
-        permissions: list = payload.get("permissions", [])
+        
         if username is None:
             raise credentials_exception
-        return {"id": user_id, "username": username, "role": role, "permissions": permissions}
+            
+        # --- NEW: Fetch fresh role and permissions from DB on every request ---
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT u.role, r.permissions 
+            FROM Users u
+            LEFT JOIN Roles r ON u.role = r.name
+            WHERE u.id = ?
+        """, (user_id,))
+        user_record = cursor.fetchone()
+        conn.close()
+
+        if not user_record:
+            raise credentials_exception # Boot user out if they were deleted
+            
+        fresh_role = user_record[0]
+        fresh_permissions = json.loads(user_record[1]) if user_record[1] else []
+
+        return {"id": user_id, "username": username, "role": fresh_role, "permissions": fresh_permissions}
+        
     except JWTError:
         raise credentials_exception
+
+
+# --- Add this new endpoint anywhere below get_current_user ---
+@app.get("/users/me")
+def get_user_me(current_user: dict = Depends(get_current_user)):
+    """Returns the fresh user session data directly from the DB"""
+    return current_user
 
 def require_permission(perm: str):
     def permission_checker(current_user: dict = Depends(get_current_user)):

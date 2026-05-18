@@ -107,6 +107,53 @@ const PricingApp = () => {
   const [username, setUsername] = useState(localStorage.getItem('username') || '');
   const [permissions, setPermissions] = useState(JSON.parse(localStorage.getItem('permissions')) || []);
 
+  const [currentPage, setCurrentPage] = useState('calculator');
+  // --- NEW: Background Permission Sync ---
+  useEffect(() => {
+    let isMounted = true;
+    
+    const syncSession = async () => {
+      if (!token) return;
+      try {
+        // authFetch automatically handles 401s (session expiry / user deleted) and logs them out
+        const response = await authFetch(`${API_URL}/users/me`);
+        
+        if (response.ok && isMounted) {
+          const data = await response.json();
+          
+          // Only update state if there is an actual change to prevent unnecessary re-renders
+          const currentPermsStr = localStorage.getItem('permissions');
+          const newPermsStr = JSON.stringify(data.permissions);
+          
+          if (currentPermsStr !== newPermsStr || localStorage.getItem('userRole') !== data.role) {
+            setPermissions(data.permissions);
+            setUserRole(data.role);
+            localStorage.setItem('permissions', newPermsStr);
+            localStorage.setItem('userRole', data.role);
+            
+            // Optional: If they lose access to their current page, boot them to dashboard
+            if (!data.permissions.includes(`view_${currentPage}`) && currentPage !== '') {
+               showNotification("Your permissions were updated by an administrator.", "info");
+               setCurrentPage(data.permissions.includes('view_dashboard') ? 'dashboard' : 'calculator');
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to sync session:", error);
+      }
+    };
+
+    // Run immediately on mount, and then poll every 30 seconds
+    syncSession();
+    const interval = setInterval(syncSession, 30000); 
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [token, currentPage]); // Re-bind if token or page changes
+  // --- END NEW ---
+
   const getCurrentMonthString = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -353,7 +400,7 @@ const PricingApp = () => {
   };
 
   // App State
-  const [currentPage, setCurrentPage] = useState('calculator');
+  
   const [docNums, setDocNums] = useState([]); 
   const [selectedDocNums, setSelectedDocNums] = useState([]); 
   const [docNumSearchTerm, setDocNumSearchTerm] = useState('');
