@@ -2242,32 +2242,26 @@ def download_history_excel(record_id: int, user: dict = Depends(require_permissi
         columns = [desc[0] for desc in cursor.description]
         record = dict(zip(columns, row))
         record['doc_nums'] = json.loads(record['doc_nums']) if record['doc_nums'] else []
+        
+        cursor.execute("""
+            SELECT code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
+                   b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
+                   calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost
+            FROM Calculation_Products WHERE calc_id = ?
+        """, (record_id,))
+        
+        prod_rows = cursor.fetchall()
+        
+        if not prod_rows:
+            conn.close() # Close connection before raising an error
+            raise HTTPException(status_code=404, detail="Historical product data not found for this saved record.")
+            
+        prod_cols = ["code","name","uom","weight","doc_date","sin_no","principal","brand","ctns","bu",
+                     "b_code","b_name","b_dept","b_principal","b_desc","s_dept","s_principal",
+                     "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost"]
+        products = [dict(zip(prod_cols, r)) for r in prod_rows]
+        
         conn.close()
-
-        # Try to re-calculate live; fall back to persisted Calculation_Products rows
-        products = []
-        try:
-            calc_result = _perform_calculation_logic(
-                gate_name=record['gate_name'], doc_nums=record['doc_nums'],
-                from_loc=record['from_loc'], to_loc=record['to_loc'],
-                manual_total_cost=record['manual_total_cost'], additional_charges=record['additional_charges']
-            )
-            products = calc_result['calculated_products']
-        except Exception as e:
-            cursor.execute("""
-                SELECT code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
-                       b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
-                       calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost
-                FROM Calculation_Products WHERE calc_id = ?
-            """, (record_id,))
-            prod_rows = cursor.fetchall()
-            if prod_rows:
-                prod_cols = ["code","name","uom","weight","doc_date","sin_no","principal","brand","ctns","bu",
-                             "b_code","b_name","b_dept","b_principal","b_desc","s_dept","s_principal",
-                             "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost"]
-                products = [dict(zip(prod_cols, r)) for r in prod_rows]
-            else:
-                raise HTTPException(status_code=500, detail=f"Data purged from DWBI and no local save found: {str(e)}")
 
         wb = openpyxl.Workbook()
         ws = wb.active

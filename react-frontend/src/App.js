@@ -1354,6 +1354,7 @@ const PricingApp = () => {
       if (response.ok) {
         const fullRecord = await response.json();
         
+        // 1. Load all saved form inputs
         setSelectedDocNums(fullRecord.doc_nums); 
         setSelectedFrom(fullRecord.from_loc); 
         await loadToLocations(fullRecord.from_loc); 
@@ -1363,6 +1364,7 @@ const PricingApp = () => {
         setManualTotalCost(fullRecord.manual_total_cost || ''); 
         setAdditionalCharges(fullRecord.additional_charges || '');
         
+        // 2. Set calculation type
         const gateInfo = gates.find(g => 
           g.gate_name === fullRecord.gate_name && 
           g.from_loc === fullRecord.from_loc && 
@@ -1372,57 +1374,26 @@ const PricingApp = () => {
         if (gateInfo) {
             setCalculationType(gateInfo.calculation_type);
         } else {
-            setCalculationType('');
+            // Fallback to saved calculation type if the gate was deleted from live gates
+            setCalculationType(fullRecord.calculation_type || '');
         }
 
-        let loadedFromPG = false;
-        
-        try {
-            const queryString = fullRecord.doc_nums.map(id => `doc_nums=${encodeURIComponent(id)}`).join('&');
-            const pgResponse = await authFetch(`${API_URL}/products-by-doc-nums?${queryString}`);
+        // 3. LOAD HISTORICAL SNAPSHOT (Bypassing live recalculations)
+        if (fullRecord.calculated_products && fullRecord.calculated_products.length > 0) {
+            setCalculatedProducts(fullRecord.calculated_products);
+            setProducts(fullRecord.calculated_products); 
             
-            if (pgResponse.ok) {
-                const pgData = await pgResponse.json();
-                
-                if (pgData.products && pgData.products.length > 0) {
-                    setProducts(pgData.products);
-                    setTotalWeight(pgData.total_weight || 0);
-                    
-                    let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(fullRecord.gate_name)}&from_loc=${encodeURIComponent(fullRecord.from_loc)}&to_loc=${encodeURIComponent(fullRecord.to_loc)}`;
-                    fullRecord.doc_nums.forEach(id => url += `&doc_nums=${encodeURIComponent(id)}`);
-                    if (fullRecord.manual_total_cost !== null && fullRecord.manual_total_cost !== undefined) {
-                        url += `&manual_total_cost=${fullRecord.manual_total_cost}`;
-                    }
-                    if (fullRecord.additional_charges) url += `&additional_charges=${fullRecord.additional_charges}`;
-                    
-                    const calcResponse = await authFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-                    
-                    if (calcResponse.ok) {
-                        const calcData = await calcResponse.json();
-                        setCalculatedProducts(calcData.calculated_products);
-                        setCalculatedTotalCost(calcData.total_cost);
-                        setEstimatedTotalCost(calcData.estimated_total_cost);
-                        loadedFromPG = true;
-                        showNotification(`Loaded and verified with live DB Details (ID: ${fullRecord.id}).`, 'success');
-                    }
-                }
-            }
-        } catch (e) {
-            console.log("DWBI check failed, falling back to local DB...", e);
+            const calculatedWeight = fullRecord.calculated_products.reduce((acc, curr) => acc + (curr.weight || 0), 0);
+            setTotalWeight(calculatedWeight);
+            
+            // CRITICAL FIX: Set the cost to the exact value saved in the database
+            setCalculatedTotalCost(fullRecord.final_total_cost);
+            
+            showNotification(`Loaded historical saved calculation (ID: ${fullRecord.id}).`, 'success');
+        } else {
+            showNotification('No historical products found for this saved record.', 'error');
         }
-
-        if (!loadedFromPG) {
-            if (fullRecord.calculated_products && fullRecord.calculated_products.length > 0) {
-                setCalculatedProducts(fullRecord.calculated_products);
-                setProducts(fullRecord.calculated_products); 
-                const calculatedWeight = fullRecord.calculated_products.reduce((acc, curr) => acc + (curr.weight || 0), 0);
-                setTotalWeight(calculatedWeight);
-                setCalculatedTotalCost(fullRecord.final_total_cost);
-                showNotification(`Data cleared from external DB. Loaded saved snapshot from local DB (ID: ${fullRecord.id}).`, 'info');
-            } else {
-                showNotification('Data purged from system and no local saved products found. Cannot load calculation details.', 'error');
-            }
-        }
+        
       } else {
          showNotification('Failed to fetch full record details', 'error');
       }
