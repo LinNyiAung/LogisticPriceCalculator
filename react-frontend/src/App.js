@@ -116,6 +116,8 @@ const PricingApp = () => {
   const [permissions, setPermissions] = useState(JSON.parse(localStorage.getItem('permissions')) || []);
 
   const [currentPage, setCurrentPage] = useState('calculator');
+
+  const [activeDataTab, setActiveDataTab] = useState('');
   // --- NEW: Background Permission Sync ---
   useEffect(() => {
     let isMounted = true;
@@ -237,7 +239,7 @@ const PricingApp = () => {
           <h2 className="text-2xl font-bold mb-4">{codeObj ? 'Edit Branch Code' : 'Add Branch Code'}</h2>
           <div className="space-y-4">
             <div className="relative">
-              <label className="block text-sm font-semibold mb-1">Log-Pric (Search ItmsGrpNam) <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-semibold mb-1">Log-Pric <span className="text-red-500">*</span></label>
               <div className="relative">
                 <input disabled={isSaving || isValidating} type="text" value={searchTerm} onChange={(e) => handleSearch(e.target.value)} className="w-full p-2 border rounded pr-8" placeholder="Type to search..." />
                 <div className="absolute right-2 top-2 text-gray-400"><Search size={18} /></div>
@@ -311,7 +313,7 @@ const PricingApp = () => {
           <h2 className="text-2xl font-bold mb-4">{codeObj ? 'Edit SD Code' : 'Add SD Code'}</h2>
           <div className="space-y-4">
             <div className="relative">
-              <label className="block text-sm font-semibold mb-1">Log-Pric (Search ItmsGrpNam) <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-semibold mb-1">Log-Pric <span className="text-red-500">*</span></label>
               <div className="relative">
                 <input disabled={isSaving || isValidating} type="text" value={searchTerm} onChange={(e) => handleSearch(e.target.value)} className="w-full p-2 border rounded pr-8" placeholder="Type to search..." />
                 <div className="absolute right-2 top-2 text-gray-400"><Search size={18} /></div>
@@ -755,10 +757,12 @@ const PricingApp = () => {
     localStorage.setItem('username', data.username);
     localStorage.setItem('permissions', JSON.stringify(perms));
     
+    const hasDataPerm = perms.some(p => ['view_gates', 'view_items', 'view_branch_codes', 'view_sd_codes', 'view_rate_carts'].includes(p));
+
     if (!perms.includes('view_calculator')) {
         if (perms.includes('view_history')) setCurrentPage('history');
         else if (perms.includes('view_dashboard')) setCurrentPage('dashboard');
-        else if (perms.includes('view_gates')) setCurrentPage('gates');
+        else if (hasDataPerm) setCurrentPage('data');
         else setCurrentPage(''); 
     } else {
         setCurrentPage('calculator');
@@ -1481,14 +1485,22 @@ const PricingApp = () => {
     else setItemPricingData([]);
   }, [selectedGateForPricing, token]);
 
+  // Add activeDataTab logic to auto-select the first available tab
   useEffect(() => {
-    if (token && currentPage === 'history' && permissions.includes('view_history')) {
-        loadHistory();
+    if (currentPage === 'data' && !activeDataTab) {
+        if (permissions.includes('view_gates')) setActiveDataTab('gates');
+        else if (permissions.includes('view_items')) setActiveDataTab('items');
+        else if (permissions.includes('view_branch_codes')) setActiveDataTab('branch_codes');
+        else if (permissions.includes('view_sd_codes')) setActiveDataTab('sd_codes');
+        else if (permissions.includes('view_rate_carts')) setActiveDataTab('rate_carts');
     }
+  }, [currentPage, permissions, activeDataTab]);
+
+  useEffect(() => {
+    if (token && currentPage === 'history' && permissions.includes('view_history')) loadHistory();
     if (token && currentPage === 'users' && permissions.includes('view_users')) { loadUsers(); loadRoles(); }
     if (token && currentPage === 'roles' && permissions.includes('view_roles')) loadRoles();
     if (token && currentPage === 'references' && permissions.includes('view_references')) loadReferenceData();
-    if (token && currentPage === 'rate_carts' && permissions.includes('view_rate_carts')) { loadRateCarts(); loadReferenceData(); }
     if (token && currentPage === 'daily_report' && permissions.includes('view_daily_report')) { 
         fetchDailyReport(dailyReportDate, dailyReportStartDate, dailyReportEndDate, isDateRange); 
         if(activeDailyTab === 'submitted' && submittedAllocationData.length === 0) {
@@ -1498,11 +1510,15 @@ const PricingApp = () => {
     if (token && currentPage === 'dashboard' && permissions.includes('view_dashboard')) { 
         fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc); 
     }
-    if (token && currentPage === 'activity_logs' && permissions.includes('view_activity_logs')) { fetchActivityLogs(0); }
+    if (token && currentPage === 'activity_logs' && permissions.includes('view_activity_logs')) fetchActivityLogs(0);
     
-    if (token && currentPage === 'branch_codes' && permissions.includes('view_branch_codes')) loadBranchCodes();
-    if (token && currentPage === 'sd_codes' && permissions.includes('view_sd_codes')) loadSDCodes();
-  }, [currentPage, token, permissions, activeDailyTab]); 
+    // NEW: Handle loading based on the active tab within the Data page
+    if (token && currentPage === 'data') {
+        if (activeDataTab === 'rate_carts' && permissions.includes('view_rate_carts')) { loadRateCarts(); loadReferenceData(); }
+        if (activeDataTab === 'branch_codes' && permissions.includes('view_branch_codes')) loadBranchCodes();
+        if (activeDataTab === 'sd_codes' && permissions.includes('view_sd_codes')) loadSDCodes();
+    }
+  }, [currentPage, activeDataTab, token, permissions, activeDailyTab]);
 
   useEffect(() => {
     const checkManualCostStatus = async () => {
@@ -2022,37 +2038,43 @@ const PricingApp = () => {
     </div>
   );
 
-  const renderNavigation = () => (
-    <>
-      <div className="bg-white shadow-md mb-6">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
-          <div className="flex flex-wrap gap-2">
-            {permissions.includes('view_calculator') && <button onClick={() => setCurrentPage('calculator')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'calculator' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calculator size={18} /> Calculator</button>}
-            {permissions.includes('view_gates') && <button onClick={() => setCurrentPage('gates')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Gates</button>}
-            {permissions.includes('view_items') && <button onClick={() => setCurrentPage('items')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><FileText size={18} /> Items</button>}
-            {permissions.includes('view_branch_codes') && (<button onClick={() => setCurrentPage('branch_codes')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'branch_codes' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Branch Codes</button>)}
-            {permissions.includes('view_sd_codes') && (<button onClick={() => setCurrentPage('sd_codes')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'sd_codes' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> SD Codes</button>)}
-            {permissions.includes('view_rate_carts') && <button onClick={() => setCurrentPage('rate_carts')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'rate_carts' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Percent size={18} /> Rate Carts</button>}
-            {permissions.includes('view_daily_report') && <button onClick={() => setCurrentPage('daily_report')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'daily_report' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calendar size={18} /> Daily Report</button>}
-            {permissions.includes('view_dashboard') && <button onClick={() => setCurrentPage('dashboard')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><BarChart2 size={18} /> Dashboard</button>}
-            {permissions.includes('view_history') && <button onClick={() => setCurrentPage('history')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><History size={18} /> History</button>}
-            {permissions.includes('view_references') && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={18} /> References</button>)}
-            {permissions.includes('view_users') && (<button onClick={() => setCurrentPage('users')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Users size={18} /> Users</button>)}
-            {permissions.includes('view_roles') && (<button onClick={() => setCurrentPage('roles')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'roles' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Shield size={18} /> Roles</button>)}
-            {permissions.includes('view_activity_logs') && (<button onClick={() => setCurrentPage('activity_logs')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'activity_logs' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Activity size={18} /> System Logs</button>)}
-          </div>
-          <div className="flex items-center gap-4">
-              <div className="text-right"><p className="text-xs text-gray-500">Logged in as</p><div className="flex items-center gap-1"><User size={14} className="text-blue-600"/><p className="font-bold text-sm text-blue-600 capitalize">{username} ({userRole})</p></div></div>
-              <div className="flex gap-1 border-l pl-4 ml-2 border-gray-200">
-                  <button onClick={() => setShowChangePasswordModal(true)} className="text-gray-500 hover:text-blue-600 transition p-2 hover:bg-blue-50 rounded-full" title="Change Password"><Key size={20} /></button>
-                  <button onClick={handleLogout} className="text-gray-500 hover:text-red-500 transition p-2 hover:bg-red-50 rounded-full" title="Logout"><LogOut size={20} /></button>
-              </div>
+  const renderNavigation = () => {
+    const canViewData = permissions.some(p => ['view_gates', 'view_items', 'view_branch_codes', 'view_sd_codes', 'view_rate_carts'].includes(p));
+
+    return (
+      <>
+        <div className="bg-white shadow-md mb-6">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+            <div className="flex flex-wrap gap-2">
+              {permissions.includes('view_calculator') && <button onClick={() => setCurrentPage('calculator')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'calculator' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calculator size={18} /> Calculator</button>}
+              
+              {/* NEW COMBINED DATA BUTTON */}
+              {canViewData && (
+                <button onClick={() => setCurrentPage('data')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'data' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Data Management</button>
+              )}
+              
+              {permissions.includes('view_daily_report') && <button onClick={() => setCurrentPage('daily_report')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'daily_report' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calendar size={18} /> Daily Report</button>}
+              {permissions.includes('view_dashboard') && <button onClick={() => setCurrentPage('dashboard')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><BarChart2 size={18} /> Dashboard</button>}
+              {permissions.includes('view_history') && <button onClick={() => setCurrentPage('history')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'history' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><History size={18} /> History</button>}
+              {permissions.includes('view_references') && (<button onClick={() => setCurrentPage('references')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'references' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><ListIcon size={18} /> References</button>)}
+              {permissions.includes('view_users') && (<button onClick={() => setCurrentPage('users')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Users size={18} /> Users</button>)}
+              {permissions.includes('view_roles') && (<button onClick={() => setCurrentPage('roles')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'roles' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Shield size={18} /> Roles</button>)}
+              {permissions.includes('view_activity_logs') && (<button onClick={() => setCurrentPage('activity_logs')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'activity_logs' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Activity size={18} /> System Logs</button>)}
+            </div>
+            {/* User Profile logic remains the same... */}
+            <div className="flex items-center gap-4">
+                <div className="text-right"><p className="text-xs text-gray-500">Logged in as</p><div className="flex items-center gap-1"><User size={14} className="text-blue-600"/><p className="font-bold text-sm text-blue-600 capitalize">{username} ({userRole})</p></div></div>
+                <div className="flex gap-1 border-l pl-4 ml-2 border-gray-200">
+                    <button onClick={() => setShowChangePasswordModal(true)} className="text-gray-500 hover:text-blue-600 transition p-2 hover:bg-blue-50 rounded-full" title="Change Password"><Key size={20} /></button>
+                    <button onClick={handleLogout} className="text-gray-500 hover:text-red-500 transition p-2 hover:bg-red-50 rounded-full" title="Logout"><LogOut size={20} /></button>
+                </div>
+            </div>
           </div>
         </div>
-      </div>
-      {showChangePasswordModal && <ChangePasswordModal onClose={() => setShowChangePasswordModal(false)} />}
-    </>
-  );
+        {showChangePasswordModal && <ChangePasswordModal onClose={() => setShowChangePasswordModal(false)} />}
+      </>
+    );
+  };
 
   // --- Views ---
   if (!token) return <LoginScreen onLogin={handleLogin} />;
@@ -2985,51 +3007,6 @@ const PricingApp = () => {
       );
   }
 
-  if (currentPage === 'rate_carts' && permissions.includes('view_rate_carts')) {
-    return (
-        <div className="min-h-screen bg-gray-50 p-6">
-            <div className="max-w-7xl mx-auto">
-                {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
-                {renderNavigation()}
-                <div className="bg-white rounded-lg shadow-md p-6">
-                    <div className="flex items-center justify-between mb-6">
-                        <h1 className="text-3xl font-bold text-gray-800">Rate Carts Management</h1>
-                        {permissions.includes('add_rate_cart') && <button onClick={() => { setEditingRateCart(null); setShowRateCartModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Rate Cart</button>}
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full border-collapse border">
-                            <thead className="bg-gray-100">
-                                <tr>
-                                    <th className="border p-3 text-left">Location</th>
-                                    <th className="border p-3 text-left">Rate Cart Amount</th>
-                                    <th className="border p-3 text-center w-32">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {rateCarts.length === 0 ? (<tr><td colSpan="3" className="text-center p-4 text-gray-500">No Rate Carts Found</td></tr>) : 
-                                    rateCarts.map((rc, i) => (
-                                        <tr key={i} className="hover:bg-gray-50">
-                                            <td className="border p-3 font-semibold text-gray-700">{rc.location}</td>
-                                            <td className="border p-3">{formatNumber(rc.cost)}</td>
-                                            <td className="border p-3 text-center">
-                                                <div className="flex justify-center gap-2">
-                                                    <button onClick={() => fetchRateCartLogs(rc)} className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={16} /></button>
-                                                    {permissions.includes('edit_rate_cart') && <button onClick={() => { setEditingRateCart(rc); setShowRateCartModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
-                                                    {permissions.includes('delete_rate_cart') && <button onClick={() => deleteRateCart(rc.location)} disabled={isDeleting} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            {showRateCartModal && <RateCartModal rateCart={editingRateCart} onSave={saveRateCart} onClose={() => setShowRateCartModal(false)} isSaving={isSaving} />}
-            {showRateCartLogModal && <LogTableModal logs={rateCartLogsData} title={currentLogRateCartLocation} onClose={() => setShowRateCartLogModal(false)} />}
-        </div>
-    );
-  }
 
   if (currentPage === 'daily_report' && permissions.includes('view_daily_report')) {
       const filteredDailyReportData = dailyReportData.filter(row => {
@@ -3775,180 +3752,320 @@ const PricingApp = () => {
     );
   }
 
-  if (currentPage === 'gates' && permissions.includes('view_gates')) {
-    const filteredGates = gateData.filter(gate => {
-      const matchName = (gate.gate_name || '').toLowerCase().includes(gateFilters.gate_name.toLowerCase());
-      const matchFrom = (gate.from_loc || '').toLowerCase().includes(gateFilters.from_loc.toLowerCase());
-      const matchTo = (gate.to_loc || '').toLowerCase().includes(gateFilters.to_loc.toLowerCase());
-      const matchUom = (gate.uom || '').toLowerCase().includes(gateFilters.uom.toLowerCase());
-      const matchUnit = String(gate.unit || '').toLowerCase().includes(gateFilters.unit.toLowerCase());
-      const matchCost = String(gate.cost || '').toLowerCase().includes(gateFilters.cost.toLowerCase());
-      return matchName && matchFrom && matchTo && matchUom && matchUnit && matchCost;
-    });
+  if (currentPage === 'data' && permissions.some(p => ['view_gates', 'view_items', 'view_branch_codes', 'view_sd_codes', 'view_rate_carts'].includes(p))) {
+      
+      // Calculate derived data based on the active tab
+      let tabData = {};
+      if (activeDataTab === 'gates') {
+          tabData.filteredGates = gateData.filter(gate => {
+              return (gate.gate_name || '').toLowerCase().includes(gateFilters.gate_name.toLowerCase()) &&
+                     (gate.from_loc || '').toLowerCase().includes(gateFilters.from_loc.toLowerCase()) &&
+                     (gate.to_loc || '').toLowerCase().includes(gateFilters.to_loc.toLowerCase()) &&
+                     (gate.uom || '').toLowerCase().includes(gateFilters.uom.toLowerCase()) &&
+                     String(gate.unit || '').toLowerCase().includes(gateFilters.unit.toLowerCase()) &&
+                     String(gate.cost || '').toLowerCase().includes(gateFilters.cost.toLowerCase());
+          });
+      } else if (activeDataTab === 'items') {
+          tabData.filteredItems = itemPricingData.filter(item => {
+              return (item.bu || '').toLowerCase().includes(itemFilters.bu.toLowerCase()) &&
+                     (item.item_code || '').toLowerCase().includes(itemFilters.item_code.toLowerCase()) &&
+                     (item.item_name || '').toLowerCase().includes(itemFilters.item_name.toLowerCase()) &&
+                     (item.principal || '').toLowerCase().includes(itemFilters.principal.toLowerCase()) &&
+                     (item.brand || '').toLowerCase().includes(itemFilters.brand.toLowerCase()) &&
+                     (String(item.transportation_cost) || '').toLowerCase().includes(itemFilters.transportation_cost.toLowerCase());
+          });
+          tabData.displayedItems = tabData.filteredItems.slice(0, visibleCounts.items);
+      } else if (activeDataTab === 'branch_codes') {
+          tabData.filteredBranches = branchCodes.filter(b => {
+              return (b.log_pric || '').toLowerCase().includes(branchCodeFilters.log_pric.toLowerCase()) &&
+                     (b.code || '').toLowerCase().includes(branchCodeFilters.code.toLowerCase()) &&
+                     (b.name || '').toLowerCase().includes(branchCodeFilters.name.toLowerCase()) &&
+                     (b.dept || '').toLowerCase().includes(branchCodeFilters.dept.toLowerCase()) &&
+                     (b.principal || '').toLowerCase().includes(branchCodeFilters.principal.toLowerCase()) &&
+                     (b.description || '').toLowerCase().includes(branchCodeFilters.description.toLowerCase());
+          });
+      } else if (activeDataTab === 'sd_codes') {
+          tabData.filteredSDs = sdCodes.filter(s => {
+              return (s.channel || '').toLowerCase().includes(sdCodeFilters.channel.toLowerCase()) &&
+                     (s.code || '').toLowerCase().includes(sdCodeFilters.code.toLowerCase()) &&
+                     (s.name || '').toLowerCase().includes(sdCodeFilters.name.toLowerCase()) &&
+                     (s.dept || '').toLowerCase().includes(sdCodeFilters.dept.toLowerCase()) &&
+                     (s.principal || '').toLowerCase().includes(sdCodeFilters.principal.toLowerCase()) &&
+                     (s.log_pric || '').toLowerCase().includes(sdCodeFilters.log_pric.toLowerCase());
+          });
+      }
 
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
-          {renderNavigation()}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h1 className="text-3xl font-bold text-gray-800">Transportation Cost by Gate</h1>
-              {permissions.includes('add_gate') && (<button onClick={() => setShowAddGateModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Gate</button>)}
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border text-sm">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="border p-2 text-left">
-                        <div>Gate Name</div>
-                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.gate_name} onChange={(e) => setGateFilters({...gateFilters, gate_name: e.target.value})} />
-                    </th>
-                    <th className="border p-2 text-left">
-                        <div>From</div>
-                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.from_loc} onChange={(e) => setGateFilters({...gateFilters, from_loc: e.target.value})} />
-                    </th>
-                    <th className="border p-2 text-left">
-                        <div>To</div>
-                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.to_loc} onChange={(e) => setGateFilters({...gateFilters, to_loc: e.target.value})} />
-                    </th>
-                    <th className="border p-2 text-left">
-                        <div>UOM</div>
-                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.uom} onChange={(e) => setGateFilters({...gateFilters, uom: e.target.value})} />
-                    </th>
-                    <th className="border p-2 text-left">
-                        <div>Unit</div>
-                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.unit} onChange={(e) => setGateFilters({...gateFilters, unit: e.target.value})} />
-                    </th>
-                    <th className="border p-2 text-left">
-                        <div>Cost</div>
-                        <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.cost} onChange={(e) => setGateFilters({...gateFilters, cost: e.target.value})} />
-                    </th>
-                    <th className="border p-2 text-center align-top">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredGates.length === 0 ? (
-                    <tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No gates found matching your filters.</td></tr>
-                  ) : (
-                    filteredGates.map((gate, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                        <td className="border p-2">{gate.gate_name}</td>
-                        <td className="border p-2">{gate.from_loc}</td>
-                        <td className="border p-2">{gate.to_loc}</td>
-                        <td className="border p-2">{gate.uom || '-'}</td>
-                        <td className="border p-2">{gate.unit || '-'}</td>
-                        <td className="border p-2">{formatNumber(gate.cost)}</td>
-                        <td className="border p-2 text-center">
-                            <div className="flex items-center justify-center gap-2">
-                                <button onClick={() => fetchGateLogs(gate)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
-                                {permissions.includes('edit_gate') && <button onClick={() => { setOriginalGateName(gate.gate_name); setEditingGate(gate); setShowAddGateModal(true); }} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={14} /></button>}
-                                {permissions.includes('delete_gate') && <button onClick={() => deleteGate(gate.gate_id)} disabled={isDeleting} className="p-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={14} /></button>}
-                            </div>
-                        </td>
-                    </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          {showAddGateModal && <GateModal gate={editingGate} onSave={saveGate} isSaving={isSaving} onClose={() => { setShowAddGateModal(false); setEditingGate(null); setOriginalGateName(null); }} />}
-          {showLogModal && <LogTableModal logs={logsData} title={currentLogGateName} onClose={() => setShowLogModal(false)} />}
-          {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} isDeleting={isDeleting} />}
-        </div>
-      </div>
-    );
-  }
-
-  if (currentPage === 'items' && permissions.includes('view_items')) {
-    const filteredItems = itemPricingData.filter(item => {
-      const matchBu = (item.bu || '').toLowerCase().includes(itemFilters.bu.toLowerCase());
-      const matchCode = (item.item_code || '').toLowerCase().includes(itemFilters.item_code.toLowerCase());
-      const matchName = (item.item_name || '').toLowerCase().includes(itemFilters.item_name.toLowerCase());
-      const matchPrincipal = (item.principal || '').toLowerCase().includes(itemFilters.principal.toLowerCase());
-      const matchBrand = (item.brand || '').toLowerCase().includes(itemFilters.brand.toLowerCase());
-      const matchCost = (String(item.transportation_cost) || '').toLowerCase().includes(itemFilters.transportation_cost.toLowerCase());
-      return matchBu && matchCode && matchName && matchPrincipal && matchBrand && matchCost;
-    });
-
-    const displayedItems = filteredItems.slice(0, visibleCounts.items);
-
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
-          {renderNavigation()}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h1 className="text-3xl font-bold text-gray-800">Transportation Cost by Item</h1>
-              <div className="flex gap-2">
-                {selectedGateForPricing && (
-                  <><button onClick={handleExportExcel} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"><Download size={20} /> Download Excel</button>
-                    {(permissions.includes('add_item') && permissions.includes('edit_item')) && <label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer"><Upload size={20} /> Upload Excel <input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" /></label>}
-                    {permissions.includes('add_item') && <button onClick={() => setShowAddItemModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Item</button>}
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-semibold mb-2">Select Gate</label>
-              <select value={selectedGateForPricing} onChange={(e) => setSelectedGateForPricing(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                <option value="">-- Select a Gate --</option>
-                {gates.map((gate) => (<option key={gate.gate_id} value={gate.gate_id}>{gate.gate_name} ({gate.from_loc} &rarr; {gate.to_loc})</option>))}
-              </select>
-            </div>
-
-            {selectedGateForPricing && (
-              <>
-                <div className="overflow-x-auto mb-4">
-                  <table className="w-full border-collapse border text-sm">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="border p-2 text-left"><div>BU</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.bu} onChange={(e) => setItemFilters({...itemFilters, bu: e.target.value})} /></th>
-                        <th className="border p-2 text-left"><div>Item Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_code} onChange={(e) => setItemFilters({...itemFilters, item_code: e.target.value})} /></th>
-                        <th className="border p-2 text-left"><div>Item Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_name} onChange={(e) => setItemFilters({...itemFilters, item_name: e.target.value})} /></th>
-                        <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.principal} onChange={(e) => setItemFilters({...itemFilters, principal: e.target.value})} /></th>
-                        <th className="border p-2 text-left"><div>Brand</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.brand} onChange={(e) => setItemFilters({...itemFilters, brand: e.target.value})} /></th>
-                        <th className="border p-2 text-left"><div>Transport Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.transportation_cost} onChange={(e) => setItemFilters({...itemFilters, transportation_cost: e.target.value})} /></th>
-                        <th className="border p-2 text-left">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {displayedItems.map((item, index) => (
-                        <tr key={index}>
-                          <td className="border p-2">{item.bu}</td><td className="border p-2">{item.item_code}</td><td className="border p-2">{item.item_name}</td><td className="border p-2">{item.principal}</td><td className="border p-2">{item.brand}</td><td className="border p-2">{formatNumber(item.transportation_cost)}</td>
-                          <td className="border p-2">
-                            <div className="flex gap-2">
-                                  <button onClick={() => fetchItemLogs(item)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
-                                  {permissions.includes('edit_item') && <button onClick={() => { setOriginalItemCode(item.item_code); setEditingItem(item); setShowAddItemModal(true); }} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={14} /></button>}
-                                  {permissions.includes('delete_item') && <button disabled={isDeleting} onClick={() => deleteItem(item.item_code)} className="p-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={14} /></button>}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {displayedItems.length === 0 && (<tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No items found matching your filters.</td></tr>)}
-                    </tbody>
-                  </table>
-                </div>
-                {visibleCounts.items < filteredItems.length && (
-                    <div className="flex justify-center mb-2">
-                        <button onClick={() => loadMore('items')} className="px-6 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
-                            Load More ({filteredItems.length - visibleCounts.items} remaining)
-                        </button>
+      return (
+        <div className="min-h-screen bg-gray-50 p-6">
+            <div className="max-w-7xl mx-auto">
+                {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
+                {renderNavigation()}
+                
+                <div className="bg-white rounded-lg shadow-md p-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 pb-4 border-b">
+                        <h1 className="text-3xl font-bold text-gray-800">Master Data Management</h1>
                     </div>
-                )}
-              </>
-            )}
-          </div>
-          {showAddItemModal && <ItemModal item={editingItem} onSave={saveItem} isSaving={isSaving} onClose={() => { setShowAddItemModal(false); setEditingItem(null); setOriginalItemCode(null); }} />}
-          {showItemLogModal && <LogTableModal logs={itemLogsData} title={currentLogItemName} onClose={() => setShowItemLogModal(false)} />}
-          {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} isDeleting={isDeleting} />}
+
+                    {/* Tab Selection Navigation */}
+                    <div className="flex flex-wrap border-b mb-8 border-gray-200">
+                        {permissions.includes('view_gates') && (
+                            <button className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${activeDataTab === 'gates' ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`} onClick={() => setActiveDataTab('gates')}>Gates</button>
+                        )}
+                        {permissions.includes('view_items') && (
+                            <button className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${activeDataTab === 'items' ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`} onClick={() => setActiveDataTab('items')}>Items</button>
+                        )}
+                        {permissions.includes('view_branch_codes') && (
+                            <button className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${activeDataTab === 'branch_codes' ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`} onClick={() => setActiveDataTab('branch_codes')}>Branch Codes</button>
+                        )}
+                        {permissions.includes('view_sd_codes') && (
+                            <button className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${activeDataTab === 'sd_codes' ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`} onClick={() => setActiveDataTab('sd_codes')}>SD Codes</button>
+                        )}
+                        {permissions.includes('view_rate_carts') && (
+                            <button className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${activeDataTab === 'rate_carts' ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`} onClick={() => setActiveDataTab('rate_carts')}>Rate Carts</button>
+                        )}
+                    </div>
+
+                    {/* Content: Gates */}
+                    {activeDataTab === 'gates' && permissions.includes('view_gates') && (
+                        <div className="animation-fade-in">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-2xl font-bold text-gray-800">Transportation Cost by Gate</h2>
+                                {permissions.includes('add_gate') && (<button onClick={() => setShowAddGateModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Gate</button>)}
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full border-collapse border text-sm">
+                                    <thead className="bg-gray-100">
+                                        <tr>
+                                            <th className="border p-2 text-left"><div>Gate Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.gate_name} onChange={(e) => setGateFilters({...gateFilters, gate_name: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>From</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.from_loc} onChange={(e) => setGateFilters({...gateFilters, from_loc: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>To</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.to_loc} onChange={(e) => setGateFilters({...gateFilters, to_loc: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>UOM</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.uom} onChange={(e) => setGateFilters({...gateFilters, uom: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Unit</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.unit} onChange={(e) => setGateFilters({...gateFilters, unit: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.cost} onChange={(e) => setGateFilters({...gateFilters, cost: e.target.value})} /></th>
+                                            <th className="border p-2 text-center align-top">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {tabData.filteredGates.length === 0 ? (
+                                            <tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No gates found matching your filters.</td></tr>
+                                        ) : (
+                                            tabData.filteredGates.map((gate, index) => (
+                                            <tr key={index} className="hover:bg-gray-50">
+                                                <td className="border p-2">{gate.gate_name}</td><td className="border p-2">{gate.from_loc}</td><td className="border p-2">{gate.to_loc}</td><td className="border p-2">{gate.uom || '-'}</td><td className="border p-2">{gate.unit || '-'}</td><td className="border p-2">{formatNumber(gate.cost)}</td>
+                                                <td className="border p-2 text-center">
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <button onClick={() => fetchGateLogs(gate)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
+                                                        {permissions.includes('edit_gate') && <button onClick={() => { setOriginalGateName(gate.gate_name); setEditingGate(gate); setShowAddGateModal(true); }} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={14} /></button>}
+                                                        {permissions.includes('delete_gate') && <button onClick={() => deleteGate(gate.gate_id)} disabled={isDeleting} className="p-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={14} /></button>}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Content: Items */}
+                    {activeDataTab === 'items' && permissions.includes('view_items') && (
+                        <div className="animation-fade-in">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-2xl font-bold text-gray-800">Transportation Cost by Item</h2>
+                                <div className="flex gap-2">
+                                    {selectedGateForPricing && (
+                                    <>
+                                        <button onClick={handleExportExcel} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"><Download size={20} /> Download Excel</button>
+                                        {(permissions.includes('add_item') && permissions.includes('edit_item')) && <label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer"><Upload size={20} /> Upload Excel <input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" /></label>}
+                                        {permissions.includes('add_item') && <button onClick={() => setShowAddItemModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Item</button>}
+                                    </>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="mb-6">
+                                <label className="block text-sm font-semibold mb-2">Select Gate</label>
+                                <select value={selectedGateForPricing} onChange={(e) => setSelectedGateForPricing(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                                    <option value="">-- Select a Gate --</option>
+                                    {gates.map((gate) => (<option key={gate.gate_id} value={gate.gate_id}>{gate.gate_name} ({gate.from_loc} &rarr; {gate.to_loc})</option>))}
+                                </select>
+                            </div>
+
+                            {selectedGateForPricing && (
+                                <>
+                                    <div className="overflow-x-auto mb-4">
+                                        <table className="w-full border-collapse border text-sm">
+                                            <thead className="bg-gray-100">
+                                                <tr>
+                                                    <th className="border p-2 text-left"><div>BU</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.bu} onChange={(e) => setItemFilters({...itemFilters, bu: e.target.value})} /></th>
+                                                    <th className="border p-2 text-left"><div>Item Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_code} onChange={(e) => setItemFilters({...itemFilters, item_code: e.target.value})} /></th>
+                                                    <th className="border p-2 text-left"><div>Item Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.item_name} onChange={(e) => setItemFilters({...itemFilters, item_name: e.target.value})} /></th>
+                                                    <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.principal} onChange={(e) => setItemFilters({...itemFilters, principal: e.target.value})} /></th>
+                                                    <th className="border p-2 text-left"><div>Brand</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.brand} onChange={(e) => setItemFilters({...itemFilters, brand: e.target.value})} /></th>
+                                                    <th className="border p-2 text-left"><div>Transport Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemFilters.transportation_cost} onChange={(e) => setItemFilters({...itemFilters, transportation_cost: e.target.value})} /></th>
+                                                    <th className="border p-2 text-left">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {tabData.displayedItems.map((item, index) => (
+                                                    <tr key={index}>
+                                                        <td className="border p-2">{item.bu}</td><td className="border p-2">{item.item_code}</td><td className="border p-2">{item.item_name}</td><td className="border p-2">{item.principal}</td><td className="border p-2">{item.brand}</td><td className="border p-2">{formatNumber(item.transportation_cost)}</td>
+                                                        <td className="border p-2">
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => fetchItemLogs(item)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
+                                                                {permissions.includes('edit_item') && <button onClick={() => { setOriginalItemCode(item.item_code); setEditingItem(item); setShowAddItemModal(true); }} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Edit2 size={14} /></button>}
+                                                                {permissions.includes('delete_item') && <button disabled={isDeleting} onClick={() => deleteItem(item.item_code)} className="p-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={14} /></button>}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {tabData.displayedItems.length === 0 && (<tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No items found matching your filters.</td></tr>)}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {visibleCounts.items < tabData.filteredItems.length && (
+                                        <div className="flex justify-center mb-2">
+                                            <button onClick={() => loadMore('items')} className="px-6 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
+                                                Load More ({tabData.filteredItems.length - visibleCounts.items} remaining)
+                                            </button>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Content: Branch Codes */}
+                    {activeDataTab === 'branch_codes' && permissions.includes('view_branch_codes') && (
+                        <div className="animation-fade-in">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-2xl font-bold text-gray-800">Branch Code Mapping</h2>
+                                {permissions.includes('add_branch_code') && (<button onClick={() => { setEditingBranchCode(null); setShowBranchCodeModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Branch Code</button>)}
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full border-collapse border text-sm">
+                                    <thead className="bg-gray-100">
+                                        <tr>
+                                            <th className="border p-2 text-left"><div>Log-Pric</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.log_pric} onChange={e => setBranchCodeFilters({...branchCodeFilters, log_pric: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.code} onChange={e => setBranchCodeFilters({...branchCodeFilters, code: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.name} onChange={e => setBranchCodeFilters({...branchCodeFilters, name: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Dept</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.dept} onChange={e => setBranchCodeFilters({...branchCodeFilters, dept: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.principal} onChange={e => setBranchCodeFilters({...branchCodeFilters, principal: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Description</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.description} onChange={e => setBranchCodeFilters({...branchCodeFilters, description: e.target.value})} /></th>
+                                            <th className="border p-2 text-center align-top">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {tabData.filteredBranches.map((b, i) => (
+                                            <tr key={i} className="hover:bg-gray-50">
+                                                <td className="border p-2 font-bold">{b.log_pric}</td><td className="border p-2">{b.code}</td><td className="border p-2">{b.name}</td><td className="border p-2">{b.dept}</td><td className="border p-2">{b.principal}</td><td className="border p-2 text-gray-500">{b.description}</td>
+                                                <td className="border p-2 text-center">
+                                                    <div className="flex justify-center gap-2">
+                                                        {permissions.includes('edit_branch_code') && <button onClick={() => { setEditingBranchCode(b); setShowBranchCodeModal(true); }} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
+                                                        {permissions.includes('delete_branch_code') && <button onClick={() => deleteBranchCode(b.log_pric)} disabled={isDeleting} className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {tabData.filteredBranches.length === 0 && (<tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No records found.</td></tr>)}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Content: SD Codes */}
+                    {activeDataTab === 'sd_codes' && permissions.includes('view_sd_codes') && (
+                        <div className="animation-fade-in">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-2xl font-bold text-gray-800">SD Code Mapping</h2>
+                                {permissions.includes('add_sd_code') && (<button onClick={() => { setEditingSDCode(null); setShowSDCodeModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add SD Code</button>)}
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full border-collapse border text-sm">
+                                    <thead className="bg-gray-100">
+                                        <tr>
+                                            <th className="border p-2 text-left"><div>Log-Pric</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.log_pric} onChange={e => setSDCodeFilters({...sdCodeFilters, log_pric: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Channel</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.channel} onChange={e => setSDCodeFilters({...sdCodeFilters, channel: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.code} onChange={e => setSDCodeFilters({...sdCodeFilters, code: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.name} onChange={e => setSDCodeFilters({...sdCodeFilters, name: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Dept</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.dept} onChange={e => setSDCodeFilters({...sdCodeFilters, dept: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.principal} onChange={e => setSDCodeFilters({...sdCodeFilters, principal: e.target.value})} /></th>
+                                            <th className="border p-2 text-center align-top">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {tabData.filteredSDs.map((s, i) => (
+                                            <tr key={i} className="hover:bg-gray-50">
+                                                <td className="border p-2 font-bold">{s.log_pric}</td><td className="border p-2">{s.channel}</td><td className="border p-2">{s.code}</td><td className="border p-2">{s.name}</td><td className="border p-2">{s.dept}</td><td className="border p-2">{s.principal}</td>
+                                                <td className="border p-2 text-center">
+                                                    <div className="flex justify-center gap-2">
+                                                        {permissions.includes('edit_sd_code') && <button onClick={() => { setEditingSDCode(s); setShowSDCodeModal(true); }} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
+                                                        {permissions.includes('delete_sd_code') && <button onClick={() => deleteSDCode(s.log_pric)} disabled={isDeleting} className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {tabData.filteredSDs.length === 0 && (<tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No records found.</td></tr>)}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Content: Rate Carts */}
+                    {activeDataTab === 'rate_carts' && permissions.includes('view_rate_carts') && (
+                        <div className="animation-fade-in">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-2xl font-bold text-gray-800">Rate Carts</h2>
+                                {permissions.includes('add_rate_cart') && <button onClick={() => { setEditingRateCart(null); setShowRateCartModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Rate Cart</button>}
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full border-collapse border">
+                                    <thead className="bg-gray-100">
+                                        <tr>
+                                            <th className="border p-3 text-left">Location</th>
+                                            <th className="border p-3 text-left">Rate Cart Amount</th>
+                                            <th className="border p-3 text-center w-32">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {rateCarts.length === 0 ? (<tr><td colSpan="3" className="text-center p-4 text-gray-500">No Rate Carts Found</td></tr>) : 
+                                            rateCarts.map((rc, i) => (
+                                                <tr key={i} className="hover:bg-gray-50">
+                                                    <td className="border p-3 font-semibold text-gray-700">{rc.location}</td>
+                                                    <td className="border p-3">{formatNumber(rc.cost)}</td>
+                                                    <td className="border p-3 text-center">
+                                                        <div className="flex justify-center gap-2">
+                                                            <button onClick={() => fetchRateCartLogs(rc)} className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={16} /></button>
+                                                            {permissions.includes('edit_rate_cart') && <button onClick={() => { setEditingRateCart(rc); setShowRateCartModal(true); }} className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
+                                                            {permissions.includes('delete_rate_cart') && <button onClick={() => deleteRateCart(rc.location)} disabled={isDeleting} className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Modals rendered at the bottom of the data page to ensure they appear regardless of tab switching logic */}
+                {showAddGateModal && <GateModal gate={editingGate} onSave={saveGate} isSaving={isSaving} onClose={() => { setShowAddGateModal(false); setEditingGate(null); setOriginalGateName(null); }} />}
+                {showLogModal && <LogTableModal logs={logsData} title={currentLogGateName} onClose={() => setShowLogModal(false)} />}
+                {showAddItemModal && <ItemModal item={editingItem} onSave={saveItem} isSaving={isSaving} onClose={() => { setShowAddItemModal(false); setEditingItem(null); setOriginalItemCode(null); }} />}
+                {showItemLogModal && <LogTableModal logs={itemLogsData} title={currentLogItemName} onClose={() => setShowItemLogModal(false)} />}
+                {showBranchCodeModal && <BranchCodeModal codeObj={editingBranchCode} onSave={saveBranchCode} isSaving={isSaving} onClose={() => setShowBranchCodeModal(false)} />}
+                {showSDCodeModal && <SDCodeModal codeObj={editingSDCode} onSave={saveSDCode} isSaving={isSaving} onClose={() => setShowSDCodeModal(false)} />}
+                {showRateCartModal && <RateCartModal rateCart={editingRateCart} onSave={saveRateCart} onClose={() => setShowRateCartModal(false)} isSaving={isSaving} />}
+                {showRateCartLogModal && <LogTableModal logs={rateCartLogsData} title={currentLogRateCartLocation} onClose={() => setShowRateCartLogModal(false)} />}
+                {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} isDeleting={isDeleting} />}
+            </div>
         </div>
-      </div>
-    );
+      );
   }
+
 
   // Calculator View
   if (currentPage === 'calculator' && permissions.includes('view_calculator')) {
@@ -4157,119 +4274,7 @@ const PricingApp = () => {
     );
   }
 
-  // --- Branch Codes View ---
-  if (currentPage === 'branch_codes' && permissions.includes('view_branch_codes')) {
-      const filteredBranches = branchCodes.filter(b => {
-          return (b.log_pric || '').toLowerCase().includes(branchCodeFilters.log_pric.toLowerCase()) &&
-                 (b.code || '').toLowerCase().includes(branchCodeFilters.code.toLowerCase()) &&
-                 (b.name || '').toLowerCase().includes(branchCodeFilters.name.toLowerCase()) &&
-                 (b.dept || '').toLowerCase().includes(branchCodeFilters.dept.toLowerCase()) &&
-                 (b.principal || '').toLowerCase().includes(branchCodeFilters.principal.toLowerCase()) &&
-                 (b.description || '').toLowerCase().includes(branchCodeFilters.description.toLowerCase());
-      });
 
-      return (
-        <div className="min-h-screen bg-gray-50 p-6">
-          <div className="max-w-7xl mx-auto">
-            {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
-            {renderNavigation()}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h1 className="text-3xl font-bold text-gray-800">Branch Code Mapping</h1>
-                {permissions.includes('add_branch_code') && (<button onClick={() => { setEditingBranchCode(null); setShowBranchCodeModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Branch Code</button>)}
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse border text-sm">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="border p-2 text-left"><div>Log-Pric</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.log_pric} onChange={e => setBranchCodeFilters({...branchCodeFilters, log_pric: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.code} onChange={e => setBranchCodeFilters({...branchCodeFilters, code: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.name} onChange={e => setBranchCodeFilters({...branchCodeFilters, name: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Dept</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.dept} onChange={e => setBranchCodeFilters({...branchCodeFilters, dept: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.principal} onChange={e => setBranchCodeFilters({...branchCodeFilters, principal: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Description</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.description} onChange={e => setBranchCodeFilters({...branchCodeFilters, description: e.target.value})} /></th>
-                      <th className="border p-2 text-center align-top">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredBranches.map((b, i) => (
-                      <tr key={i} className="hover:bg-gray-50">
-                        <td className="border p-2 font-bold">{b.log_pric}</td><td className="border p-2">{b.code}</td><td className="border p-2">{b.name}</td><td className="border p-2">{b.dept}</td><td className="border p-2">{b.principal}</td><td className="border p-2 text-gray-500">{b.description}</td>
-                        <td className="border p-2 text-center">
-                          <div className="flex justify-center gap-2">
-                            {permissions.includes('edit_branch_code') && <button onClick={() => { setEditingBranchCode(b); setShowBranchCodeModal(true); }} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
-                            {permissions.includes('delete_branch_code') && <button onClick={() => deleteBranchCode(b.log_pric)} disabled={isDeleting} className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredBranches.length === 0 && (<tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No records found.</td></tr>)}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            {showBranchCodeModal && <BranchCodeModal codeObj={editingBranchCode} onSave={saveBranchCode} isSaving={isSaving} onClose={() => setShowBranchCodeModal(false)} />}
-          </div>
-        </div>
-      );
-  }
-
-  // --- SD Codes View ---
-  if (currentPage === 'sd_codes' && permissions.includes('view_sd_codes')) {
-      const filteredSDs = sdCodes.filter(s => {
-          return (s.channel || '').toLowerCase().includes(sdCodeFilters.channel.toLowerCase()) &&
-                 (s.code || '').toLowerCase().includes(sdCodeFilters.code.toLowerCase()) &&
-                 (s.name || '').toLowerCase().includes(sdCodeFilters.name.toLowerCase()) &&
-                 (s.dept || '').toLowerCase().includes(sdCodeFilters.dept.toLowerCase()) &&
-                 (s.principal || '').toLowerCase().includes(sdCodeFilters.principal.toLowerCase()) &&
-                 (s.log_pric || '').toLowerCase().includes(sdCodeFilters.log_pric.toLowerCase());
-      });
-
-      return (
-        <div className="min-h-screen bg-gray-50 p-6">
-          <div className="max-w-7xl mx-auto">
-            {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
-            {renderNavigation()}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h1 className="text-3xl font-bold text-gray-800">SD Code Mapping</h1>
-                {permissions.includes('add_sd_code') && (<button onClick={() => { setEditingSDCode(null); setShowSDCodeModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add SD Code</button>)}
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse border text-sm">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="border p-2 text-left"><div>Log-Pric</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.log_pric} onChange={e => setSDCodeFilters({...sdCodeFilters, log_pric: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Channel</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.channel} onChange={e => setSDCodeFilters({...sdCodeFilters, channel: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.code} onChange={e => setSDCodeFilters({...sdCodeFilters, code: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.name} onChange={e => setSDCodeFilters({...sdCodeFilters, name: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Dept</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.dept} onChange={e => setSDCodeFilters({...sdCodeFilters, dept: e.target.value})} /></th>
-                      <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.principal} onChange={e => setSDCodeFilters({...sdCodeFilters, principal: e.target.value})} /></th>
-                      <th className="border p-2 text-center align-top">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredSDs.map((s, i) => (
-                      <tr key={i} className="hover:bg-gray-50">
-                        <td className="border p-2 font-bold">{s.log_pric}</td><td className="border p-2">{s.channel}</td><td className="border p-2">{s.code}</td><td className="border p-2">{s.name}</td><td className="border p-2">{s.dept}</td><td className="border p-2">{s.principal}</td>
-                        <td className="border p-2 text-center">
-                          <div className="flex justify-center gap-2">
-                            {permissions.includes('edit_sd_code') && <button onClick={() => { setEditingSDCode(s); setShowSDCodeModal(true); }} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
-                            {permissions.includes('delete_sd_code') && <button onClick={() => deleteSDCode(s.log_pric)} disabled={isDeleting} className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredSDs.length === 0 && (<tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No records found.</td></tr>)}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            {showSDCodeModal && <SDCodeModal codeObj={editingSDCode} onSave={saveSDCode} isSaving={isSaving} onClose={() => setShowSDCodeModal(false)} />}
-          </div>
-        </div>
-      );
-  }
 
   // --- Fallback View ---
   return (
