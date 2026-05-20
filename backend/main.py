@@ -637,6 +637,25 @@ def cleanup_old_activity_logs():
 
 # --- Pydantic Models ---
 
+
+class BranchCodeData(BaseModel):
+    original_log_pric: Optional[str] = None
+    log_pric: str
+    code: Optional[str] = ""
+    name: Optional[str] = ""
+    dept: Optional[str] = ""
+    principal: Optional[str] = ""
+    description: Optional[str] = ""
+
+class SDCodeData(BaseModel):
+    original_log_pric: Optional[str] = None
+    channel: Optional[str] = ""
+    code: Optional[str] = ""
+    name: Optional[str] = ""
+    dept: Optional[str] = ""
+    principal: Optional[str] = ""
+    log_pric: str
+
 class LocationMappingItem(BaseModel):
     to_location: str
     branch_code: str
@@ -2035,6 +2054,140 @@ def delete_ref_location_mapping(to_location: str, user: dict = Depends(require_p
         log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted mapping for: {to_location}")
         return {"message": "Deleted successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+    
+    
+    
+# --- Branch Code Management Endpoints ---
+
+@app.get("/account/branch-codes")
+def get_branch_codes(user: dict = Depends(get_current_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT [Log-Pric], [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code")
+        rows = cursor.fetchall()
+        conn.close()
+        return [{"log_pric": r[0], "code": r[1], "name": r[2], "dept": r[3], "principal": r[4], "description": r[5]} for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading branch codes: {str(e)}")
+
+@app.post("/account/branch-codes")
+def save_branch_code(data: BranchCodeData, user: dict = Depends(get_current_user)):
+    perms = user.get("permissions", [])
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+
+        if data.original_log_pric:
+            if "edit_branch_code" not in perms:
+                conn.close()
+                raise HTTPException(status_code=403, detail="Requires 'edit_branch_code' permission")
+            
+            cursor.execute("""
+                UPDATE Branch_Code 
+                SET [Log-Pric] = ?, [Code] = ?, [Name] = ?, [Dept] = ?, [Principal] = ?, [Description] = ? 
+                WHERE [Log-Pric] = ?
+            """, (data.log_pric, data.code, data.name, data.dept, data.principal, data.description, data.original_log_pric))
+            log_user_activity(user['username'], "UPDATE_BRANCH_CODE", f"Updated Branch Code: {data.log_pric}")
+        else:
+            if "add_branch_code" not in perms:
+                conn.close()
+                raise HTTPException(status_code=403, detail="Requires 'add_branch_code' permission")
+            
+            cursor.execute("""
+                INSERT INTO Branch_Code ([Log-Pric], [Code], [Name], [Dept], [Principal], [Description]) 
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (data.log_pric, data.code, data.name, data.dept, data.principal, data.description))
+            log_user_activity(user['username'], "ADD_BRANCH_CODE", f"Added Branch Code: {data.log_pric}")
+
+        conn.commit()
+        conn.close()
+        return {"message": "Branch code saved successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving branch code: {str(e)}")
+
+@app.delete("/account/branch-codes/{log_pric}")
+def delete_branch_code(log_pric: str, user: dict = Depends(require_permission("delete_branch_code"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM Branch_Code WHERE [Log-Pric] = ?", (log_pric,))
+        if cursor.rowcount == 0:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Branch code not found")
+        conn.commit()
+        conn.close()
+        log_user_activity(user['username'], "DELETE_BRANCH_CODE", f"Deleted Branch Code: {log_pric}")
+        return {"message": "Branch code deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting branch code: {str(e)}")
+
+# --- SD Code Management Endpoints ---
+
+@app.get("/account/sd-codes")
+def get_sd_codes(user: dict = Depends(get_current_user)):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT [Channel], [Code], [Name], [Dept], [Principal], [Log-Pric] FROM SD_Code")
+        rows = cursor.fetchall()
+        conn.close()
+        return [{"channel": r[0], "code": r[1], "name": r[2], "dept": r[3], "principal": r[4], "log_pric": r[5]} for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading SD codes: {str(e)}")
+
+@app.post("/account/sd-codes")
+def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user)):
+    perms = user.get("permissions", [])
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+
+        if data.original_log_pric:
+            if "edit_sd_code" not in perms:
+                conn.close()
+                raise HTTPException(status_code=403, detail="Requires 'edit_sd_code' permission")
+            
+            cursor.execute("""
+                UPDATE SD_Code 
+                SET [Channel] = ?, [Code] = ?, [Name] = ?, [Dept] = ?, [Principal] = ?, [Log-Pric] = ? 
+                WHERE [Log-Pric] = ?
+            """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric, data.original_log_pric))
+            log_user_activity(user['username'], "UPDATE_SD_CODE", f"Updated SD Code: {data.log_pric}")
+        else:
+            if "add_sd_code" not in perms:
+                conn.close()
+                raise HTTPException(status_code=403, detail="Requires 'add_sd_code' permission")
+            
+            cursor.execute("""
+                INSERT INTO SD_Code ([Channel], [Code], [Name], [Dept], [Principal], [Log-Pric]) 
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric))
+            log_user_activity(user['username'], "ADD_SD_CODE", f"Added SD Code: {data.log_pric}")
+
+        conn.commit()
+        conn.close()
+        return {"message": "SD code saved successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving SD code: {str(e)}")
+
+@app.delete("/account/sd-codes/{log_pric}")
+def delete_sd_code(log_pric: str, user: dict = Depends(require_permission("delete_sd_code"))):
+    try:
+        conn = get_logistic_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM SD_Code WHERE [Log-Pric] = ?", (log_pric,))
+        if cursor.rowcount == 0:
+            conn.close()
+            raise HTTPException(status_code=404, detail="SD code not found")
+        conn.commit()
+        conn.close()
+        log_user_activity(user['username'], "DELETE_SD_CODE", f"Deleted SD Code: {log_pric}")
+        return {"message": "SD code deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting SD code: {str(e)}")
+    
+    
 
 # --- Calculation History Endpoints ---
 
@@ -2840,6 +2993,37 @@ def validate_dwbi_item(code: str = Query(...)):
         
         if row: 
             return {"valid": True, "item": {"item_code": row[0], "item_name": row[1], "principal": row[2], "brand": row[3], "bu": row[4]}}
+        return {"valid": False}
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
+    
+    
+@app.get("/dwbi/principals/search")
+def search_dwbi_principals(q: str = Query(..., min_length=2)):
+    try:
+        conn = get_dwbi_connection()
+        cursor = conn.cursor()
+        search_term = f"%{q}%"
+        # Using DISTINCT so we only get unique ItmsGrpNam values
+        cursor.execute("SELECT DISTINCT TOP 50 ItmsGrpNam FROM Itemmasterallpp WHERE ItmsGrpNam LIKE ?", (search_term,))
+        rows = cursor.fetchall()
+        principals = [r[0] for r in rows if r[0]]
+        conn.close()
+        return {"principals": principals}
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=f"Error searching principals: {str(e)}")
+
+@app.get("/dwbi/principals/validate")
+def validate_dwbi_principal(name: str = Query(...)):
+    try:
+        conn = get_dwbi_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT TOP 1 ItmsGrpNam FROM Itemmasterallpp WHERE ItmsGrpNam = ?", (name,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row: 
+            return {"valid": True, "principal": row[0]}
         return {"valid": False}
     except Exception as e: 
         raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")

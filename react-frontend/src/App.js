@@ -34,7 +34,15 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'add_rate_cart', label: 'Add Rate Cart' },
   { id: 'edit_rate_cart', label: 'Edit Rate Cart' },
   { id: 'view_daily_report', label: 'View Daily Report' },
-  { id: 'view_activity_logs', label: 'View Activity Logs' }
+  { id: 'view_activity_logs', label: 'View Activity Logs' },
+  { id: 'view_branch_codes', label: 'View Branch Codes' },
+  { id: 'add_branch_code', label: 'Add Branch Code' },
+  { id: 'edit_branch_code', label: 'Edit Branch Code' },
+  { id: 'delete_branch_code', label: 'Delete Branch Code' },
+  { id: 'view_sd_codes', label: 'View SD Codes' },
+  { id: 'add_sd_code', label: 'Add SD Code' },
+  { id: 'edit_sd_code', label: 'Edit SD Code' },
+  { id: 'delete_sd_code', label: 'Delete SD Code' },
 ];
 
 // --- Login Component ---
@@ -174,6 +182,166 @@ const PricingApp = () => {
   const [calculatedData, setCalculatedData] = useState([]);
   const [selectedAllocBrand, setSelectedAllocBrand] = useState(''); 
   const [selectedCalcBrand, setSelectedCalcBrand] = useState('');
+
+
+// Branch & SD Code States
+  const [branchCodes, setBranchCodes] = useState([]);
+  const [sdCodes, setSDCodes] = useState([]);
+  const [branchCodeFilters, setBranchCodeFilters] = useState({ log_pric: '', code: '', name: '', dept: '', principal: '', description: '' });
+  const [sdCodeFilters, setSDCodeFilters] = useState({ channel: '', code: '', name: '', dept: '', principal: '', log_pric: '' });
+  const [showBranchCodeModal, setShowBranchCodeModal] = useState(false);
+  const [showSDCodeModal, setShowSDCodeModal] = useState(false);
+  const [editingBranchCode, setEditingBranchCode] = useState(null);
+  const [editingSDCode, setEditingSDCode] = useState(null);
+
+
+  const BranchCodeModal = ({ codeObj, onSave, onClose, isSaving }) => {
+    const [formData, setFormData] = useState(codeObj || { log_pric: '', code: '', name: '', dept: '', principal: '', description: '' });
+    const [searchResults, setSearchResults] = useState([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [isValidating, setIsValidating] = useState(false);
+    const [searchTerm, setSearchTerm] = useState(codeObj ? codeObj.log_pric : '');
+
+    const handleSearch = async (query) => {
+        setSearchTerm(query);
+        if (query.length < 2) { setSearchResults([]); return; }
+        setIsSearching(true);
+        try {
+            const response = await authFetch(`${API_URL}/dwbi/principals/search?q=${encodeURIComponent(query)}`);
+            if (response.ok) setSearchResults((await response.json()).principals);
+        } catch (error) {} finally { setIsSearching(false); }
+    };
+
+    const selectPrincipal = (selectedName) => {
+        setFormData({ ...formData, log_pric: selectedName });
+        setSearchTerm(selectedName); 
+        setSearchResults([]); 
+    };
+
+    const handleSaveButton = async () => {
+        if (!searchTerm) { showNotification("Log-Pric required", "error"); return; }
+        setIsValidating(true);
+        try {
+            const response = await authFetch(`${API_URL}/dwbi/principals/validate?name=${encodeURIComponent(searchTerm)}`);
+            if (response.ok) {
+                const result = await response.json();
+                if (result.valid) onSave({ ...formData, log_pric: result.principal });
+                else showNotification("Invalid Log-Pric (Not found in DWBI).", "error");
+            } else showNotification("Validation check failed.", "error");
+        } catch (error) { showNotification("Network error", "error"); } finally { setIsValidating(false); }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+          <h2 className="text-2xl font-bold mb-4">{codeObj ? 'Edit Branch Code' : 'Add Branch Code'}</h2>
+          <div className="space-y-4">
+            <div className="relative">
+              <label className="block text-sm font-semibold mb-1">Log-Pric (Search ItmsGrpNam) <span className="text-red-500">*</span></label>
+              <div className="relative">
+                <input disabled={isSaving || isValidating} type="text" value={searchTerm} onChange={(e) => handleSearch(e.target.value)} className="w-full p-2 border rounded pr-8" placeholder="Type to search..." />
+                <div className="absolute right-2 top-2 text-gray-400"><Search size={18} /></div>
+              </div>
+              {searchResults.length > 0 && (
+                <div className="absolute z-10 w-full bg-white border rounded shadow-lg max-h-48 overflow-y-auto mt-1">
+                  {searchResults.map((res, idx) => (
+                    <div key={idx} onClick={() => selectPrincipal(res)} className="p-2 hover:bg-blue-50 cursor-pointer border-b last:border-0 text-sm">
+                      <div className="font-bold text-gray-800">{res}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div><label className="block text-sm font-semibold mb-1">Code</label><input disabled={isSaving} type="text" value={formData.code} onChange={(e) => setFormData({...formData, code: e.target.value})} className="w-full p-2 border rounded" /></div>
+            <div><label className="block text-sm font-semibold mb-1">Name</label><input disabled={isSaving} type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full p-2 border rounded" /></div>
+            <div><label className="block text-sm font-semibold mb-1">Dept</label><input disabled={isSaving} type="text" value={formData.dept} onChange={(e) => setFormData({...formData, dept: e.target.value})} className="w-full p-2 border rounded" /></div>
+            <div><label className="block text-sm font-semibold mb-1">Principal</label><input disabled={isSaving} type="text" value={formData.principal} onChange={(e) => setFormData({...formData, principal: e.target.value})} className="w-full p-2 border rounded" /></div>
+            <div><label className="block text-sm font-semibold mb-1">Description</label><input disabled={isSaving} type="text" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full p-2 border rounded" /></div>
+          </div>
+          <div className="flex gap-2 mt-6">
+            <button onClick={handleSaveButton} disabled={isValidating || isSaving} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed">
+              {isValidating ? "Validating..." : isSaving ? "Saving..." : "Save"}
+            </button>
+            <button onClick={onClose} disabled={isValidating || isSaving} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed">Cancel</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const SDCodeModal = ({ codeObj, onSave, onClose, isSaving }) => {
+    const [formData, setFormData] = useState(codeObj || { channel: '', code: '', name: '', dept: '', principal: '', log_pric: '' });
+    const [searchResults, setSearchResults] = useState([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [isValidating, setIsValidating] = useState(false);
+    const [searchTerm, setSearchTerm] = useState(codeObj ? codeObj.log_pric : '');
+
+    const handleSearch = async (query) => {
+        setSearchTerm(query);
+        if (query.length < 2) { setSearchResults([]); return; }
+        setIsSearching(true);
+        try {
+            const response = await authFetch(`${API_URL}/dwbi/principals/search?q=${encodeURIComponent(query)}`);
+            if (response.ok) setSearchResults((await response.json()).principals);
+        } catch (error) {} finally { setIsSearching(false); }
+    };
+
+    const selectPrincipal = (selectedName) => {
+        setFormData({ ...formData, log_pric: selectedName });
+        setSearchTerm(selectedName); 
+        setSearchResults([]); 
+    };
+
+    const handleSaveButton = async () => {
+        if (!searchTerm) { showNotification("Log-Pric required", "error"); return; }
+        setIsValidating(true);
+        try {
+            const response = await authFetch(`${API_URL}/dwbi/principals/validate?name=${encodeURIComponent(searchTerm)}`);
+            if (response.ok) {
+                const result = await response.json();
+                if (result.valid) onSave({ ...formData, log_pric: result.principal });
+                else showNotification("Invalid Log-Pric (Not found in DWBI).", "error");
+            } else showNotification("Validation check failed.", "error");
+        } catch (error) { showNotification("Network error", "error"); } finally { setIsValidating(false); }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+          <h2 className="text-2xl font-bold mb-4">{codeObj ? 'Edit SD Code' : 'Add SD Code'}</h2>
+          <div className="space-y-4">
+            <div className="relative">
+              <label className="block text-sm font-semibold mb-1">Log-Pric (Search ItmsGrpNam) <span className="text-red-500">*</span></label>
+              <div className="relative">
+                <input disabled={isSaving || isValidating} type="text" value={searchTerm} onChange={(e) => handleSearch(e.target.value)} className="w-full p-2 border rounded pr-8" placeholder="Type to search..." />
+                <div className="absolute right-2 top-2 text-gray-400"><Search size={18} /></div>
+              </div>
+              {searchResults.length > 0 && (
+                <div className="absolute z-10 w-full bg-white border rounded shadow-lg max-h-48 overflow-y-auto mt-1">
+                  {searchResults.map((res, idx) => (
+                    <div key={idx} onClick={() => selectPrincipal(res)} className="p-2 hover:bg-blue-50 cursor-pointer border-b last:border-0 text-sm">
+                      <div className="font-bold text-gray-800">{res}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div><label className="block text-sm font-semibold mb-1">Channel</label><input disabled={isSaving} type="text" value={formData.channel} onChange={(e) => setFormData({...formData, channel: e.target.value})} className="w-full p-2 border rounded" /></div>
+            <div><label className="block text-sm font-semibold mb-1">Code</label><input disabled={isSaving} type="text" value={formData.code} onChange={(e) => setFormData({...formData, code: e.target.value})} className="w-full p-2 border rounded" /></div>
+            <div><label className="block text-sm font-semibold mb-1">Name</label><input disabled={isSaving} type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full p-2 border rounded" /></div>
+            <div><label className="block text-sm font-semibold mb-1">Dept</label><input disabled={isSaving} type="text" value={formData.dept} onChange={(e) => setFormData({...formData, dept: e.target.value})} className="w-full p-2 border rounded" /></div>
+            <div><label className="block text-sm font-semibold mb-1">Principal</label><input disabled={isSaving} type="text" value={formData.principal} onChange={(e) => setFormData({...formData, principal: e.target.value})} className="w-full p-2 border rounded" /></div>
+          </div>
+          <div className="flex gap-2 mt-6">
+            <button onClick={handleSaveButton} disabled={isValidating || isSaving} className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed">
+              {isValidating ? "Validating..." : isSaving ? "Saving..." : "Save"}
+            </button>
+            <button onClick={onClose} disabled={isValidating || isSaving} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed">Cancel</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
 
 
@@ -664,6 +832,73 @@ const PricingApp = () => {
       const response = await authFetch(`${API_URL}/history`);
       if (response.ok) { const data = await response.json(); setHistoryData(data.history); }
     } catch (error) { showNotification(`Error loading history: ${error.message}`, 'error'); }
+  };
+
+
+  // --- Branch Codes ---
+  const loadBranchCodes = async () => {
+      try {
+          const response = await authFetch(`${API_URL}/account/branch-codes`);
+          if (response.ok) setBranchCodes(await response.json());
+      } catch (error) { showNotification(`Error loading branch codes: ${error.message}`, 'error'); }
+  };
+
+  const saveBranchCode = async (data) => {
+      if (!data.log_pric) { showNotification('Log-Pric is required', 'error'); return; }
+      setIsSaving(true);
+      try {
+          const payload = { ...data, original_log_pric: editingBranchCode ? editingBranchCode.log_pric : null };
+          const response = await authFetch(`${API_URL}/account/branch-codes`, { 
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) 
+          });
+          if (response.ok) { showNotification('Branch code saved', 'success'); loadBranchCodes(); setShowBranchCodeModal(false); setEditingBranchCode(null); }
+          else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+      finally { setIsSaving(false); }
+  };
+
+  const deleteBranchCode = async (log_pric) => {
+      if (!window.confirm(`Delete Branch Code: ${log_pric}?`)) return;
+      setIsDeleting(true);
+      try {
+          const response = await authFetch(`${API_URL}/account/branch-codes/${encodeURIComponent(log_pric)}`, { method: 'DELETE' });
+          if (response.ok) { showNotification('Deleted successfully', 'success'); loadBranchCodes(); }
+          else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+      finally { setIsDeleting(false); }
+  };
+
+  // --- SD Codes ---
+  const loadSDCodes = async () => {
+      try {
+          const response = await authFetch(`${API_URL}/account/sd-codes`);
+          if (response.ok) setSDCodes(await response.json());
+      } catch (error) { showNotification(`Error loading SD codes: ${error.message}`, 'error'); }
+  };
+
+  const saveSDCode = async (data) => {
+      if (!data.log_pric) { showNotification('Log-Pric is required', 'error'); return; }
+      setIsSaving(true);
+      try {
+          const payload = { ...data, original_log_pric: editingSDCode ? editingSDCode.log_pric : null };
+          const response = await authFetch(`${API_URL}/account/sd-codes`, { 
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) 
+          });
+          if (response.ok) { showNotification('SD code saved', 'success'); loadSDCodes(); setShowSDCodeModal(false); setEditingSDCode(null); }
+          else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+      finally { setIsSaving(false); }
+  };
+
+  const deleteSDCode = async (log_pric) => {
+      if (!window.confirm(`Delete SD Code: ${log_pric}?`)) return;
+      setIsDeleting(true);
+      try {
+          const response = await authFetch(`${API_URL}/account/sd-codes/${encodeURIComponent(log_pric)}`, { method: 'DELETE' });
+          if (response.ok) { showNotification('Deleted successfully', 'success'); loadSDCodes(); }
+          else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+      finally { setIsDeleting(false); }
   };
 
   const fetchSubmittedAllocation = async (start = '', end = '') => {
@@ -1264,6 +1499,9 @@ const PricingApp = () => {
         fetchCombinedDashboard(dashboardMonth, dashboardBranch, dashboardToLoc); 
     }
     if (token && currentPage === 'activity_logs' && permissions.includes('view_activity_logs')) { fetchActivityLogs(0); }
+    
+    if (token && currentPage === 'branch_codes' && permissions.includes('view_branch_codes')) loadBranchCodes();
+    if (token && currentPage === 'sd_codes' && permissions.includes('view_sd_codes')) loadSDCodes();
   }, [currentPage, token, permissions, activeDailyTab]); 
 
   useEffect(() => {
@@ -1792,6 +2030,8 @@ const PricingApp = () => {
             {permissions.includes('view_calculator') && <button onClick={() => setCurrentPage('calculator')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'calculator' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calculator size={18} /> Calculator</button>}
             {permissions.includes('view_gates') && <button onClick={() => setCurrentPage('gates')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Gates</button>}
             {permissions.includes('view_items') && <button onClick={() => setCurrentPage('items')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><FileText size={18} /> Items</button>}
+            {permissions.includes('view_branch_codes') && (<button onClick={() => setCurrentPage('branch_codes')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'branch_codes' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> Branch Codes</button>)}
+            {permissions.includes('view_sd_codes') && (<button onClick={() => setCurrentPage('sd_codes')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'sd_codes' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Database size={18} /> SD Codes</button>)}
             {permissions.includes('view_rate_carts') && <button onClick={() => setCurrentPage('rate_carts')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'rate_carts' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Percent size={18} /> Rate Carts</button>}
             {permissions.includes('view_daily_report') && <button onClick={() => setCurrentPage('daily_report')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'daily_report' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><Calendar size={18} /> Daily Report</button>}
             {permissions.includes('view_dashboard') && <button onClick={() => setCurrentPage('dashboard')} className={`flex items-center gap-2 px-3 py-2 rounded transition ${currentPage === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}><BarChart2 size={18} /> Dashboard</button>}
@@ -3915,6 +4155,120 @@ const PricingApp = () => {
         </div>
       </div>
     );
+  }
+
+  // --- Branch Codes View ---
+  if (currentPage === 'branch_codes' && permissions.includes('view_branch_codes')) {
+      const filteredBranches = branchCodes.filter(b => {
+          return (b.log_pric || '').toLowerCase().includes(branchCodeFilters.log_pric.toLowerCase()) &&
+                 (b.code || '').toLowerCase().includes(branchCodeFilters.code.toLowerCase()) &&
+                 (b.name || '').toLowerCase().includes(branchCodeFilters.name.toLowerCase()) &&
+                 (b.dept || '').toLowerCase().includes(branchCodeFilters.dept.toLowerCase()) &&
+                 (b.principal || '').toLowerCase().includes(branchCodeFilters.principal.toLowerCase()) &&
+                 (b.description || '').toLowerCase().includes(branchCodeFilters.description.toLowerCase());
+      });
+
+      return (
+        <div className="min-h-screen bg-gray-50 p-6">
+          <div className="max-w-7xl mx-auto">
+            {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
+            {renderNavigation()}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h1 className="text-3xl font-bold text-gray-800">Branch Code Mapping</h1>
+                {permissions.includes('add_branch_code') && (<button onClick={() => { setEditingBranchCode(null); setShowBranchCodeModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Branch Code</button>)}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border text-sm">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="border p-2 text-left"><div>Log-Pric</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.log_pric} onChange={e => setBranchCodeFilters({...branchCodeFilters, log_pric: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.code} onChange={e => setBranchCodeFilters({...branchCodeFilters, code: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.name} onChange={e => setBranchCodeFilters({...branchCodeFilters, name: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Dept</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.dept} onChange={e => setBranchCodeFilters({...branchCodeFilters, dept: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.principal} onChange={e => setBranchCodeFilters({...branchCodeFilters, principal: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Description</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={branchCodeFilters.description} onChange={e => setBranchCodeFilters({...branchCodeFilters, description: e.target.value})} /></th>
+                      <th className="border p-2 text-center align-top">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredBranches.map((b, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="border p-2 font-bold">{b.log_pric}</td><td className="border p-2">{b.code}</td><td className="border p-2">{b.name}</td><td className="border p-2">{b.dept}</td><td className="border p-2">{b.principal}</td><td className="border p-2 text-gray-500">{b.description}</td>
+                        <td className="border p-2 text-center">
+                          <div className="flex justify-center gap-2">
+                            {permissions.includes('edit_branch_code') && <button onClick={() => { setEditingBranchCode(b); setShowBranchCodeModal(true); }} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
+                            {permissions.includes('delete_branch_code') && <button onClick={() => deleteBranchCode(b.log_pric)} disabled={isDeleting} className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredBranches.length === 0 && (<tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No records found.</td></tr>)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {showBranchCodeModal && <BranchCodeModal codeObj={editingBranchCode} onSave={saveBranchCode} isSaving={isSaving} onClose={() => setShowBranchCodeModal(false)} />}
+          </div>
+        </div>
+      );
+  }
+
+  // --- SD Codes View ---
+  if (currentPage === 'sd_codes' && permissions.includes('view_sd_codes')) {
+      const filteredSDs = sdCodes.filter(s => {
+          return (s.channel || '').toLowerCase().includes(sdCodeFilters.channel.toLowerCase()) &&
+                 (s.code || '').toLowerCase().includes(sdCodeFilters.code.toLowerCase()) &&
+                 (s.name || '').toLowerCase().includes(sdCodeFilters.name.toLowerCase()) &&
+                 (s.dept || '').toLowerCase().includes(sdCodeFilters.dept.toLowerCase()) &&
+                 (s.principal || '').toLowerCase().includes(sdCodeFilters.principal.toLowerCase()) &&
+                 (s.log_pric || '').toLowerCase().includes(sdCodeFilters.log_pric.toLowerCase());
+      });
+
+      return (
+        <div className="min-h-screen bg-gray-50 p-6">
+          <div className="max-w-7xl mx-auto">
+            {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
+            {renderNavigation()}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h1 className="text-3xl font-bold text-gray-800">SD Code Mapping</h1>
+                {permissions.includes('add_sd_code') && (<button onClick={() => { setEditingSDCode(null); setShowSDCodeModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add SD Code</button>)}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border text-sm">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="border p-2 text-left"><div>Log-Pric</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.log_pric} onChange={e => setSDCodeFilters({...sdCodeFilters, log_pric: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Channel</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.channel} onChange={e => setSDCodeFilters({...sdCodeFilters, channel: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.code} onChange={e => setSDCodeFilters({...sdCodeFilters, code: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.name} onChange={e => setSDCodeFilters({...sdCodeFilters, name: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Dept</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.dept} onChange={e => setSDCodeFilters({...sdCodeFilters, dept: e.target.value})} /></th>
+                      <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.principal} onChange={e => setSDCodeFilters({...sdCodeFilters, principal: e.target.value})} /></th>
+                      <th className="border p-2 text-center align-top">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSDs.map((s, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="border p-2 font-bold">{s.log_pric}</td><td className="border p-2">{s.channel}</td><td className="border p-2">{s.code}</td><td className="border p-2">{s.name}</td><td className="border p-2">{s.dept}</td><td className="border p-2">{s.principal}</td>
+                        <td className="border p-2 text-center">
+                          <div className="flex justify-center gap-2">
+                            {permissions.includes('edit_sd_code') && <button onClick={() => { setEditingSDCode(s); setShowSDCodeModal(true); }} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
+                            {permissions.includes('delete_sd_code') && <button onClick={() => deleteSDCode(s.log_pric)} disabled={isDeleting} className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredSDs.length === 0 && (<tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No records found.</td></tr>)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {showSDCodeModal && <SDCodeModal codeObj={editingSDCode} onSave={saveSDCode} isSaving={isSaving} onClose={() => setShowSDCodeModal(false)} />}
+          </div>
+        </div>
+      );
   }
 
   // --- Fallback View ---
