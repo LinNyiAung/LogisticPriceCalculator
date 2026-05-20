@@ -1,6 +1,6 @@
 import logging
-import pyodbc
-import sqlite3
+import aioodbc
+import aiosqlite
 import json
 import datetime
 import calendar
@@ -19,7 +19,8 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-from apscheduler.schedulers.background import BackgroundScheduler
+import asyncio
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Request 
 from dotenv import load_dotenv
 
@@ -35,14 +36,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # --- Initialization ---
 
-def startup_db():
+async def startup_db():
     """Ensure logistic.db has the required tables and updated roles"""
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         
         # Gate table 
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Gate (
                 [Gate ID] INTEGER PRIMARY KEY,
                 [Gate Name] TEXT,
@@ -55,7 +56,7 @@ def startup_db():
         """)
         
         # Item_Pricing table
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Item_Pricing (
                 [Pricing ID] INTEGER PRIMARY KEY,
                 [Gate ID] INTEGER,
@@ -70,7 +71,7 @@ def startup_db():
         """)
 
         # Calculation History Table
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Calculation_History (
                 [id] INTEGER PRIMARY KEY, 
                 [created_at] TEXT,
@@ -92,7 +93,7 @@ def startup_db():
         """)
 
         # Calculation Products Table (replaces calculated_products JSON column)
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Calculation_Products (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [calc_id] INTEGER NOT NULL,
@@ -123,7 +124,7 @@ def startup_db():
         """)
 
         # Rate Cart Table
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Rate_Cart (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [location] TEXT UNIQUE,
@@ -132,7 +133,7 @@ def startup_db():
         """)
         
         # Daily Report History Table (metadata only — rows live in child tables)
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Daily_Report_History (
                 [target_date] TEXT PRIMARY KEY,
                 [created_at] TEXT
@@ -140,7 +141,7 @@ def startup_db():
         """)
 
         # Daily Item Report Table (replaces item_report_json)
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Daily_Item_Report (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [target_date] TEXT NOT NULL,
@@ -162,7 +163,7 @@ def startup_db():
         """)
 
         # Daily Township Report Table (replaces township_report_json)
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Daily_Township_Report (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [target_date] TEXT NOT NULL,
@@ -184,7 +185,7 @@ def startup_db():
         """)
         
         # User Activity Log Table
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS User_Activity_Log (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [username] TEXT,
@@ -195,37 +196,37 @@ def startup_db():
         """)
 
         # Safely attempt to add columns for existing databases
-        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [channel] TEXT")
-        except sqlite3.OperationalError: pass
-        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [status] TEXT DEFAULT 'saved'")
-        except sqlite3.OperationalError: pass
-        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [created_by] TEXT")
-        except sqlite3.OperationalError: pass
-        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [submitted_by] TEXT")
-        except sqlite3.OperationalError: pass
-        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [submitted_at] TEXT")
-        except sqlite3.OperationalError: pass
-        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [claimed_by] TEXT")
-        except sqlite3.OperationalError: pass
-        try: cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [claimed_at] TEXT")
-        except sqlite3.OperationalError: pass
-        try: cursor.execute("ALTER TABLE Item_Pricing ADD COLUMN [BU] TEXT")
-        except sqlite3.OperationalError: pass
+        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [channel] TEXT")
+        except aiosqlite.OperationalError: pass
+        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [status] TEXT DEFAULT 'saved'")
+        except aiosqlite.OperationalError: pass
+        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [created_by] TEXT")
+        except aiosqlite.OperationalError: pass
+        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [submitted_by] TEXT")
+        except aiosqlite.OperationalError: pass
+        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [submitted_at] TEXT")
+        except aiosqlite.OperationalError: pass
+        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [claimed_by] TEXT")
+        except aiosqlite.OperationalError: pass
+        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [claimed_at] TEXT")
+        except aiosqlite.OperationalError: pass
+        try: await cursor.execute("ALTER TABLE Item_Pricing ADD COLUMN [BU] TEXT")
+        except aiosqlite.OperationalError: pass
 
         # --- Migrate legacy calculated_products JSON to Calculation_Products table ---
         try:
-            cursor.execute("SELECT id, calculated_products FROM Calculation_History WHERE calculated_products IS NOT NULL AND calculated_products != '[]' AND calculated_products != ''")
-            legacy_rows = cursor.fetchall()
+            await cursor.execute("SELECT id, calculated_products FROM Calculation_History WHERE calculated_products IS NOT NULL AND calculated_products != '[]' AND calculated_products != ''")
+            legacy_rows = await cursor.fetchall()
             migrated = 0
             for calc_id, cp_json in legacy_rows:
-                cursor.execute("SELECT COUNT(*) FROM Calculation_Products WHERE calc_id = ?", (calc_id,))
-                if cursor.fetchone()[0] > 0:
+                await cursor.execute("SELECT COUNT(*) FROM Calculation_Products WHERE calc_id = ?", (calc_id,))
+                if (await cursor.fetchone())[0] > 0:
                     continue  # already migrated
                 import json as _json
                 try:
                     products = _json.loads(cp_json)
                     for p in products:
-                        cursor.execute("""
+                        await cursor.execute("""
                             INSERT INTO Calculation_Products
                             (calc_id, code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
                              b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
@@ -247,28 +248,28 @@ def startup_db():
                 except Exception:
                     pass
             if migrated > 0:
-                conn.commit()
+                await conn.commit()
                 logger.info(f"Migrated {migrated} legacy calculation records to Calculation_Products table")
         except Exception as mig_err:
             logger.warning(f"Legacy Calculation_Products migration skipped: {mig_err}")
 
         # --- Migrate legacy Daily_Report_History JSON to Daily_Item_Report / Daily_Township_Report ---
         try:
-            cursor.execute("PRAGMA table_info(Daily_Report_History)")
-            drh_cols = [row[1] for row in cursor.fetchall()]
+            await cursor.execute("PRAGMA table_info(Daily_Report_History)")
+            drh_cols = [row[1] for row in await cursor.fetchall()]
             if 'item_report_json' in drh_cols:
-                cursor.execute("SELECT target_date, item_report_json, township_report_json FROM Daily_Report_History WHERE item_report_json IS NOT NULL")
-                legacy_daily = cursor.fetchall()
+                await cursor.execute("SELECT target_date, item_report_json, township_report_json FROM Daily_Report_History WHERE item_report_json IS NOT NULL")
+                legacy_daily = await cursor.fetchall()
                 migrated_daily = 0
                 import json as _json2
                 for target_date, ir_json, tr_json in legacy_daily:
-                    cursor.execute("SELECT COUNT(*) FROM Daily_Item_Report WHERE target_date = ?", (target_date,))
-                    if cursor.fetchone()[0] > 0:
+                    await cursor.execute("SELECT COUNT(*) FROM Daily_Item_Report WHERE target_date = ?", (target_date,))
+                    if (await cursor.fetchone())[0] > 0:
                         continue
                     try:
                         items = _json2.loads(ir_json) if ir_json else []
                         for it in items:
-                            cursor.execute("""
+                            await cursor.execute("""
                                 INSERT INTO Daily_Item_Report
                                 (target_date, bu, branch, driver_name, item_code, item_name, principal, brand,
                                  ctns, allocated_cost, cost_per_carton, driver_total_ctns, branch_cost, sales_amount)
@@ -281,7 +282,7 @@ def startup_db():
                             ))
                         townships = _json2.loads(tr_json) if tr_json else []
                         for tw in townships:
-                            cursor.execute("""
+                            await cursor.execute("""
                                 INSERT INTO Daily_Township_Report
                                 (target_date, branch, driver_name, township, customer_code, contact_person,
                                  ctns, driver_total_ctns, branch_cost, cost_per_carton, allocated_cost,
@@ -298,18 +299,18 @@ def startup_db():
                     except Exception:
                         pass
                 if migrated_daily > 0:
-                    conn.commit()
+                    await conn.commit()
                     logger.info(f"Migrated {migrated_daily} legacy daily reports to normalized tables")
         except Exception as mig_err2:
             logger.warning(f"Legacy Daily_Report migration skipped: {mig_err2}")
         
         # --- User Table with Auto-Incrementing ID & Migration ---
-        cursor.execute("PRAGMA table_info(Users)")
-        user_columns = [row[1] for row in cursor.fetchall()]
+        await cursor.execute("PRAGMA table_info(Users)")
+        user_columns = [row[1] for row in await cursor.fetchall()]
         
         if user_columns and "id" not in user_columns:
             logger.info("Migrating Users table to use 'id' as primary key...")
-            cursor.execute("""
+            await cursor.execute("""
                 CREATE TABLE Users_new (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE,
@@ -317,11 +318,11 @@ def startup_db():
                     role TEXT
                 )
             """)
-            cursor.execute("INSERT INTO Users_new (username, hashed_password, role) SELECT username, hashed_password, role FROM Users")
-            cursor.execute("DROP TABLE Users")
-            cursor.execute("ALTER TABLE Users_new RENAME TO Users")
+            await cursor.execute("INSERT INTO Users_new (username, hashed_password, role) SELECT username, hashed_password, role FROM Users")
+            await cursor.execute("DROP TABLE Users")
+            await cursor.execute("ALTER TABLE Users_new RENAME TO Users")
         elif not user_columns:
-            cursor.execute("""
+            await cursor.execute("""
                 CREATE TABLE Users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE,
@@ -331,7 +332,7 @@ def startup_db():
             """)
 
         # --- Roles Table ---
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Roles (
                 name TEXT PRIMARY KEY,
                 permissions TEXT
@@ -339,28 +340,28 @@ def startup_db():
         """)
 
         # --- Reference Tables (Locations, UOMs, Channels, Rate Cart Locations) ---
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Locations (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [name] TEXT UNIQUE
             )
         """)
 
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Rate_Cart_Locations (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [name] TEXT UNIQUE
             )
         """)
 
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS UOMs (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [name] TEXT UNIQUE
             )
         """)
 
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Channels (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [name] TEXT UNIQUE
@@ -368,7 +369,7 @@ def startup_db():
         """)
 
         # --- Branch Code Mapping Table ---
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Branch_Code (
                 [Log-Pric] TEXT,
                 [Code] TEXT,
@@ -380,7 +381,7 @@ def startup_db():
         """)
 
         # --- SD Code Mapping Table ---
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS SD_Code (
                 [Channel] TEXT,
                 [Code] TEXT,
@@ -392,7 +393,7 @@ def startup_db():
         """)
 
         # --- Gate Change Log Table ---
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Gate_Change_Log (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [gate_id] INTEGER,
@@ -406,7 +407,7 @@ def startup_db():
         """)
 
         # --- Item Change Log Table ---
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Item_Change_Log (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [pricing_id] INTEGER,
@@ -420,7 +421,7 @@ def startup_db():
         """)
 
         # --- Rate Cart Change Log Table ---
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Rate_Cart_Change_Log (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [location] TEXT,
@@ -435,7 +436,7 @@ def startup_db():
         
         
         # --- Location Mapping Table ---
-        cursor.execute("""
+        await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Location_Mapping (
                 [id] INTEGER PRIMARY KEY AUTOINCREMENT,
                 [to_location] TEXT UNIQUE,
@@ -444,19 +445,19 @@ def startup_db():
         """)
         
         # Pre-seed with existing defaults to save you time
-        cursor.execute("SELECT COUNT(*) FROM Location_Mapping")
-        if cursor.fetchone()[0] == 0:
+        await cursor.execute("SELECT COUNT(*) FROM Location_Mapping")
+        if (await cursor.fetchone())[0] == 0:
             default_mappings = [
                 ("Yangon", "YGN"), ("Mandalay", "MDY"), ("Naypyitaw", "NPT"),
                 ("Magaway", "MGW"), ("Taunggyi", "TGI"), ("Taunggu", "TGU"),
                 ("Pathein", "PTN"), ("Mawlamyine", "MLM"), ("Bago", "BGO")
             ]
-            cursor.executemany("INSERT INTO Location_Mapping (to_location, branch_code) VALUES (?, ?)", default_mappings)
+            await cursor.executemany("INSERT INTO Location_Mapping (to_location, branch_code) VALUES (?, ?)", default_mappings)
             
         
         # --- SEED DEFAULTS AND MIGRATE TO GRANULAR PERMISSIONS ---
-        # cursor.execute("SELECT COUNT(*) FROM Roles")
-        # if cursor.fetchone()[0] == 0:
+        # await cursor.execute("SELECT COUNT(*) FROM Roles")
+        # if (await cursor.fetchone())[0] == 0:
         #     default_roles = [
         #         ('admin', json.dumps([
         #             'view_calculator', 'view_history',
@@ -478,23 +479,23 @@ def startup_db():
         #         ])),
         #         ('logistics', json.dumps(['view_calculator', 'view_history', 'submit_calculation', 'view_gates', 'view_items', 'view_references', 'view_rate_carts']))
         #     ]
-        #     cursor.executemany("INSERT INTO Roles (name, permissions) VALUES (?, ?)", default_roles)
+        #     await cursor.executemany("INSERT INTO Roles (name, permissions) VALUES (?, ?)", default_roles)
 
         # Create default users
-        cursor.execute("SELECT * FROM Users WHERE username = 'account'")
-        if not cursor.fetchone():
+        await cursor.execute("SELECT * FROM Users WHERE username = 'account'")
+        if not await cursor.fetchone():
             default_pw = pwd_context.hash("account123") 
-            cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", ('account', default_pw, 'account'))
+            await cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", ('account', default_pw, 'account'))
             
-        cursor.execute("SELECT * FROM Users WHERE username = 'logistic'")
-        if not cursor.fetchone():
+        await cursor.execute("SELECT * FROM Users WHERE username = 'logistic'")
+        if not await cursor.fetchone():
             log_pw = pwd_context.hash("log123")
-            cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", ('logistic', log_pw, 'logistic'))
+            await cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", ('logistic', log_pw, 'logistic'))
             
-        cursor.execute("SELECT * FROM Users WHERE username = 'admin'")
-        if not cursor.fetchone():
+        await cursor.execute("SELECT * FROM Users WHERE username = 'admin'")
+        if not await cursor.fetchone():
             admin_pw = pwd_context.hash("admin123")
-            cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", ('admin', admin_pw, 'admin'))
+            await cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", ('admin', admin_pw, 'admin'))
 
         # Seed references
         default_locs = [
@@ -513,30 +514,30 @@ def startup_db():
             ('NPT',)
         ]
 
-        cursor.execute("SELECT COUNT(*) FROM Locations")
-        if cursor.fetchone()[0] == 0:
-            cursor.executemany("INSERT INTO Locations (name) VALUES (?)", default_locs)
+        await cursor.execute("SELECT COUNT(*) FROM Locations")
+        if (await cursor.fetchone())[0] == 0:
+            await cursor.executemany("INSERT INTO Locations (name) VALUES (?)", default_locs)
 
-        cursor.execute("SELECT COUNT(*) FROM Rate_Cart_Locations")
-        if cursor.fetchone()[0] == 0:
-            cursor.executemany("INSERT INTO Rate_Cart_Locations (name) VALUES (?)", default_locsrc)
+        await cursor.execute("SELECT COUNT(*) FROM Rate_Cart_Locations")
+        if (await cursor.fetchone())[0] == 0:
+            await cursor.executemany("INSERT INTO Rate_Cart_Locations (name) VALUES (?)", default_locsrc)
 
-        cursor.execute("SELECT COUNT(*) FROM UOMs")
-        if cursor.fetchone()[0] == 0:
+        await cursor.execute("SELECT COUNT(*) FROM UOMs")
+        if (await cursor.fetchone())[0] == 0:
             default_uoms = [('Kg',), ('Ton',)]
-            cursor.executemany("INSERT INTO UOMs (name) VALUES (?)", default_uoms)
+            await cursor.executemany("INSERT INTO UOMs (name) VALUES (?)", default_uoms)
 
-        cursor.execute("SELECT COUNT(*) FROM Channels")
-        if cursor.fetchone()[0] == 0:
+        await cursor.execute("SELECT COUNT(*) FROM Channels")
+        if (await cursor.fetchone())[0] == 0:
             default_channels = [('SD',), ('Branch',), ('Telecom Branch',), ('Telecom SD',), ('Outlet',)]
-            cursor.executemany("INSERT INTO Channels (name) VALUES (?)", default_channels)
+            await cursor.executemany("INSERT INTO Channels (name) VALUES (?)", default_channels)
         
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         logger.info("Logistic DB initialized successfully")
         
         # --- Start Scheduler ---
-        scheduler = BackgroundScheduler()
+        scheduler = AsyncIOScheduler()
         
         # Schedule daily job at 23:55 (11:55 PM) to compute end-of-day reports
         scheduler.add_job(daily_job_generator, 'cron', hour=23, minute=55)
@@ -552,7 +553,7 @@ def startup_db():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    startup_db()
+    await startup_db()
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -572,7 +573,7 @@ logger = logging.getLogger(__name__)
 
 # --- Database Connections ---
 
-def get_dwbi_connection():
+async def get_dwbi_connection():
     """Create and return a SQL Server connection to DWBI (Read-Only Source)"""
     
     # Securely fetch credentials from the .env file
@@ -591,44 +592,44 @@ def get_dwbi_connection():
         f'UID={db_user};'
         f'PWD={db_password};'
     )
-    return pyodbc.connect(conn_str)
+    return await aioodbc.connect(dsn=conn_str, autocommit=False)
 
-def get_logistic_connection():
+async def get_logistic_connection():
     """Create and return a SQLite connection to logistic.db (Read/Write Source)"""
     db_path = os.path.join(os.path.dirname(__file__), 'logistic.db')
-    conn = sqlite3.connect(db_path)
+    conn = await aiosqlite.connect(db_path)
     return conn
 
 # --- Helper: Activity Logger ---
-def log_user_activity(username: str, action: str, details: str = ""):
+async def log_user_activity(username: str, action: str, details: str = ""):
     """Inserts a new record into the User_Activity_Log table."""
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute(
+        await cursor.execute(
             "INSERT INTO User_Activity_Log (username, action, details, timestamp) VALUES (?, ?, ?, ?)",
             (username, action, details, now_str)
         )
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
     except Exception as e:
         logger.error(f"Failed to log user activity: {str(e)}")
 
-def cleanup_old_activity_logs():
+async def cleanup_old_activity_logs():
     """Automated job to delete activity logs older than 30 days."""
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         
         # Calculate the threshold date (30 days ago)
         threshold_date = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
         
-        cursor.execute("DELETE FROM User_Activity_Log WHERE timestamp < ?", (threshold_date,))
+        await cursor.execute("DELETE FROM User_Activity_Log WHERE timestamp < ?", (threshold_date,))
         deleted_count = cursor.rowcount
         
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         
         if deleted_count > 0:
             logger.info(f"Cleaned up {deleted_count} system activity logs older than {threshold_date}.")
@@ -804,16 +805,16 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             raise credentials_exception
             
         # --- NEW: Fetch fresh role and permissions from DB on every request ---
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("""
             SELECT u.role, r.permissions 
             FROM Users u
             LEFT JOIN Roles r ON u.role = r.name
             WHERE u.id = ?
         """, (user_id,))
-        user_record = cursor.fetchone()
-        conn.close()
+        user_record = await cursor.fetchone()
+        await conn.close()
 
         if not user_record:
             raise credentials_exception # Boot user out if they were deleted
@@ -829,12 +830,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 # --- Add this new endpoint anywhere below get_current_user ---
 @app.get("/users/me")
-def get_user_me(current_user: dict = Depends(get_current_user)):
+async def get_user_me(current_user: dict = Depends(get_current_user)):
     """Returns the fresh user session data directly from the DB"""
     return current_user
 
 def require_permission(perm: str):
-    def permission_checker(current_user: dict = Depends(get_current_user)):
+    async def permission_checker(current_user: dict = Depends(get_current_user)):
         if perm not in current_user.get("permissions", []):
             raise HTTPException(status_code=403, detail=f"Requires '{perm}' permission")
         return current_user
@@ -844,16 +845,16 @@ def require_permission(perm: str):
 
 @app.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    conn = get_logistic_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
+    conn = await get_logistic_connection()
+    cursor = await conn.cursor()
+    await cursor.execute("""
         SELECT u.id, u.username, u.hashed_password, u.role, r.permissions 
         FROM Users u
         LEFT JOIN Roles r ON u.role = r.name
         WHERE u.username = ?
     """, (form_data.username,))
-    user = cursor.fetchone()
-    conn.close()
+    user = await cursor.fetchone()
+    await conn.close()
     
     if not user or not verify_password(form_data.password, user[2]):
         raise HTTPException(
@@ -865,14 +866,14 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     permissions = json.loads(user[4]) if user[4] else []
     access_token = create_access_token(data={"sub": user[1], "id": user[0], "role": user[3], "permissions": permissions})
     
-    log_user_activity(user[1], "LOGIN", "User authenticated successfully")
+    await log_user_activity(user[1], "LOGIN", "User authenticated successfully")
     
     return {"access_token": access_token, "token_type": "bearer", "role": user[3], "username": user[1], "permissions": permissions, "id": user[0]}
 
 # --- System Activity Log Endpoint ---
 
 @app.get("/admin/activity-logs", response_model=ActivityLogPaginatedResponse)
-def get_activity_logs(
+async def get_activity_logs(
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     timestamp: Optional[str] = Query(None, description="Filter by timestamp"),
@@ -882,8 +883,8 @@ def get_activity_logs(
     user: dict = Depends(require_permission("view_activity_logs"))
 ):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         
         query = "SELECT id, username, action, details, timestamp FROM User_Activity_Log WHERE 1=1"
         count_query = "SELECT COUNT(*) FROM User_Activity_Log WHERE 1=1"
@@ -910,15 +911,15 @@ def get_activity_logs(
         query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
         
         # Get the total count for pagination
-        cursor.execute(count_query, params)
-        total_count = cursor.fetchone()[0]
+        await cursor.execute(count_query, params)
+        total_count = (await cursor.fetchone())[0]
         
         # Get the paginated rows
         params.extend([limit, offset])
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
         
-        conn.close()
+        await conn.close()
         
         logs = [{"id": r[0], "username": r[1], "action": r[2], "details": r[3], "timestamp": r[4]} for r in rows]
         return {"total": total_count, "logs": logs}
@@ -929,66 +930,66 @@ def get_activity_logs(
 # --- Role Management Endpoints ---
 
 @app.get("/roles", response_model=List[RoleResponse])
-def get_all_roles(user: dict = Depends(require_permission("view_roles"))):
+async def get_all_roles(user: dict = Depends(require_permission("view_roles"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, permissions FROM Roles ORDER BY name")
-        rows = cursor.fetchall()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT name, permissions FROM Roles ORDER BY name")
+        rows = await cursor.fetchall()
+        await conn.close()
         return [{"name": row[0], "permissions": json.loads(row[1]) if row[1] else []} for row in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching roles: {str(e)}")
 
 @app.post("/roles")
-def create_role(role_data: RoleCreate, user: dict = Depends(require_permission("add_role"))):
+async def create_role(role_data: RoleCreate, user: dict = Depends(require_permission("add_role"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM Roles WHERE name = ?", (role_data.name,))
-        if cursor.fetchone():
-            conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT name FROM Roles WHERE name = ?", (role_data.name,))
+        if await cursor.fetchone():
+            await conn.close()
             raise HTTPException(status_code=400, detail="Role already exists")
-        cursor.execute("INSERT INTO Roles (name, permissions) VALUES (?, ?)", 
+        await cursor.execute("INSERT INTO Roles (name, permissions) VALUES (?, ?)", 
                       (role_data.name, json.dumps(role_data.permissions)))
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         
-        log_user_activity(user['username'], "CREATE_ROLE", f"Created role: {role_data.name}")
+        await log_user_activity(user['username'], "CREATE_ROLE", f"Created role: {role_data.name}")
         return {"message": "Role created successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating role: {str(e)}")
 
 @app.put("/roles/{role_name}")
-def update_role(role_name: str, role_data: RoleUpdate, user: dict = Depends(require_permission("edit_role"))):
+async def update_role(role_name: str, role_data: RoleUpdate, user: dict = Depends(require_permission("edit_role"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE Roles SET permissions = ? WHERE name = ?", (json.dumps(role_data.permissions), role_name))
-        conn.commit()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("UPDATE Roles SET permissions = ? WHERE name = ?", (json.dumps(role_data.permissions), role_name))
+        await conn.commit()
+        await conn.close()
         
-        log_user_activity(user['username'], "UPDATE_ROLE", f"Updated permissions for role: {role_name}")
+        await log_user_activity(user['username'], "UPDATE_ROLE", f"Updated permissions for role: {role_name}")
         return {"message": "Role updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating role: {str(e)}")
 
 @app.delete("/roles/{role_name}")
-def delete_role(role_name: str, user: dict = Depends(require_permission("delete_role"))):
+async def delete_role(role_name: str, user: dict = Depends(require_permission("delete_role"))):
     # if role_name in ['admin', 'account', 'logistics']:
     #     raise HTTPException(status_code=400, detail="Cannot delete default system roles")
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM Users WHERE role = ?", (role_name,))
-        if cursor.fetchone()[0] > 0:
-            conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT COUNT(*) FROM Users WHERE role = ?", (role_name,))
+        if (await cursor.fetchone())[0] > 0:
+            await conn.close()
             raise HTTPException(status_code=400, detail="Cannot delete role currently assigned to users")
-        cursor.execute("DELETE FROM Roles WHERE name = ?", (role_name,))
-        conn.commit()
-        conn.close()
+        await cursor.execute("DELETE FROM Roles WHERE name = ?", (role_name,))
+        await conn.commit()
+        await conn.close()
         
-        log_user_activity(user['username'], "DELETE_ROLE", f"Deleted role: {role_name}")
+        await log_user_activity(user['username'], "DELETE_ROLE", f"Deleted role: {role_name}")
         return {"message": "Role deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting role: {str(e)}")
@@ -996,34 +997,34 @@ def delete_role(role_name: str, user: dict = Depends(require_permission("delete_
 # --- User Management Endpoints ---
 
 @app.get("/users", response_model=List[UserResponse])
-def get_all_users(user: dict = Depends(require_permission("view_users"))):
+async def get_all_users(user: dict = Depends(require_permission("view_users"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, username, role FROM Users ORDER BY username")
-        rows = cursor.fetchall()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT id, username, role FROM Users ORDER BY username")
+        rows = await cursor.fetchall()
+        await conn.close()
         return [{"id": row[0], "username": row[1], "role": row[2]} for row in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
     
 
 @app.post("/users")
-def create_user(user_data: UserCreate, user: dict = Depends(require_permission("add_user"))):
+async def create_user(user_data: UserCreate, user: dict = Depends(require_permission("add_user"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT username FROM Users WHERE username = ?", (user_data.username,))
-        if cursor.fetchone():
-            conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT username FROM Users WHERE username = ?", (user_data.username,))
+        if await cursor.fetchone():
+            await conn.close()
             raise HTTPException(status_code=400, detail="Username already exists")
         hashed_pw = pwd_context.hash(user_data.password)
-        cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
+        await cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
                       (user_data.username, hashed_pw, user_data.role))
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         
-        log_user_activity(user['username'], "CREATE_USER", f"Created user: {user_data.username} with role: {user_data.role}")
+        await log_user_activity(user['username'], "CREATE_USER", f"Created user: {user_data.username} with role: {user_data.role}")
         return {"message": "User created successfully"}
     except HTTPException:
         raise
@@ -1031,29 +1032,29 @@ def create_user(user_data: UserCreate, user: dict = Depends(require_permission("
         raise HTTPException(status_code=500, detail=f"Error creating user: {str(e)}")
 
 @app.put("/users/{user_id}")
-def update_user(user_id: int, user_data: UserUpdate, user: dict = Depends(require_permission("edit_user"))):
+async def update_user(user_id: int, user_data: UserUpdate, user: dict = Depends(require_permission("edit_user"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT username FROM Users WHERE id = ?", (user_id,))
-        target_user = cursor.fetchone()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT username FROM Users WHERE id = ?", (user_id,))
+        target_user = await cursor.fetchone()
         if not target_user:
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=404, detail="User not found")
             
         changes = []
         if user_data.password:
             hashed_pw = pwd_context.hash(user_data.password)
-            cursor.execute("UPDATE Users SET hashed_password = ? WHERE id = ?", (hashed_pw, user_id))
+            await cursor.execute("UPDATE Users SET hashed_password = ? WHERE id = ?", (hashed_pw, user_id))
             changes.append("password")
         if user_data.role:
-            cursor.execute("UPDATE Users SET role = ? WHERE id = ?", (user_data.role, user_id))
+            await cursor.execute("UPDATE Users SET role = ? WHERE id = ?", (user_data.role, user_id))
             changes.append(f"role to {user_data.role}")
             
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         
-        log_user_activity(user['username'], "UPDATE_USER", f"Updated user: {target_user[0]} ({', '.join(changes)})")
+        await log_user_activity(user['username'], "UPDATE_USER", f"Updated user: {target_user[0]} ({', '.join(changes)})")
         return {"message": "User updated successfully"}
     except HTTPException:
         raise
@@ -1061,24 +1062,24 @@ def update_user(user_id: int, user_data: UserUpdate, user: dict = Depends(requir
         raise HTTPException(status_code=500, detail=f"Error updating user: {str(e)}")
 
 @app.delete("/users/{user_id}")
-def delete_user(user_id: int, user: dict = Depends(require_permission("delete_user"))):
+async def delete_user(user_id: int, user: dict = Depends(require_permission("delete_user"))):
     if user_id == user.get("id"):
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         
-        cursor.execute("SELECT username FROM Users WHERE id = ?", (user_id,))
-        target_user = cursor.fetchone()
+        await cursor.execute("SELECT username FROM Users WHERE id = ?", (user_id,))
+        target_user = await cursor.fetchone()
         
-        cursor.execute("DELETE FROM Users WHERE id = ?", (user_id,))
+        await cursor.execute("DELETE FROM Users WHERE id = ?", (user_id,))
         if cursor.rowcount == 0:
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=404, detail="User not found")
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         
-        log_user_activity(user['username'], "DELETE_USER", f"Deleted user: {target_user[0]}")
+        await log_user_activity(user['username'], "DELETE_USER", f"Deleted user: {target_user[0]}")
         return {"message": "User deleted successfully"}
     except HTTPException:
         raise
@@ -1086,33 +1087,33 @@ def delete_user(user_id: int, user: dict = Depends(require_permission("delete_us
         raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
     
 @app.put("/users/me/password")
-def change_password(data: ChangePasswordRequest, current_user: dict = Depends(get_current_user)):
+async def change_password(data: ChangePasswordRequest, current_user: dict = Depends(get_current_user)):
     username = current_user["username"]
     
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         
-        cursor.execute("SELECT hashed_password FROM Users WHERE username = ?", (username,))
-        row = cursor.fetchone()
+        await cursor.execute("SELECT hashed_password FROM Users WHERE username = ?", (username,))
+        row = await cursor.fetchone()
         
         if not row:
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=404, detail="User not found")
             
         current_hashed_password = row[0]
         
         if not verify_password(data.old_password, current_hashed_password):
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=400, detail="Incorrect old password")
             
         new_hashed_password = pwd_context.hash(data.new_password)
-        cursor.execute("UPDATE Users SET hashed_password = ? WHERE username = ?", (new_hashed_password, username))
+        await cursor.execute("UPDATE Users SET hashed_password = ? WHERE username = ?", (new_hashed_password, username))
         
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         
-        log_user_activity(username, "CHANGE_PASSWORD", "User changed their own password")
+        await log_user_activity(username, "CHANGE_PASSWORD", "User changed their own password")
         return {"message": "Password changed successfully"}
         
     except HTTPException:
@@ -1121,13 +1122,13 @@ def change_password(data: ChangePasswordRequest, current_user: dict = Depends(ge
         raise HTTPException(status_code=500, detail=f"Error changing password: {str(e)}")
 
 # --- Helper Functions for Calculation ---
-def determine_calculation_type_sql(gate_id):
+async def determine_calculation_type_sql(gate_id):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT [Cost] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
-        row = cursor.fetchone()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT [Cost] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
+        row = await cursor.fetchone()
+        await conn.close()
 
         if row and row[0] is not None:
             try:
@@ -1152,7 +1153,7 @@ def get_rounded_ctns(val):
     except (ValueError, TypeError):
         return 0
 
-def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, manual_total_cost=None, additional_charges=0.0):
+async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, manual_total_cost=None, additional_charges=0.0):
     add_charges = float(additional_charges) if additional_charges is not None else 0.0
 
     pg_nums = [str(d).replace("PG - ", "").replace("PG-", "") for d in doc_nums if not str(d).startswith("PDG")]
@@ -1161,8 +1162,8 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
     pick_rows = []
 
     try:
-        conn_dwbi = get_dwbi_connection()
-        cursor_dwbi = conn_dwbi.cursor()
+        conn_dwbi = await get_dwbi_connection()
+        cursor_dwbi = await conn_dwbi.cursor()
 
         if pg_nums:
             placeholders = ','.join('?' * len(pg_nums))
@@ -1173,8 +1174,8 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
                 GROUP BY DocNum, ItemCode
                 ORDER BY DocNum, ItemCode
             """
-            cursor_dwbi.execute(query_pg, pg_nums)
-            pick_rows.extend(cursor_dwbi.fetchall())
+            await cursor_dwbi.execute(query_pg, pg_nums)
+            pick_rows.extend(await cursor_dwbi.fetchall())
 
         if pdg_nums:
             placeholders = ','.join('?' * len(pdg_nums))
@@ -1185,10 +1186,10 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
                 GROUP BY DocNum, ItemCode
                 ORDER BY DocNum, ItemCode
             """
-            cursor_dwbi.execute(query_pdg, pdg_nums)
-            pick_rows.extend(cursor_dwbi.fetchall())
+            await cursor_dwbi.execute(query_pdg, pdg_nums)
+            pick_rows.extend(await cursor_dwbi.fetchall())
 
-        conn_dwbi.close()
+        await conn_dwbi.close()
     except Exception as e:
         raise Exception(f"Error fetching transfer details: {str(e)}")
     
@@ -1196,31 +1197,31 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
         raise Exception("No products found for the selected Doc Nums")
     
     try:
-        conn_log = get_logistic_connection()
-        cursor_log = conn_log.cursor()
+        conn_log = await get_logistic_connection()
+        cursor_log = await conn_log.cursor()
         
         if from_loc and to_loc:
-            cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit] FROM Gate WHERE [Gate Name] = ? AND [From] = ? AND [To] = ?", (gate_name, from_loc, to_loc))
+            await cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit] FROM Gate WHERE [Gate Name] = ? AND [From] = ? AND [To] = ?", (gate_name, from_loc, to_loc))
         else:
-            cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
+            await cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
             
-        gate_row = cursor_log.fetchone()
+        gate_row = await cursor_log.fetchone()
         
-        cursor_log.execute("SELECT [Log-Pric], [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code")
+        await cursor_log.execute("SELECT [Log-Pric], [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code")
         branch_code_map = {row[0].strip().lower(): {
             "Code": row[1], "Name": row[2], "Dept": row[3], "Principal": row[4], "Description": row[5]
-        } for row in cursor_log.fetchall() if row[3]}
+        } for row in await cursor_log.fetchall() if row[3]}
 
-        cursor_log.execute("SELECT [Dept], [Principal], [Log-Pric] FROM SD_Code")
+        await cursor_log.execute("SELECT [Dept], [Principal], [Log-Pric] FROM SD_Code")
         sd_code_map = {row[2].strip().lower(): {
             "Dept": row[0], "Principal": row[1]
-        } for row in cursor_log.fetchall() if row[2]}
+        } for row in await cursor_log.fetchall() if row[2]}
 
     except Exception as e:
         raise Exception(f"Error fetching local configs: {str(e)}")
     
     if not gate_row:
-        if 'conn_log' in locals(): conn_log.close()
+        if 'conn_log' in locals(): await conn_log.close()
         raise Exception(f"Gate {gate_name} not found")
         
     gate_id = gate_row[0]
@@ -1229,9 +1230,9 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
     cost = float(gate_row[3] or 0)
     gate_unit = float(gate_row[4]) if gate_row[4] else 1.0
     
-    cursor_log.execute("SELECT [Item ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
-    pricing_rows = cursor_log.fetchall()
-    conn_log.close()
+    await cursor_log.execute("SELECT [Item ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
+    pricing_rows = await cursor_log.fetchall()
+    await conn_log.close()
     
     item_pricing = {}
     for row in pricing_rows:
@@ -1393,108 +1394,108 @@ def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, 
 # --- Rate Cart Endpoints ---
 
 @app.get("/account/rate-cuts")
-def get_rate_carts(user: dict = Depends(require_permission("view_rate_carts"))):
+async def get_rate_carts(user: dict = Depends(require_permission("view_rate_carts"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT location, cost FROM Rate_Cart ORDER BY location")
-        rows = cursor.fetchall()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT location, cost FROM Rate_Cart ORDER BY location")
+        rows = await cursor.fetchall()
+        await conn.close()
         return [{"location": row[0], "cost": row[1]} for row in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading rate carts: {str(e)}")
 
 @app.post("/account/rate-cuts")
-def save_rate_cart(data: RateCartData, user: dict = Depends(get_current_user)):
+async def save_rate_cart(data: RateCartData, user: dict = Depends(get_current_user)):
     perms = user.get("permissions", [])
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         
-        cursor.execute("SELECT cost FROM Rate_Cart WHERE location = ?", (data.location,))
-        existing = cursor.fetchone()
+        await cursor.execute("SELECT cost FROM Rate_Cart WHERE location = ?", (data.location,))
+        existing = await cursor.fetchone()
         
         change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         username = user['username']
 
         if existing:
             if "edit_rate_cart" not in perms:
-                conn.close()
+                await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'edit_rate_cart' permission")
             
             old_cost = existing[0]
             if float(old_cost) != float(data.cost):
-                cursor.execute("""
+                await cursor.execute("""
                     INSERT INTO Rate_Cart_Change_Log (location, changed_by, change_date, field_name, old_value, new_value)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (data.location, username, change_date, 'Cost', str(old_cost), str(data.cost)))
 
-            cursor.execute("UPDATE Rate_Cart SET cost = ? WHERE location = ?", (data.cost, data.location))
-            log_user_activity(username, "UPDATE_RATE_CART", f"Updated rate cart for {data.location}")
+            await cursor.execute("UPDATE Rate_Cart SET cost = ? WHERE location = ?", (data.cost, data.location))
+            await log_user_activity(username, "UPDATE_RATE_CART", f"Updated rate cart for {data.location}")
         else:
             if "add_rate_cart" not in perms:
-                conn.close()
+                await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_rate_cart' permission")
-            cursor.execute("INSERT INTO Rate_Cart (location, cost) VALUES (?, ?)", (data.location, data.cost))
-            log_user_activity(username, "ADD_RATE_CART", f"Added rate cart for {data.location}")
+            await cursor.execute("INSERT INTO Rate_Cart (location, cost) VALUES (?, ?)", (data.location, data.cost))
+            await log_user_activity(username, "ADD_RATE_CART", f"Added rate cart for {data.location}")
             
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         return {"message": "Rate cart saved successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error saving rate cart: {str(e)}")
 
 @app.delete("/account/rate-cuts/{location}")
-def delete_rate_cart(location: str, user: dict = Depends(require_permission("delete_rate_cart"))):
+async def delete_rate_cart(location: str, user: dict = Depends(require_permission("delete_rate_cart"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM Rate_Cart_Change_Log WHERE location = ?", (location,))
-        cursor.execute("DELETE FROM Rate_Cart WHERE location = ?", (location,))
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("DELETE FROM Rate_Cart_Change_Log WHERE location = ?", (location,))
+        await cursor.execute("DELETE FROM Rate_Cart WHERE location = ?", (location,))
         
         if cursor.rowcount == 0:
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=404, detail="Rate cart not found")
         
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         
-        log_user_activity(user['username'], "DELETE_RATE_CART", f"Deleted rate cart for {location}")
+        await log_user_activity(user['username'], "DELETE_RATE_CART", f"Deleted rate cart for {location}")
         return {"message": "Rate cart deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting rate cart: {str(e)}")
 
 @app.get("/account/rate-cuts/{location}/logs", response_model=List[RateCartLogItem])
-def get_rate_cart_logs(location: str, user: dict = Depends(get_current_user)):
+async def get_rate_cart_logs(location: str, user: dict = Depends(get_current_user)):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, location, changed_by, change_date, field_name, old_value, new_value FROM Rate_Cart_Change_Log WHERE location = ? ORDER BY change_date DESC", (location,))
-        rows = cursor.fetchall()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT id, location, changed_by, change_date, field_name, old_value, new_value FROM Rate_Cart_Change_Log WHERE location = ? ORDER BY change_date DESC", (location,))
+        rows = await cursor.fetchall()
         logs = [{"id": r[0], "location": r[1], "changed_by": r[2], "change_date": r[3], "field_name": r[4], "old_value": r[5], "new_value": r[6]} for r in rows]
-        conn.close()
+        await conn.close()
         return logs
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching rate cart logs: {str(e)}")
 
 
 # --- Daily Report Logic & Automation ---
 
-def get_rate_carts_for_date(target_date: str) -> dict:
-    conn = get_logistic_connection()
-    cursor = conn.cursor()
+async def get_rate_carts_for_date(target_date: str) -> dict:
+    conn = await get_logistic_connection()
+    cursor = await conn.cursor()
     
-    cursor.execute("SELECT location, cost FROM Rate_Cart")
-    current_costs = {row[0].strip().upper(): float(row[1]) for row in cursor.fetchall()}
+    await cursor.execute("SELECT location, cost FROM Rate_Cart")
+    current_costs = {row[0].strip().upper(): float(row[1]) for row in await cursor.fetchall()}
     
     query_threshold = target_date + " 23:59:59"
-    cursor.execute("""
+    await cursor.execute("""
         SELECT location, change_date, old_value 
         FROM Rate_Cart_Change_Log 
         WHERE change_date > ? 
         ORDER BY change_date DESC
     """, (query_threshold,))
-    logs = cursor.fetchall()
-    conn.close()
+    logs = await cursor.fetchall()
+    await conn.close()
 
     historical_costs = current_costs.copy()
     for row in logs:
@@ -1505,20 +1506,20 @@ def get_rate_carts_for_date(target_date: str) -> dict:
 
     return historical_costs
 
-def _get_daily_report_data(target_date: str):
-    rate_carts = get_rate_carts_for_date(target_date)
+async def _get_daily_report_data(target_date: str):
+    rate_carts = await get_rate_carts_for_date(target_date)
 
-    conn_dwbi = get_dwbi_connection()
-    cursor_dwbi = conn_dwbi.cursor()
+    conn_dwbi = await get_dwbi_connection()
+    cursor_dwbi = await conn_dwbi.cursor()
     query = """
         SELECT Branch, ItemCode, MAX(ItemName), MAX(Principal), MAX(Brand), [Driver Name], SUM(ctnQty), CustomerCode, MAX(ContactPerson), Township, SUM(SalesAmount), MAX(BU)
         FROM VersaFleetDetail_TC
         WHERE CONVERT(DATE, [Task Date]) = ? AND [Task Status] = 'successful'
         GROUP BY Branch, [Driver Name], ItemCode, CustomerCode, Township
     """
-    cursor_dwbi.execute(query, (target_date,))
-    rows = cursor_dwbi.fetchall()
-    conn_dwbi.close()
+    await cursor_dwbi.execute(query, (target_date,))
+    rows = await cursor_dwbi.fetchall()
+    await conn_dwbi.close()
 
     granular_data = []
     driver_totals = {}
@@ -1611,27 +1612,27 @@ def _get_daily_report_data(target_date: str):
         "township_report": township_report_list
     }
 
-def generate_and_save_daily_report(target_date: str):
+async def generate_and_save_daily_report(target_date: str):
     try:
-        data = _get_daily_report_data(target_date)
+        data = await _get_daily_report_data(target_date)
         if not data["item_report"] and not data["township_report"]:
             return
 
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Upsert metadata row
-        cursor.execute("""
+        await cursor.execute("""
             INSERT INTO Daily_Report_History (target_date, created_at)
             VALUES (?, ?)
             ON CONFLICT(target_date) DO UPDATE SET created_at = excluded.created_at
         """, (target_date, now_str))
 
         # Replace item report rows
-        cursor.execute("DELETE FROM Daily_Item_Report WHERE target_date = ?", (target_date,))
+        await cursor.execute("DELETE FROM Daily_Item_Report WHERE target_date = ?", (target_date,))
         for it in data["item_report"]:
-            cursor.execute("""
+            await cursor.execute("""
                 INSERT INTO Daily_Item_Report
                 (target_date, bu, branch, driver_name, item_code, item_name, principal, brand,
                  ctns, allocated_cost, cost_per_carton, driver_total_ctns, branch_cost, sales_amount)
@@ -1644,9 +1645,9 @@ def generate_and_save_daily_report(target_date: str):
             ))
 
         # Replace township report rows
-        cursor.execute("DELETE FROM Daily_Township_Report WHERE target_date = ?", (target_date,))
+        await cursor.execute("DELETE FROM Daily_Township_Report WHERE target_date = ?", (target_date,))
         for tw in data["township_report"]:
-            cursor.execute("""
+            await cursor.execute("""
                 INSERT INTO Daily_Township_Report
                 (target_date, branch, driver_name, township, customer_code, contact_person,
                  ctns, driver_total_ctns, branch_cost, cost_per_carton, allocated_cost,
@@ -1660,39 +1661,39 @@ def generate_and_save_daily_report(target_date: str):
                 tw.get("total_drop_points",0), tw.get("cost_per_drop_point",0), tw.get("sales_amount",0)
             ))
 
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         logger.info(f"Successfully generated and saved report for {target_date}")
         return data
     except Exception as e:
         logger.error(f"Failed to generate and save daily report for {target_date}: {str(e)}")
         return None
 
-def daily_job_generator():
+async def daily_job_generator():
     target_date = datetime.datetime.now().strftime("%Y-%m-%d")
     logger.info(f"Running automated EOD report generation for {target_date}")
-    generate_and_save_daily_report(target_date)
+    await generate_and_save_daily_report(target_date)
 
-def get_or_generate_daily_report(target_date: str):
+async def get_or_generate_daily_report(target_date: str):
     """Fetches daily report from local history DB, or generates it if not found."""
-    conn = get_logistic_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT target_date FROM Daily_Report_History WHERE target_date = ?", (target_date,))
-    row = cursor.fetchone()
+    conn = await get_logistic_connection()
+    cursor = await conn.cursor()
+    await cursor.execute("SELECT target_date FROM Daily_Report_History WHERE target_date = ?", (target_date,))
+    row = await cursor.fetchone()
 
     if row:
-        cursor.execute("""
+        await cursor.execute("""
             SELECT bu, branch, driver_name, item_code, item_name, principal, brand,
                    ctns, allocated_cost, cost_per_carton, driver_total_ctns, branch_cost, sales_amount
             FROM Daily_Item_Report WHERE target_date = ?
         """, (target_date,))
         ir_cols = ["bu","branch","driver_name","item_code","item_name","principal","brand",
                    "ctns","allocated_cost","cost_per_carton","driver_total_ctns","branch_cost","sales_amount"]
-        item_report = [dict(zip(ir_cols, r)) for r in cursor.fetchall()]
+        item_report = [dict(zip(ir_cols, r)) for r in await cursor.fetchall()]
         for it in item_report:
             it["target_date"] = target_date
 
-        cursor.execute("""
+        await cursor.execute("""
             SELECT branch, driver_name, township, customer_code, contact_person,
                    ctns, driver_total_ctns, branch_cost, cost_per_carton, allocated_cost,
                    total_drop_points, cost_per_drop_point, sales_amount
@@ -1701,15 +1702,15 @@ def get_or_generate_daily_report(target_date: str):
         tr_cols = ["branch","driver_name","township","customer_code","contact_person",
                    "ctns","driver_total_ctns","branch_cost","cost_per_carton","allocated_cost",
                    "total_drop_points","cost_per_drop_point","sales_amount"]
-        township_report = [dict(zip(tr_cols, r)) for r in cursor.fetchall()]
+        township_report = [dict(zip(tr_cols, r)) for r in await cursor.fetchall()]
         for tw in township_report:
             tw["target_date"] = target_date
 
-        conn.close()
+        await conn.close()
         return {"item_report": item_report, "township_report": township_report}
     else:
-        conn.close()
-        return _get_daily_report_data(target_date)
+        await conn.close()
+        return await _get_daily_report_data(target_date)
 
 def _aggregate_reports(daily_datas: List[dict]):
     """Aggregates multiple daily reports into a single consolidated report for date ranges."""
@@ -1781,7 +1782,7 @@ def _aggregate_reports(daily_datas: List[dict]):
     }
 
 @app.get("/account/daily-rate-cut-report")
-def get_daily_rate_cart_report(
+async def get_daily_rate_cart_report(
     target_date: Optional[str] = None, 
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -1803,7 +1804,7 @@ def get_daily_rate_cart_report(
             current_dt = start_dt
             while current_dt <= end_dt:
                 dt_str = current_dt.strftime("%Y-%m-%d")
-                daily_datas.append(get_or_generate_daily_report(dt_str))
+                daily_datas.append(await get_or_generate_daily_report(dt_str))
                 current_dt += datetime.timedelta(days=1)
             
             aggregated = _aggregate_reports(daily_datas)
@@ -1818,7 +1819,7 @@ def get_daily_rate_cart_report(
             if not target_date:
                 target_date = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
                 
-            data = get_or_generate_daily_report(target_date)
+            data = await get_or_generate_daily_report(target_date)
             return {
                 "target_date": target_date, 
                 "report": data["item_report"], 
@@ -1833,181 +1834,181 @@ def get_daily_rate_cart_report(
 # --- Reference Management Endpoints ---
 
 @app.get("/references/locations")
-def get_ref_locations():
+async def get_ref_locations():
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM Locations ORDER BY name")
-        rows = cursor.fetchall()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT name FROM Locations ORDER BY name")
+        rows = await cursor.fetchall()
+        await conn.close()
         return [row[0] for row in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/locations")
-def add_ref_location(item: ReferenceItem, user: dict = Depends(require_permission("add_reference"))):
+async def add_ref_location(item: ReferenceItem, user: dict = Depends(require_permission("add_reference"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         try:
-            cursor.execute("INSERT INTO Locations (name) VALUES (?)", (item.name,))
-            conn.commit()
-        except sqlite3.IntegrityError:
-            conn.close()
+            await cursor.execute("INSERT INTO Locations (name) VALUES (?)", (item.name,))
+            await conn.commit()
+        except aiosqlite.IntegrityError:
+            await conn.close()
             raise HTTPException(status_code=400, detail="Location already exists")
-        conn.close()
-        log_user_activity(user['username'], "ADD_REFERENCE", f"Added location: {item.name}")
+        await conn.close()
+        await log_user_activity(user['username'], "ADD_REFERENCE", f"Added location: {item.name}")
         return {"message": "Added successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.delete("/references/locations/{name}")
-def delete_ref_location(name: str, user: dict = Depends(require_permission("delete_reference"))):
+async def delete_ref_location(name: str, user: dict = Depends(require_permission("delete_reference"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM Locations WHERE name = ?", (name,))
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("DELETE FROM Locations WHERE name = ?", (name,))
         if cursor.rowcount == 0:
-             conn.close()
+             await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
-        conn.commit()
-        conn.close()
-        log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted location: {name}")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted location: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
 @app.get("/references/rate-cart-locations")
-def get_ref_rate_cart_locations():
+async def get_ref_rate_cart_locations():
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM Rate_Cart_Locations ORDER BY name")
-        rows = cursor.fetchall()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT name FROM Rate_Cart_Locations ORDER BY name")
+        rows = await cursor.fetchall()
+        await conn.close()
         return [row[0] for row in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/rate-cart-locations")
-def add_ref_rate_cart_location(item: ReferenceItem, user: dict = Depends(require_permission("add_reference"))):
+async def add_ref_rate_cart_location(item: ReferenceItem, user: dict = Depends(require_permission("add_reference"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         try:
-            cursor.execute("INSERT INTO Rate_Cart_Locations (name) VALUES (?)", (item.name,))
-            conn.commit()
-        except sqlite3.IntegrityError:
-            conn.close()
+            await cursor.execute("INSERT INTO Rate_Cart_Locations (name) VALUES (?)", (item.name,))
+            await conn.commit()
+        except aiosqlite.IntegrityError:
+            await conn.close()
             raise HTTPException(status_code=400, detail="Rate Cart Location already exists")
-        conn.close()
-        log_user_activity(user['username'], "ADD_REFERENCE", f"Added rate cart location: {item.name}")
+        await conn.close()
+        await log_user_activity(user['username'], "ADD_REFERENCE", f"Added rate cart location: {item.name}")
         return {"message": "Added successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.delete("/references/rate-cart-locations/{name}")
-def delete_ref_rate_cart_location(name: str, user: dict = Depends(require_permission("delete_reference"))):
+async def delete_ref_rate_cart_location(name: str, user: dict = Depends(require_permission("delete_reference"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM Rate_Cart_Locations WHERE name = ?", (name,))
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("DELETE FROM Rate_Cart_Locations WHERE name = ?", (name,))
         if cursor.rowcount == 0:
-             conn.close()
+             await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
-        conn.commit()
-        conn.close()
-        log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted rate cart location: {name}")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted rate cart location: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
 @app.get("/references/uoms")
-def get_ref_uoms():
+async def get_ref_uoms():
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM UOMs ORDER BY name")
-        rows = cursor.fetchall()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT name FROM UOMs ORDER BY name")
+        rows = await cursor.fetchall()
+        await conn.close()
         return [row[0] for row in rows]
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/uoms")
-def add_ref_uom(item: ReferenceItem, user: dict = Depends(require_permission("add_reference"))):
+async def add_ref_uom(item: ReferenceItem, user: dict = Depends(require_permission("add_reference"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         try:
-            cursor.execute("INSERT INTO UOMs (name) VALUES (?)", (item.name,))
-            conn.commit()
-        except sqlite3.IntegrityError:
-            conn.close()
+            await cursor.execute("INSERT INTO UOMs (name) VALUES (?)", (item.name,))
+            await conn.commit()
+        except aiosqlite.IntegrityError:
+            await conn.close()
             raise HTTPException(status_code=400, detail="UOM already exists")
-        conn.close()
-        log_user_activity(user['username'], "ADD_REFERENCE", f"Added UOM: {item.name}")
+        await conn.close()
+        await log_user_activity(user['username'], "ADD_REFERENCE", f"Added UOM: {item.name}")
         return {"message": "Added successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.delete("/references/uoms/{name}")
-def delete_ref_uom(name: str, user: dict = Depends(require_permission("delete_reference"))):
+async def delete_ref_uom(name: str, user: dict = Depends(require_permission("delete_reference"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM UOMs WHERE name = ?", (name,))
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("DELETE FROM UOMs WHERE name = ?", (name,))
         if cursor.rowcount == 0:
-             conn.close()
+             await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
-        conn.commit()
-        conn.close()
-        log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted UOM: {name}")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted UOM: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.get("/references/channels")
-def get_ref_channels():
+async def get_ref_channels():
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM Channels ORDER BY name")
-        rows = cursor.fetchall()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT name FROM Channels ORDER BY name")
+        rows = await cursor.fetchall()
+        await conn.close()
         return [row[0] for row in rows]
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/channels")
-def add_ref_channel(item: ReferenceItem, user: dict = Depends(require_permission("add_reference"))):
+async def add_ref_channel(item: ReferenceItem, user: dict = Depends(require_permission("add_reference"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         try:
-            cursor.execute("INSERT INTO Channels (name) VALUES (?)", (item.name,))
-            conn.commit()
-        except sqlite3.IntegrityError:
-            conn.close()
+            await cursor.execute("INSERT INTO Channels (name) VALUES (?)", (item.name,))
+            await conn.commit()
+        except aiosqlite.IntegrityError:
+            await conn.close()
             raise HTTPException(status_code=400, detail="Channel already exists")
-        conn.close()
-        log_user_activity(user['username'], "ADD_REFERENCE", f"Added channel: {item.name}")
+        await conn.close()
+        await log_user_activity(user['username'], "ADD_REFERENCE", f"Added channel: {item.name}")
         return {"message": "Added successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.delete("/references/channels/{name}")
-def delete_ref_channel(name: str, user: dict = Depends(require_permission("delete_reference"))):
+async def delete_ref_channel(name: str, user: dict = Depends(require_permission("delete_reference"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM Channels WHERE name = ?", (name,))
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("DELETE FROM Channels WHERE name = ?", (name,))
         if cursor.rowcount == 0:
-             conn.close()
+             await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
-        conn.commit()
-        conn.close()
-        log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted channel: {name}")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted channel: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2015,43 +2016,43 @@ def delete_ref_channel(name: str, user: dict = Depends(require_permission("delet
     
     
 @app.get("/references/location-mappings")
-def get_ref_location_mappings():
+async def get_ref_location_mappings():
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT to_location, branch_code FROM Location_Mapping ORDER BY to_location")
-        rows = cursor.fetchall()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT to_location, branch_code FROM Location_Mapping ORDER BY to_location")
+        rows = await cursor.fetchall()
+        await conn.close()
         return [{"to_location": row[0], "branch_code": row[1]} for row in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/location-mappings")
-def add_ref_location_mapping(item: LocationMappingItem, user: dict = Depends(require_permission("add_reference"))):
+async def add_ref_location_mapping(item: LocationMappingItem, user: dict = Depends(require_permission("add_reference"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         try:
-            cursor.execute("INSERT INTO Location_Mapping (to_location, branch_code) VALUES (?, ?)", (item.to_location, item.branch_code))
-            conn.commit()
-        except sqlite3.IntegrityError:
+            await cursor.execute("INSERT INTO Location_Mapping (to_location, branch_code) VALUES (?, ?)", (item.to_location, item.branch_code))
+            await conn.commit()
+        except aiosqlite.IntegrityError:
             # If it already exists, update it
-            cursor.execute("UPDATE Location_Mapping SET branch_code = ? WHERE to_location = ?", (item.branch_code, item.to_location))
-            conn.commit()
-        conn.close()
-        log_user_activity(user['username'], "ADD_REFERENCE", f"Mapped {item.to_location} to {item.branch_code}")
+            await cursor.execute("UPDATE Location_Mapping SET branch_code = ? WHERE to_location = ?", (item.branch_code, item.to_location))
+            await conn.commit()
+        await conn.close()
+        await log_user_activity(user['username'], "ADD_REFERENCE", f"Mapped {item.to_location} to {item.branch_code}")
         return {"message": "Mapping saved successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.delete("/references/location-mappings/{to_location}")
-def delete_ref_location_mapping(to_location: str, user: dict = Depends(require_permission("delete_reference"))):
+async def delete_ref_location_mapping(to_location: str, user: dict = Depends(require_permission("delete_reference"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM Location_Mapping WHERE to_location = ?", (to_location,))
-        conn.commit()
-        conn.close()
-        log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted mapping for: {to_location}")
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("DELETE FROM Location_Mapping WHERE to_location = ?", (to_location,))
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted mapping for: {to_location}")
         return {"message": "Deleted successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
     
@@ -2060,64 +2061,64 @@ def delete_ref_location_mapping(to_location: str, user: dict = Depends(require_p
 # --- Branch Code Management Endpoints ---
 
 @app.get("/account/branch-codes")
-def get_branch_codes(user: dict = Depends(get_current_user)):
+async def get_branch_codes(user: dict = Depends(get_current_user)):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT [Log-Pric], [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code")
-        rows = cursor.fetchall()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT [Log-Pric], [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code")
+        rows = await cursor.fetchall()
+        await conn.close()
         return [{"log_pric": r[0], "code": r[1], "name": r[2], "dept": r[3], "principal": r[4], "description": r[5]} for r in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading branch codes: {str(e)}")
 
 @app.post("/account/branch-codes")
-def save_branch_code(data: BranchCodeData, user: dict = Depends(get_current_user)):
+async def save_branch_code(data: BranchCodeData, user: dict = Depends(get_current_user)):
     perms = user.get("permissions", [])
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
 
         if data.original_log_pric:
             if "edit_branch_code" not in perms:
-                conn.close()
+                await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'edit_branch_code' permission")
             
-            cursor.execute("""
+            await cursor.execute("""
                 UPDATE Branch_Code 
                 SET [Log-Pric] = ?, [Code] = ?, [Name] = ?, [Dept] = ?, [Principal] = ?, [Description] = ? 
                 WHERE [Log-Pric] = ?
             """, (data.log_pric, data.code, data.name, data.dept, data.principal, data.description, data.original_log_pric))
-            log_user_activity(user['username'], "UPDATE_BRANCH_CODE", f"Updated Branch Code: {data.log_pric}")
+            await log_user_activity(user['username'], "UPDATE_BRANCH_CODE", f"Updated Branch Code: {data.log_pric}")
         else:
             if "add_branch_code" not in perms:
-                conn.close()
+                await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_branch_code' permission")
             
-            cursor.execute("""
+            await cursor.execute("""
                 INSERT INTO Branch_Code ([Log-Pric], [Code], [Name], [Dept], [Principal], [Description]) 
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (data.log_pric, data.code, data.name, data.dept, data.principal, data.description))
-            log_user_activity(user['username'], "ADD_BRANCH_CODE", f"Added Branch Code: {data.log_pric}")
+            await log_user_activity(user['username'], "ADD_BRANCH_CODE", f"Added Branch Code: {data.log_pric}")
 
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         return {"message": "Branch code saved successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error saving branch code: {str(e)}")
 
 @app.delete("/account/branch-codes/{log_pric}")
-def delete_branch_code(log_pric: str, user: dict = Depends(require_permission("delete_branch_code"))):
+async def delete_branch_code(log_pric: str, user: dict = Depends(require_permission("delete_branch_code"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM Branch_Code WHERE [Log-Pric] = ?", (log_pric,))
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("DELETE FROM Branch_Code WHERE [Log-Pric] = ?", (log_pric,))
         if cursor.rowcount == 0:
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=404, detail="Branch code not found")
-        conn.commit()
-        conn.close()
-        log_user_activity(user['username'], "DELETE_BRANCH_CODE", f"Deleted Branch Code: {log_pric}")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['username'], "DELETE_BRANCH_CODE", f"Deleted Branch Code: {log_pric}")
         return {"message": "Branch code deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting branch code: {str(e)}")
@@ -2125,64 +2126,64 @@ def delete_branch_code(log_pric: str, user: dict = Depends(require_permission("d
 # --- SD Code Management Endpoints ---
 
 @app.get("/account/sd-codes")
-def get_sd_codes(user: dict = Depends(get_current_user)):
+async def get_sd_codes(user: dict = Depends(get_current_user)):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT [Channel], [Code], [Name], [Dept], [Principal], [Log-Pric] FROM SD_Code")
-        rows = cursor.fetchall()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT [Channel], [Code], [Name], [Dept], [Principal], [Log-Pric] FROM SD_Code")
+        rows = await cursor.fetchall()
+        await conn.close()
         return [{"channel": r[0], "code": r[1], "name": r[2], "dept": r[3], "principal": r[4], "log_pric": r[5]} for r in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading SD codes: {str(e)}")
 
 @app.post("/account/sd-codes")
-def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user)):
+async def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user)):
     perms = user.get("permissions", [])
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
 
         if data.original_log_pric:
             if "edit_sd_code" not in perms:
-                conn.close()
+                await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'edit_sd_code' permission")
             
-            cursor.execute("""
+            await cursor.execute("""
                 UPDATE SD_Code 
                 SET [Channel] = ?, [Code] = ?, [Name] = ?, [Dept] = ?, [Principal] = ?, [Log-Pric] = ? 
                 WHERE [Log-Pric] = ?
             """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric, data.original_log_pric))
-            log_user_activity(user['username'], "UPDATE_SD_CODE", f"Updated SD Code: {data.log_pric}")
+            await log_user_activity(user['username'], "UPDATE_SD_CODE", f"Updated SD Code: {data.log_pric}")
         else:
             if "add_sd_code" not in perms:
-                conn.close()
+                await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_sd_code' permission")
             
-            cursor.execute("""
+            await cursor.execute("""
                 INSERT INTO SD_Code ([Channel], [Code], [Name], [Dept], [Principal], [Log-Pric]) 
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric))
-            log_user_activity(user['username'], "ADD_SD_CODE", f"Added SD Code: {data.log_pric}")
+            await log_user_activity(user['username'], "ADD_SD_CODE", f"Added SD Code: {data.log_pric}")
 
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         return {"message": "SD code saved successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error saving SD code: {str(e)}")
 
 @app.delete("/account/sd-codes/{log_pric}")
-def delete_sd_code(log_pric: str, user: dict = Depends(require_permission("delete_sd_code"))):
+async def delete_sd_code(log_pric: str, user: dict = Depends(require_permission("delete_sd_code"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM SD_Code WHERE [Log-Pric] = ?", (log_pric,))
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("DELETE FROM SD_Code WHERE [Log-Pric] = ?", (log_pric,))
         if cursor.rowcount == 0:
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=404, detail="SD code not found")
-        conn.commit()
-        conn.close()
-        log_user_activity(user['username'], "DELETE_SD_CODE", f"Deleted SD Code: {log_pric}")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['username'], "DELETE_SD_CODE", f"Deleted SD Code: {log_pric}")
         return {"message": "SD code deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting SD code: {str(e)}")
@@ -2192,17 +2193,17 @@ def delete_sd_code(log_pric: str, user: dict = Depends(require_permission("delet
 # --- Calculation History Endpoints ---
 
 @app.post("/history/save")
-def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_current_user)):
+async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_current_user)):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         doc_nums_json = json.dumps(data.doc_nums)
         created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        def _upsert_products(calc_id, products):
-            cursor.execute("DELETE FROM Calculation_Products WHERE calc_id = ?", (calc_id,))
+        async def _upsert_products(calc_id, products):
+            await cursor.execute("DELETE FROM Calculation_Products WHERE calc_id = ?", (calc_id,))
             for p in products:
-                cursor.execute("""
+                await cursor.execute("""
                     INSERT INTO Calculation_Products
                     (calc_id, code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
                      b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
@@ -2222,11 +2223,11 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
                 ))
 
         if data.id:
-            cursor.execute("SELECT id FROM Calculation_History WHERE id = ?", (data.id,))
-            if not cursor.fetchone():
-                conn.close()
+            await cursor.execute("SELECT id FROM Calculation_History WHERE id = ?", (data.id,))
+            if not await cursor.fetchone():
+                await conn.close()
                 raise HTTPException(status_code=404, detail="Record to update not found")
-            cursor.execute("""
+            await cursor.execute("""
                 UPDATE Calculation_History 
                 SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
                     doc_nums = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?, channel = ?,
@@ -2237,17 +2238,17 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
                 doc_nums_json, data.manual_total_cost, data.additional_charges,
                 data.final_total_cost, data.channel, data.status, data.id
             ))
-            _upsert_products(data.id, data.calculated_products)
+            await _upsert_products(data.id, data.calculated_products)
             message = "Calculation updated successfully"
-            log_user_activity(user['username'], "UPDATE_CALCULATION", f"Updated saved calculation ID: {data.id}")
+            await log_user_activity(user['username'], "UPDATE_CALCULATION", f"Updated saved calculation ID: {data.id}")
         else:
             while True:
                 new_id = int(datetime.datetime.now().strftime("%y%m%d%H%M%S"))
-                cursor.execute("SELECT 1 FROM Calculation_History WHERE id = ?", (new_id,))
-                if not cursor.fetchone(): break
-                time.sleep(1)
+                await cursor.execute("SELECT 1 FROM Calculation_History WHERE id = ?", (new_id,))
+                if not await cursor.fetchone(): break
+                await asyncio.sleep(1)
 
-            cursor.execute("""
+            await cursor.execute("""
                 INSERT INTO Calculation_History 
                 ([id], [created_at], [gate_name], [from_loc], [to_loc], 
                  [doc_nums], [manual_total_cost], [additional_charges], [final_total_cost], [channel], [status], [created_by])
@@ -2257,156 +2258,156 @@ def save_calculation(data: CalculationSaveRequest, user: dict = Depends(get_curr
                 doc_nums_json, data.manual_total_cost, data.additional_charges, data.final_total_cost,
                 data.channel, data.status, user["username"]
             ))
-            _upsert_products(new_id, data.calculated_products)
+            await _upsert_products(new_id, data.calculated_products)
             message = "Calculation saved successfully"
-            log_user_activity(user['username'], "SAVE_CALCULATION", f"Saved new calculation ID: {new_id}")
+            await log_user_activity(user['username'], "SAVE_CALCULATION", f"Saved new calculation ID: {new_id}")
 
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         return {"message": message}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error saving history: {str(e)}")
 
 @app.put("/history/{record_id}/submit")
-def submit_history_item(record_id: int, user: dict = Depends(require_permission("submit_calculation"))):
+async def submit_history_item(record_id: int, user: dict = Depends(require_permission("submit_calculation"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute("UPDATE Calculation_History SET status = 'submitted', submitted_by = ?, submitted_at = ? WHERE id = ?", (user["username"], now_str, record_id))
+        await cursor.execute("UPDATE Calculation_History SET status = 'submitted', submitted_by = ?, submitted_at = ? WHERE id = ?", (user["username"], now_str, record_id))
         if cursor.rowcount == 0:
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=404, detail="Record not found")
-        conn.commit()
-        conn.close()
-        log_user_activity(user['username'], "SUBMIT_CALCULATION", f"Submitted calculation ID: {record_id}")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['username'], "SUBMIT_CALCULATION", f"Submitted calculation ID: {record_id}")
         return {"message": "Calculation submitted successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error submitting record: {str(e)}")
 
 @app.put("/history/{record_id}/claim")
-def claim_history_item(record_id: int, user: dict = Depends(require_permission("claim_calculation"))):
+async def claim_history_item(record_id: int, user: dict = Depends(require_permission("claim_calculation"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute("UPDATE Calculation_History SET status = 'claimed', claimed_by = ?, claimed_at = ? WHERE id = ?", (user["username"], now_str, record_id))
+        await cursor.execute("UPDATE Calculation_History SET status = 'claimed', claimed_by = ?, claimed_at = ? WHERE id = ?", (user["username"], now_str, record_id))
         if cursor.rowcount == 0:
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=404, detail="Record not found")
-        conn.commit()
-        conn.close()
-        log_user_activity(user['username'], "CLAIM_CALCULATION", f"Claimed calculation ID: {record_id}")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['username'], "CLAIM_CALCULATION", f"Claimed calculation ID: {record_id}")
         return {"message": "Calculation claimed successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error claiming record: {str(e)}")
 
 @app.get("/history/{record_id}")
-def get_history_record(record_id: int, user: dict = Depends(require_permission("view_history"))):
+async def get_history_record(record_id: int, user: dict = Depends(require_permission("view_history"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Calculation_History WHERE id = ?", (record_id,))
-        row = cursor.fetchone()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT * FROM Calculation_History WHERE id = ?", (record_id,))
+        row = await cursor.fetchone()
         if not row:
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=404, detail="Record not found")
 
         columns = [desc[0] for desc in cursor.description]
         record = dict(zip(columns, row))
         record['doc_nums'] = json.loads(record['doc_nums']) if record['doc_nums'] else []
 
-        cursor.execute("""
+        await cursor.execute("""
             SELECT code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
                    b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
                    calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost
             FROM Calculation_Products WHERE calc_id = ?
         """, (record_id,))
-        prod_rows = cursor.fetchall()
+        prod_rows = await cursor.fetchall()
         prod_cols = ["code","name","uom","weight","doc_date","sin_no","principal","brand","ctns","bu",
                      "b_code","b_name","b_dept","b_principal","b_desc","s_dept","s_principal",
                      "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost"]
         record['calculated_products'] = [dict(zip(prod_cols, r)) for r in prod_rows]
-        conn.close()
+        await conn.close()
         return record
     except HTTPException: raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/history")
-def get_history(user: dict = Depends(require_permission("view_history"))):
+async def get_history(user: dict = Depends(require_permission("view_history"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         
         permissions = user.get('permissions', [])
         username = user.get('username')
 
         if 'view_all_history' in permissions:
-            cursor.execute("SELECT * FROM Calculation_History ORDER BY created_at DESC")
+            await cursor.execute("SELECT * FROM Calculation_History ORDER BY created_at DESC")
         elif 'claim_calculation' in permissions:
-            cursor.execute("""
+            await cursor.execute("""
                 SELECT * FROM Calculation_History 
                 WHERE created_by = ? OR status IN ('submitted', 'claimed') 
                 ORDER BY created_at DESC
             """, (username,))
         else:
-            cursor.execute("SELECT * FROM Calculation_History WHERE created_by = ? OR created_by IS NULL ORDER BY created_at DESC", (username,))
+            await cursor.execute("SELECT * FROM Calculation_History WHERE created_by = ? OR created_by IS NULL ORDER BY created_at DESC", (username,))
             
-        rows = cursor.fetchall()
+        rows = await cursor.fetchall()
         columns = [desc[0] for desc in cursor.description]
         history = []
         for row in rows:
             record_dict = dict(zip(columns, row))
             record_dict["doc_nums"] = json.loads(record_dict["doc_nums"]) if record_dict["doc_nums"] else []
             history.append(record_dict)
-        conn.close()
+        await conn.close()
         return {"history": history}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading history: {str(e)}")
 
 @app.delete("/history/{record_id}")
-def delete_history_item(record_id: int, user: dict = Depends(require_permission("delete_history"))):
+async def delete_history_item(record_id: int, user: dict = Depends(require_permission("delete_history"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM Calculation_History WHERE id = ?", (record_id,))
-        if not cursor.fetchone():
-            conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT id FROM Calculation_History WHERE id = ?", (record_id,))
+        if not await cursor.fetchone():
+            await conn.close()
             raise HTTPException(status_code=404, detail="Record not found")
-        cursor.execute("DELETE FROM Calculation_Products WHERE calc_id = ?", (record_id,))
-        cursor.execute("DELETE FROM Calculation_History WHERE id = ?", (record_id,))
-        conn.commit()
-        conn.close()
-        log_user_activity(user['username'], "DELETE_CALCULATION", f"Deleted calculation ID: {record_id}")
+        await cursor.execute("DELETE FROM Calculation_Products WHERE calc_id = ?", (record_id,))
+        await cursor.execute("DELETE FROM Calculation_History WHERE id = ?", (record_id,))
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['username'], "DELETE_CALCULATION", f"Deleted calculation ID: {record_id}")
         return {"message": "Record deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting record: {str(e)}")
 
 @app.get("/history/{record_id}/download")
-def download_history_excel(record_id: int, user: dict = Depends(require_permission("view_history"))):
+async def download_history_excel(record_id: int, user: dict = Depends(require_permission("view_history"))):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Calculation_History WHERE id = ?", (record_id,))
-        row = cursor.fetchone()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT * FROM Calculation_History WHERE id = ?", (record_id,))
+        row = await cursor.fetchone()
         
         if not row:
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=404, detail="History record not found")
             
         columns = [desc[0] for desc in cursor.description]
         record = dict(zip(columns, row))
         record['doc_nums'] = json.loads(record['doc_nums']) if record['doc_nums'] else []
         
-        cursor.execute("""
+        await cursor.execute("""
             SELECT code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
                    b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
                    calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost
             FROM Calculation_Products WHERE calc_id = ?
         """, (record_id,))
         
-        prod_rows = cursor.fetchall()
+        prod_rows = await cursor.fetchall()
         
         if not prod_rows:
-            conn.close() # Close connection before raising an error
+            await conn.close() # Close connection before raising an error
             raise HTTPException(status_code=404, detail="Historical product data not found for this saved record.")
             
         prod_cols = ["code","name","uom","weight","doc_date","sin_no","principal","brand","ctns","bu",
@@ -2414,7 +2415,7 @@ def download_history_excel(record_id: int, user: dict = Depends(require_permissi
                      "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost"]
         products = [dict(zip(prod_cols, r)) for r in prod_rows]
         
-        conn.close()
+        await conn.close()
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -2528,20 +2529,20 @@ def download_history_excel(record_id: int, user: dict = Depends(require_permissi
 # --- Item Pricing Excel Export/Import ---
 
 @app.get("/account/item-pricing/export/{gate_id}")
-def export_item_pricing_excel(gate_id: int):
+async def export_item_pricing_excel(gate_id: int):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT [Gate Name], [From], [To] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
-        gate_row = cursor.fetchone()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT [Gate Name], [From], [To] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
+        gate_row = await cursor.fetchone()
         if not gate_row:
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=404, detail="Gate not found")
         gate_name, from_loc, to_loc = gate_row[0], gate_row[1] or "", gate_row[2] or ""
         
-        cursor.execute("SELECT [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? ORDER BY [Item ID]", (gate_id,))
-        rows = cursor.fetchall()
-        conn.close()
+        await cursor.execute("SELECT [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? ORDER BY [Item ID]", (gate_id,))
+        rows = await cursor.fetchall()
+        await conn.close()
         
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -2613,8 +2614,8 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
             
         if not excel_rows: raise HTTPException(status_code=400, detail="No data found in Excel file")
 
-        conn_dwbi = get_dwbi_connection()
-        cursor_dwbi = conn_dwbi.cursor()
+        conn_dwbi = await get_dwbi_connection()
+        cursor_dwbi = await conn_dwbi.cursor()
         dwbi_data = {}
         unique_codes_list = list(item_codes_to_check)
         batch_size = 1000
@@ -2622,8 +2623,8 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         for i in range(0, len(unique_codes_list), batch_size):
             batch = unique_codes_list[i:i + batch_size]
             placeholders = ','.join('?' * len(batch))
-            cursor_dwbi.execute(f"SELECT ItemCode, ItemName, ItmsGrpNam, U_BrandName, Sector FROM Itemmasterallpp WHERE ItemCode IN ({placeholders})", batch)
-            rows = cursor_dwbi.fetchall()
+            await cursor_dwbi.execute(f"SELECT ItemCode, ItemName, ItmsGrpNam, U_BrandName, Sector FROM Itemmasterallpp WHERE ItemCode IN ({placeholders})", batch)
+            rows = await cursor_dwbi.fetchall()
             for r in rows:
                 dwbi_data[str(r[0]).strip()] = {
                     "name": str(r[1]).strip() if r[1] else "", 
@@ -2631,7 +2632,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                     "brand": str(r[3]).strip() if r[3] else "",
                     "bu": str(r[4]).strip() if r[4] else ""
                 }
-        conn_dwbi.close()
+        await conn_dwbi.close()
         
         errors = []
         for row in excel_rows:
@@ -2650,15 +2651,15 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
             if len(errors) > 10: error_msg.append(f"... and {len(errors) - 10} more errors.")
             raise HTTPException(status_code=400, detail=error_msg)
 
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         
-        cursor.execute("SELECT [Item ID], [Pricing ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
-        existing_items_data = {row[0]: {'pricing_id': row[1], 'cost': row[2]} for row in cursor.fetchall()}
+        await cursor.execute("SELECT [Item ID], [Pricing ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
+        existing_items_data = {row[0]: {'pricing_id': row[1], 'cost': row[2]} for row in await cursor.fetchall()}
         existing_items = set(existing_items_data.keys())
         
-        cursor.execute("SELECT [Pricing ID] FROM Item_Pricing")
-        used_ids = {row[0] for row in cursor.fetchall()}
+        await cursor.execute("SELECT [Pricing ID] FROM Item_Pricing")
+        used_ids = {row[0] for row in await cursor.fetchall()}
         
         updated_items_set = set()
         updates_made, inserts_made, deletes_made = 0, 0, 0
@@ -2680,7 +2681,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                 if old_cost_str != new_cost_str:
                     change_logs.append((pricing_id, username, change_date, 'Transportation Cost', old_cost_str, new_cost_str))
 
-                cursor.execute("""
+                await cursor.execute("""
                     UPDATE Item_Pricing
                     SET [BU] = ?, [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ?
                     WHERE [Gate ID] = ? AND [Item ID] = ?
@@ -2692,26 +2693,26 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                     if new_id not in used_ids:
                         used_ids.add(new_id)
                         break
-                cursor.execute("""
+                await cursor.execute("""
                     INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost])
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (new_id, gate_id, row["bu"], item_code, row["name"], row["principal"], row["brand"], row["cost"]))
                 inserts_made += 1
                 
         if change_logs:
-            cursor.executemany("INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", change_logs)
+            await cursor.executemany("INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", change_logs)
         
         items_to_delete = existing_items - updated_items_set
         for item_code in items_to_delete:
             pricing_id = existing_items_data[item_code]['pricing_id']
-            cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (pricing_id,))
-            cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
+            await cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (pricing_id,))
+            await cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
             deletes_made += 1
             
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         
-        log_user_activity(username, "BULK_IMPORT_ITEMS", f"Imported items to gate ID {gate_id} (Updates: {updates_made}, Inserts: {inserts_made}, Deletes: {deletes_made})")
+        await log_user_activity(username, "BULK_IMPORT_ITEMS", f"Imported items to gate ID {gate_id} (Updates: {updates_made}, Inserts: {inserts_made}, Deletes: {deletes_made})")
         return {"message": "Import completed successfully", "updates": updates_made, "inserts": inserts_made, "deletes": deletes_made}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error importing: {str(e)}")
@@ -2719,7 +2720,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
 # --- Gate Management Endpoints (SQLite) ---
 
 @app.get("/account/gates")
-def get_all_gates(
+async def get_all_gates(
     gate_name: Optional[str] = Query(None, description="Filter by gate name"),
     from_loc: Optional[str] = Query(None, description="Filter by origin location"),
     to_loc: Optional[str] = Query(None, description="Filter by destination location"),
@@ -2728,8 +2729,8 @@ def get_all_gates(
     user: dict = Depends(get_current_user)
 ):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         
         query = "SELECT [Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost] FROM Gate WHERE 1=1"
         params = []
@@ -2750,13 +2751,13 @@ def get_all_gates(
             query += " AND CAST([Cost] AS TEXT) LIKE ?"
             params.append(f"%{cost}%")
 
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
         
         gates = []
         for row in rows:
             gate_id = row[0]
-            calc_type = determine_calculation_type_sql(gate_id)
+            calc_type = await determine_calculation_type_sql(gate_id)
             gates.append({
                 "gate_id": gate_id, 
                 "gate_name": row[1], 
@@ -2767,43 +2768,43 @@ def get_all_gates(
                 "cost": float(row[6]) if row[6] is not None else None, 
                 "calculation_type": calc_type
             })
-        conn.close()
+        await conn.close()
         return {"gates": gates}
     except Exception as e: 
         raise HTTPException(status_code=500, detail=f"Error loading gates: {str(e)}")
 
 @app.post("/account/gates")
-def save_gate(gate_data: GateData, user: dict = Depends(get_current_user)):
+async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user)):
     perms = user.get("permissions", [])
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
 
         # --- NEW VALIDATION: Prevent duplicate gate name + from/to locations ---
-        cursor.execute("""
+        await cursor.execute("""
             SELECT [Gate ID] FROM Gate 
             WHERE [Gate Name] = ? AND [From] = ? AND [To] = ?
         """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc))
-        existing_gate = cursor.fetchone()
+        existing_gate = await cursor.fetchone()
 
         if existing_gate:
             if gate_data.gate_id is None:
                 # Adding a new gate that perfectly matches an existing one
-                conn.close()
+                await conn.close()
                 raise HTTPException(status_code=400, detail="A gate with this name, origin, and destination already exists.")
             elif existing_gate[0] != gate_data.gate_id:
                 # Editing a gate to conflict with a different existing gate
-                conn.close()
+                await conn.close()
                 raise HTTPException(status_code=400, detail="Another gate with this name, origin, and destination already exists.")
         # -----------------------------------------------------------------------
 
         if gate_data.gate_id is not None:
             if "edit_gate" not in perms:
-                conn.close()
+                await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'edit_gate' permission")
             
-            cursor.execute("SELECT [Gate ID], [UOM], [Unit], [Cost] FROM Gate WHERE [Gate ID] = ?", (gate_data.gate_id,))
-            current_row = cursor.fetchone()
+            await cursor.execute("SELECT [Gate ID], [UOM], [Unit], [Cost] FROM Gate WHERE [Gate ID] = ?", (gate_data.gate_id,))
+            current_row = await cursor.fetchone()
             
             if current_row:
                 gate_id, old_uom, old_unit, old_cost = current_row
@@ -2823,82 +2824,82 @@ def save_gate(gate_data: GateData, user: dict = Depends(get_current_user)):
                 if old_cost != new_cost: changes.append((gate_id, username, change_date, 'Cost', str(old_cost) if old_cost is not None else '', str(new_cost) if new_cost is not None else ''))
                 
                 if changes:
-                    cursor.executemany("INSERT INTO Gate_Change_Log (gate_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
+                    await cursor.executemany("INSERT INTO Gate_Change_Log (gate_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
 
-            cursor.execute("""
+            await cursor.execute("""
                 UPDATE Gate SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Cost] = ? WHERE [Gate ID] = ?
             """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, gate_data.gate_id))
-            log_user_activity(user['username'], "UPDATE_GATE", f"Updated gate ID {gate_data.gate_id}: {gate_data.gate_name}")
+            await log_user_activity(user['username'], "UPDATE_GATE", f"Updated gate ID {gate_data.gate_id}: {gate_data.gate_name}")
         else:
             if "add_gate" not in perms:
-                conn.close()
+                await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_gate' permission")
                 
-            cursor.execute("INSERT INTO Gate ([Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES (?, ?, ?, ?, ?, ?)", 
+            await cursor.execute("INSERT INTO Gate ([Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES (?, ?, ?, ?, ?, ?)", 
                   (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost))
-            log_user_activity(user['username'], "CREATE_GATE", f"Created gate: {gate_data.gate_name}")
+            await log_user_activity(user['username'], "CREATE_GATE", f"Created gate: {gate_data.gate_name}")
         
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         return {"message": "Gate saved successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error saving gate: {str(e)}")
 
 @app.get("/account/gates/{gate_id}/logs", response_model=List[GateLogItem])
-def get_gate_logs(gate_id: int, user: dict = Depends(get_current_user)):
+async def get_gate_logs(gate_id: int, user: dict = Depends(get_current_user)):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, gate_id, changed_by, change_date, field_name, old_value, new_value FROM Gate_Change_Log WHERE gate_id = ? ORDER BY change_date DESC", (gate_id,))
-        rows = cursor.fetchall()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT id, gate_id, changed_by, change_date, field_name, old_value, new_value FROM Gate_Change_Log WHERE gate_id = ? ORDER BY change_date DESC", (gate_id,))
+        rows = await cursor.fetchall()
         logs = [{"id": r[0], "gate_id": r[1], "changed_by": r[2], "change_date": r[3], "field_name": r[4], "old_value": r[5], "new_value": r[6]} for r in rows]
-        conn.close()
+        await conn.close()
         return logs
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching logs: {str(e)}")
 
 @app.delete("/account/gates/{gate_id}")
-def delete_gate(gate_id: int, user: dict = Depends(require_permission("delete_gate"))): 
+async def delete_gate(gate_id: int, user: dict = Depends(require_permission("delete_gate"))): 
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM Gate_Change_Log WHERE gate_id = ?", (gate_id,))
-        cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
-        cursor.execute("DELETE FROM Gate WHERE [Gate ID] = ?", (gate_id,))
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("DELETE FROM Gate_Change_Log WHERE gate_id = ?", (gate_id,))
+        await cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
+        await cursor.execute("DELETE FROM Gate WHERE [Gate ID] = ?", (gate_id,))
         if cursor.rowcount == 0:
-             conn.close()
+             await conn.close()
              raise HTTPException(status_code=404, detail="Gate not found")
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         
-        log_user_activity(user['username'], "DELETE_GATE", f"Deleted gate ID: {gate_id}")
+        await log_user_activity(user['username'], "DELETE_GATE", f"Deleted gate ID: {gate_id}")
         return {"message": f"Gate {gate_id} deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting gate: {str(e)}")
 
 @app.get("/account/item-pricing/{gate_id}")
-def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
+async def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user)):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT [Pricing ID], [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
-        rows = cursor.fetchall()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT [Pricing ID], [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
+        rows = await cursor.fetchall()
         items = [{"pricing_id": r[0], "bu": r[1], "item_code": r[2], "item_name": r[3], "principal": r[4], "brand": r[5], "transportation_cost": r[6]} for r in rows]
-        conn.close()
+        await conn.close()
         return {"items": items, "gate_id": gate_id}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading items: {str(e)}")
 
 @app.post("/account/item-pricing")
-def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_current_user)):
+async def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_current_user)):
     perms = user.get("permissions", [])
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT [Pricing ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (item_data.gate_id, item_data.original_item_code or item_data.item_code))
-        existing = cursor.fetchone()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT [Pricing ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (item_data.gate_id, item_data.original_item_code or item_data.item_code))
+        existing = await cursor.fetchone()
 
         if existing:
             if "edit_item" not in perms:
-                conn.close()
+                await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'edit_item' permission")
                 
             pricing_id, old_cost = existing
@@ -2913,83 +2914,83 @@ def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get_curre
                  changes.append((pricing_id, username, change_date, 'Transportation Cost', old_cost_str, new_cost_str))
 
             if changes:
-                 cursor.executemany("INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
+                 await cursor.executemany("INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
 
-            cursor.execute("UPDATE Item_Pricing SET [Item ID] = ?, [BU] = ?, [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ? WHERE [Pricing ID] = ?", 
+            await cursor.execute("UPDATE Item_Pricing SET [Item ID] = ?, [BU] = ?, [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ? WHERE [Pricing ID] = ?", 
                 (item_data.item_code, item_data.bu, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost, pricing_id))
-            log_user_activity(user['username'], "UPDATE_ITEM_PRICING", f"Updated pricing for item {item_data.item_code} on gate ID {item_data.gate_id}")
+            await log_user_activity(user['username'], "UPDATE_ITEM_PRICING", f"Updated pricing for item {item_data.item_code} on gate ID {item_data.gate_id}")
         else:
             if "add_item" not in perms:
-                conn.close()
+                await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_item' permission")
                 
             while True:
                 new_id = random.randint(10000000, 99999999)
-                cursor.execute("SELECT 1 FROM Item_Pricing WHERE [Pricing ID] = ?", (new_id,))
-                if not cursor.fetchone(): break
-            cursor.execute("INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+                await cursor.execute("SELECT 1 FROM Item_Pricing WHERE [Pricing ID] = ?", (new_id,))
+                if not await cursor.fetchone(): break
+            await cursor.execute("INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
                 (new_id, item_data.gate_id, item_data.bu, item_data.item_code, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost))
-            log_user_activity(user['username'], "CREATE_ITEM_PRICING", f"Added pricing for item {item_data.item_code} to gate ID {item_data.gate_id}")
+            await log_user_activity(user['username'], "CREATE_ITEM_PRICING", f"Added pricing for item {item_data.item_code} to gate ID {item_data.gate_id}")
 
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         return {"message": "Item saved successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error saving item: {str(e)}")
 
 @app.get("/account/items/{pricing_id}/logs", response_model=List[ItemLogItem])
-def get_item_logs(pricing_id: int, user: dict = Depends(get_current_user)):
+async def get_item_logs(pricing_id: int, user: dict = Depends(get_current_user)):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, pricing_id, changed_by, change_date, field_name, old_value, new_value FROM Item_Change_Log WHERE pricing_id = ? ORDER BY change_date DESC", (pricing_id,))
-        rows = cursor.fetchall()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT id, pricing_id, changed_by, change_date, field_name, old_value, new_value FROM Item_Change_Log WHERE pricing_id = ? ORDER BY change_date DESC", (pricing_id,))
+        rows = await cursor.fetchall()
         logs = [{"id": r[0], "pricing_id": r[1], "changed_by": r[2], "change_date": r[3], "field_name": r[4], "old_value": r[5], "new_value": r[6]} for r in rows]
-        conn.close()
+        await conn.close()
         return logs
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching logs: {str(e)}")
 
 @app.delete("/account/item-pricing/{gate_id}/{item_code}")
-def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(require_permission("delete_item"))): 
+async def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(require_permission("delete_item"))): 
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT [Pricing ID] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
-        row = cursor.fetchone()
-        if row: cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (row[0],))
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT [Pricing ID] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
+        row = await cursor.fetchone()
+        if row: await cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (row[0],))
 
-        cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
+        await cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
         if cursor.rowcount == 0:
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=404, detail="Item not found")
-        conn.commit()
-        conn.close()
-        log_user_activity(user['username'], "DELETE_ITEM_PRICING", f"Deleted item {item_code} from gate {gate_id}")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['username'], "DELETE_ITEM_PRICING", f"Deleted item {item_code} from gate {gate_id}")
         return {"message": "Item deleted successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting item: {str(e)}")
 
 @app.get("/dwbi/items/search")
-def search_dwbi_items(q: str = Query(..., min_length=2)):
+async def search_dwbi_items(q: str = Query(..., min_length=2)):
     try:
-        conn = get_dwbi_connection()
-        cursor = conn.cursor()
+        conn = await get_dwbi_connection()
+        cursor = await conn.cursor()
         search_term = f"%{q}%"
-        cursor.execute("SELECT TOP 50 ItemCode, ItemName, ItmsGrpNam, U_BrandName, Sector FROM Itemmasterallpp WHERE ItemCode LIKE ? OR ItemName LIKE ?", (search_term, search_term))
-        rows = cursor.fetchall()
+        await cursor.execute("SELECT TOP 50 ItemCode, ItemName, ItmsGrpNam, U_BrandName, Sector FROM Itemmasterallpp WHERE ItemCode LIKE ? OR ItemName LIKE ?", (search_term, search_term))
+        rows = await cursor.fetchall()
         items = [{"item_code": r[0], "item_name": r[1], "principal": r[2], "brand": r[3], "bu": r[4]} for r in rows]
-        conn.close()
+        await conn.close()
         return {"items": items}
     except Exception as e: 
         raise HTTPException(status_code=500, detail=f"Error searching items: {str(e)}")
 
 @app.get("/dwbi/items/validate")
-def validate_dwbi_item(code: str = Query(...)):
+async def validate_dwbi_item(code: str = Query(...)):
     try:
-        conn = get_dwbi_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT ItemCode, ItemName, ItmsGrpNam, U_BrandName, Sector FROM Itemmasterallpp WHERE ItemCode = ?", (code,))
-        row = cursor.fetchone()
-        conn.close()
+        conn = await get_dwbi_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT ItemCode, ItemName, ItmsGrpNam, U_BrandName, Sector FROM Itemmasterallpp WHERE ItemCode = ?", (code,))
+        row = await cursor.fetchone()
+        await conn.close()
         
         if row: 
             return {"valid": True, "item": {"item_code": row[0], "item_name": row[1], "principal": row[2], "brand": row[3], "bu": row[4]}}
@@ -2999,28 +3000,28 @@ def validate_dwbi_item(code: str = Query(...)):
     
     
 @app.get("/dwbi/principals/search")
-def search_dwbi_principals(q: str = Query(..., min_length=2)):
+async def search_dwbi_principals(q: str = Query(..., min_length=2)):
     try:
-        conn = get_dwbi_connection()
-        cursor = conn.cursor()
+        conn = await get_dwbi_connection()
+        cursor = await conn.cursor()
         search_term = f"%{q}%"
         # Using DISTINCT so we only get unique ItmsGrpNam values
-        cursor.execute("SELECT DISTINCT TOP 50 ItmsGrpNam FROM Itemmasterallpp WHERE ItmsGrpNam LIKE ?", (search_term,))
-        rows = cursor.fetchall()
+        await cursor.execute("SELECT DISTINCT TOP 50 ItmsGrpNam FROM Itemmasterallpp WHERE ItmsGrpNam LIKE ?", (search_term,))
+        rows = await cursor.fetchall()
         principals = [r[0] for r in rows if r[0]]
-        conn.close()
+        await conn.close()
         return {"principals": principals}
     except Exception as e: 
         raise HTTPException(status_code=500, detail=f"Error searching principals: {str(e)}")
 
 @app.get("/dwbi/principals/validate")
-def validate_dwbi_principal(name: str = Query(...)):
+async def validate_dwbi_principal(name: str = Query(...)):
     try:
-        conn = get_dwbi_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT TOP 1 ItmsGrpNam FROM Itemmasterallpp WHERE ItmsGrpNam = ?", (name,))
-        row = cursor.fetchone()
-        conn.close()
+        conn = await get_dwbi_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT TOP 1 ItmsGrpNam FROM Itemmasterallpp WHERE ItmsGrpNam = ?", (name,))
+        row = await cursor.fetchone()
+        await conn.close()
         
         if row: 
             return {"valid": True, "principal": row[0]}
@@ -3029,30 +3030,30 @@ def validate_dwbi_principal(name: str = Query(...)):
         raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
 
 @app.get("/locations/from")
-def get_from_locations():
+async def get_from_locations():
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT [From] FROM Gate WHERE [From] IS NOT NULL ORDER BY [From]")
-        rows = cursor.fetchall()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT DISTINCT [From] FROM Gate WHERE [From] IS NOT NULL ORDER BY [From]")
+        rows = await cursor.fetchall()
+        await conn.close()
         return {"locations": [r[0] for r in rows if r[0]]}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading from locations: {str(e)}")
 
 @app.get("/locations/to")
-def get_to_locations(from_loc: Optional[str] = None):
+async def get_to_locations(from_loc: Optional[str] = None):
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
-        if from_loc: cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [From] = ? AND [To] IS NOT NULL ORDER BY [To]", (from_loc,))
-        else: cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [To] IS NOT NULL ORDER BY [To]")
-        rows = cursor.fetchall()
-        conn.close()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        if from_loc: await cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [From] = ? AND [To] IS NOT NULL ORDER BY [To]", (from_loc,))
+        else: await cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [To] IS NOT NULL ORDER BY [To]")
+        rows = await cursor.fetchall()
+        await conn.close()
         return {"locations": [r[0] for r in rows if r[0]]}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error loading to locations: {str(e)}")
 
 @app.post("/calculate-with-gate")
-def calculate_with_gate(
+async def calculate_with_gate(
     gate_name: str, 
     from_loc: Optional[str] = Query(None),
     to_loc: Optional[str] = Query(None),
@@ -3063,7 +3064,7 @@ def calculate_with_gate(
 ):
     try:
         if not doc_nums: raise HTTPException(status_code=400, detail="No Doc Nums provided")
-        return _perform_calculation_logic(
+        return await _perform_calculation_logic(
             gate_name=gate_name, 
             doc_nums=doc_nums, 
             from_loc=from_loc,
@@ -3075,10 +3076,10 @@ def calculate_with_gate(
     except Exception as e: raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")
 
 @app.get("/doc-nums")
-def get_doc_nums():
+async def get_doc_nums():
     try:
-        conn = get_dwbi_connection()
-        cursor = conn.cursor()
+        conn = await get_dwbi_connection()
+        cursor = await conn.cursor()
         query = """
             SELECT source, DocNum, DocDate FROM (
                 SELECT 'PG' as source, DocNum, MAX(DocDate) as DocDate FROM PG_Transfer_Details WHERE DocNum IS NOT NULL GROUP BY DocNum
@@ -3087,8 +3088,8 @@ def get_doc_nums():
             ) t
             ORDER BY DocDate DESC, DocNum DESC
         """
-        cursor.execute(query)
-        rows = cursor.fetchall()
+        await cursor.execute(query)
+        rows = await cursor.fetchall()
         doc_nums = []
         for row in rows:
             doc_date_val = row[2]
@@ -3097,27 +3098,27 @@ def get_doc_nums():
             else: doc_date_str = str(doc_date_val) if doc_date_val else ""
             
             doc_nums.append({"doc_num": f"{row[0]} - {row[1]}", "doc_date": doc_date_str})
-        conn.close()
+        await conn.close()
         return {"doc_nums": doc_nums}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.get("/products-by-doc-nums")
-def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums")):
+async def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums")):
     try:
         if not doc_nums: return {"products": [], "total_weight": 0}
         
         pg_nums = [str(d).replace("PG - ", "").replace("PG-", "") for d in doc_nums if not str(d).startswith("PDG")]
         pdg_nums = [str(d).replace("PDG - ", "").replace("PDG-", "") for d in doc_nums if str(d).startswith("PDG")]
         
-        conn = get_dwbi_connection()
-        cursor = conn.cursor()
+        conn = await get_dwbi_connection()
+        cursor = await conn.cursor()
         products, total_weight = [], 0.0
         
         if pg_nums:
             placeholders = ','.join('?' * len(pg_nums))
-            cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand), 'PG' FROM PG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode", pg_nums)
-            rows = cursor.fetchall()
+            await cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand), 'PG' FROM PG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode", pg_nums)
+            rows = await cursor.fetchall()
             for row in rows:
                 weight = float(row[3]) if row[3] else 0.0
                 total_weight += weight
@@ -3125,34 +3126,34 @@ def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums"))
                 
         if pdg_nums:
             placeholders = ','.join('?' * len(pdg_nums))
-            cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), DocNum, SUM(QtyCtn), MAX(Brand), 'PDG' FROM PDG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode", pdg_nums)
-            rows = cursor.fetchall()
+            await cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), DocNum, SUM(QtyCtn), MAX(Brand), 'PDG' FROM PDG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode", pdg_nums)
+            rows = await cursor.fetchall()
             for row in rows:
                 weight = float(row[3]) if row[3] else 0.0
                 total_weight += weight
                 products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7], "sin_no": f"{row[7]} - {row[4]}"})
         
-        conn.close()
+        await conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/products/{doc_num}")
-def get_products_by_doc_num(doc_num: str):
+async def get_products_by_doc_num(doc_num: str):
     try:
         is_pdg = doc_num.startswith("PDG")
         actual_num = doc_num.replace("PDG - ", "").replace("PDG-", "").replace("PG - ", "").replace("PG-", "")
 
-        conn = get_dwbi_connection()
-        cursor = conn.cursor()
+        conn = await get_dwbi_connection()
+        cursor = await conn.cursor()
 
         if is_pdg:
-            cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), DocNum, SUM(QtyCtn), MAX(Brand), 'PDG' FROM PDG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
+            await cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), DocNum, SUM(QtyCtn), MAX(Brand), 'PDG' FROM PDG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
         else:
-            cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand), 'PG' FROM PG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
+            await cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand), 'PG' FROM PG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
             
-        rows = cursor.fetchall()
+        rows = await cursor.fetchall()
         if not rows:
-            conn.close()
+            await conn.close()
             raise HTTPException(status_code=404, detail="No products found")
             
         products, total_weight = [], 0.0
@@ -3161,7 +3162,7 @@ def get_products_by_doc_num(doc_num: str):
             total_weight += weight
             products.append({"item_code": row[0] or "", "description": row[1] or "", "uom": row[2] or "", "item_weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7]})
             
-        conn.close()
+        await conn.close()
         return {"products": products, "total_weight": round(total_weight, 2)}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     
@@ -3169,7 +3170,7 @@ def get_products_by_doc_num(doc_num: str):
 # --- Submitted Calculation Allocation Report Endpoints ---
 
 @app.get("/account/submitted-allocation-report")
-def get_submitted_allocation_report(
+async def get_submitted_allocation_report(
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     user: dict = Depends(require_permission("view_daily_report"))
@@ -3179,8 +3180,8 @@ def get_submitted_allocation_report(
     to generate a comprehensive allocation report.
     """
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
 
         # Query flattened product rows joined with parent calculation
         query = """
@@ -3206,9 +3207,9 @@ def get_submitted_allocation_report(
 
         query += " ORDER BY ch.submitted_at DESC"
 
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        conn.close()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
+        await conn.close()
 
         allocation_data = []
         for row in rows:
@@ -3257,7 +3258,7 @@ def get_submitted_allocation_report(
     
 # --- Dashboard Helper Functions ---
 
-def _generate_allocation_data(target_month: str, target_branch: Optional[str] = None):
+async def _generate_allocation_data(target_month: str, target_branch: Optional[str] = None):
     try:
         year, month = map(int, target_month.split('-'))
     except ValueError:
@@ -3282,16 +3283,16 @@ def _generate_allocation_data(target_month: str, target_branch: Optional[str] = 
     _, last_day = calendar.monthrange(year, month)
     end_date = f"{year:04d}-{month:02d}-{last_day:02d}"
 
-    conn = get_logistic_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
+    conn = await get_logistic_connection()
+    cursor = await conn.cursor()
+    await cursor.execute("""
         SELECT target_date, bu, branch, driver_name, item_code, item_name, principal, brand,
                ctns, allocated_cost, cost_per_carton, driver_total_ctns, branch_cost, sales_amount
         FROM Daily_Item_Report
         WHERE target_date >= ? AND target_date <= ?
     """, (start_date, end_date))
-    rows = cursor.fetchall()
-    conn.close()
+    rows = await cursor.fetchall()
+    await conn.close()
 
     brands_data = {}
     available_branches = set()
@@ -3365,7 +3366,7 @@ def _generate_allocation_data(target_month: str, target_branch: Optional[str] = 
     return dashboard_results, month0_label, sorted(list(available_branches))
 
 
-def _generate_calculated_data(target_month: str, target_to_loc: Optional[str] = None):
+async def _generate_calculated_data(target_month: str, target_to_loc: Optional[str] = None):
     try:
         year, month = map(int, target_month.split('-'))
     except ValueError:
@@ -3385,18 +3386,18 @@ def _generate_calculated_data(target_month: str, target_to_loc: Optional[str] = 
     # Keep month0_label for the return statement
     month0_label = months_list[0]
 
-    conn = get_logistic_connection()
-    cursor = conn.cursor()
+    conn = await get_logistic_connection()
+    cursor = await conn.cursor()
 
-    cursor.execute("""
+    await cursor.execute("""
         SELECT cp.brand, cp.ctns, cp.total_cost, cp.doc_date,
                COALESCE(ch.submitted_at, ch.created_at) AS fallback_date, ch.to_loc
         FROM Calculation_Products cp
         JOIN Calculation_History ch ON cp.calc_id = ch.id
         WHERE ch.status IN ('submitted', 'claimed')
     """)
-    rows = cursor.fetchall()
-    conn.close()
+    rows = await cursor.fetchall()
+    await conn.close()
 
     brands_data = {}
     available_to_locs = set()
@@ -3465,7 +3466,7 @@ def _generate_calculated_data(target_month: str, target_to_loc: Optional[str] = 
 # --- Dashboard Endpoints ---
 
 @app.get("/dashboard/brand-allocation-cost")
-def get_brand_allocation_cost_dashboard(
+async def get_brand_allocation_cost_dashboard(
     target_month: Optional[str] = None, 
     branch: Optional[str] = Query(None, description="Filter by Branch"),
     user: dict = Depends(get_current_user)
@@ -3473,7 +3474,7 @@ def get_brand_allocation_cost_dashboard(
     if not target_month:
         target_month = datetime.datetime.now().strftime("%Y-%m")
     try:
-        results, month, available_branches = _generate_allocation_data(target_month, target_branch=branch)
+        results, month, available_branches = await _generate_allocation_data(target_month, target_branch=branch)
         return {
             "status": "success", 
             "target_month": month, 
@@ -3485,7 +3486,7 @@ def get_brand_allocation_cost_dashboard(
     
     
 @app.get("/dashboard/calculated-brand-cost")
-def get_calculated_brand_cost_dashboard(
+async def get_calculated_brand_cost_dashboard(
     target_month: Optional[str] = None, 
     to_loc: Optional[str] = Query(None, description="Filter by To Location"),
     user: dict = Depends(require_permission("view_dashboard"))
@@ -3493,7 +3494,7 @@ def get_calculated_brand_cost_dashboard(
     if not target_month:
         target_month = datetime.datetime.now().strftime("%Y-%m")
     try:
-        results, month, available_to_locs = _generate_calculated_data(target_month, target_to_loc=to_loc)
+        results, month, available_to_locs = await _generate_calculated_data(target_month, target_to_loc=to_loc)
         return {
             "status": "success", 
             "target_month": month, 
@@ -3505,7 +3506,7 @@ def get_calculated_brand_cost_dashboard(
 
 
 @app.get("/dashboard/combined")
-def get_combined_dashboard(
+async def get_combined_dashboard(
     target_month: Optional[str] = None, 
     branch: Optional[str] = Query(None, description="Filter by Branch"),
     to_loc: Optional[str] = Query(None, description="Filter by To Location"),
@@ -3515,8 +3516,8 @@ def get_combined_dashboard(
         target_month = datetime.datetime.now().strftime("%Y-%m")
         
     try:
-        alloc_data, month, available_branches = _generate_allocation_data(target_month, target_branch=branch)
-        calc_data, _, available_to_locs = _generate_calculated_data(target_month, target_to_loc=to_loc)
+        alloc_data, month, available_branches = await _generate_allocation_data(target_month, target_branch=branch)
+        calc_data, _, available_to_locs = await _generate_calculated_data(target_month, target_to_loc=to_loc)
         
         return {
             "status": "success",
@@ -3531,7 +3532,7 @@ def get_combined_dashboard(
 
 
 @app.get("/dashboard/principal-brand-allocation")
-def get_principal_brand_allocation(
+async def get_principal_brand_allocation(
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     user: dict = Depends(require_permission("view_dashboard"))
@@ -3541,8 +3542,8 @@ def get_principal_brand_allocation(
     and groups it dynamically: BU -> Branch -> Principal -> Brand -> Item Name -> Date.
     """
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         
         query = """
             SELECT target_date, bu, branch, item_name, principal, brand, ctns, allocated_cost
@@ -3560,9 +3561,9 @@ def get_principal_brand_allocation(
             query += " WHERE target_date <= ?"
             params.append(end_date)
 
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        conn.close()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
+        await conn.close()
 
         hierarchy = {}
 
@@ -3719,7 +3720,7 @@ def get_principal_brand_allocation(
     
     
 @app.get("/dashboard/third-party-allocation")
-def get_third_party_allocation(
+async def get_third_party_allocation(
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     user: dict = Depends(require_permission("view_dashboard"))
@@ -3729,8 +3730,8 @@ def get_third_party_allocation(
     and groups it dynamically: BU -> To_Loc (Branch) -> Principal -> Brand -> Item Name -> Date.
     """
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         
         query = """
             SELECT ch.submitted_at, ch.to_loc, cp.bu, cp.principal, cp.brand, cp.name,
@@ -3751,9 +3752,9 @@ def get_third_party_allocation(
             query += " AND SUBSTR(ch.submitted_at, 1, 10) <= ?"
             params.append(end_date)
 
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        conn.close()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
+        await conn.close()
 
         hierarchy = {}
 
@@ -3913,7 +3914,7 @@ def get_third_party_allocation(
 # --- Cost Comparison Report Endpoint ---
 
 @app.get("/dashboard/cost-comparison")
-def get_cost_comparison(
+async def get_cost_comparison(
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     user: dict = Depends(require_permission("view_dashboard"))
@@ -3923,8 +3924,8 @@ def get_cost_comparison(
     Merges Rate Cart (Daily Report) and Calculated Cost (Third Party) data using DocDate.
     """
     try:
-        conn = get_logistic_connection()
-        cursor = conn.cursor()
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
         
         # 1. Fetch Rate Cart Data from Daily_Item_Report (normalized)
         rc_query = """
@@ -3943,8 +3944,8 @@ def get_cost_comparison(
             rc_query += " AND target_date <= ?"
             rc_params.append(end_date)
 
-        cursor.execute(rc_query, rc_params)
-        rc_rows = cursor.fetchall()
+        await cursor.execute(rc_query, rc_params)
+        rc_rows = await cursor.fetchall()
 
         # 2. Fetch Calculated Cost Data from Calculation_Products (normalized)
         cc_query = """
@@ -3954,12 +3955,12 @@ def get_cost_comparison(
             JOIN Calculation_Products cp ON cp.calc_id = ch.id
             WHERE ch.status IN ('submitted', 'claimed')
         """
-        cursor.execute(cc_query)
-        cc_rows = cursor.fetchall()
+        await cursor.execute(cc_query)
+        cc_rows = await cursor.fetchall()
         
         # 3. Fetch Location Mappings 
-        cursor.execute("SELECT to_location, branch_code FROM Location_Mapping")
-        mapping_rows = cursor.fetchall()
+        await cursor.execute("SELECT to_location, branch_code FROM Location_Mapping")
+        mapping_rows = await cursor.fetchall()
         
         LOCATION_MAP = {}
         DISPLAY_MAP = {} 
@@ -3971,7 +3972,7 @@ def get_cost_comparison(
                 LOCATION_MAP[raw_to_loc.upper()] = raw_branch.upper()
                 DISPLAY_MAP[raw_branch.upper()] = raw_to_loc
         
-        conn.close()
+        await conn.close()
         
         comparison_dict = {}
         
@@ -4083,7 +4084,7 @@ def get_cost_comparison(
 # --- Daily Report Excel Export Endpoints ---
 
 @app.get("/account/daily-rate-cut-report/export")
-def export_daily_rate_cut_report(
+async def export_daily_rate_cut_report(
     request: Request,
     report_type: str = Query(..., description="'item' or 'township'"),
     target_date: Optional[str] = None, 
@@ -4102,7 +4103,7 @@ def export_daily_rate_cut_report(
             daily_datas = []
             current_dt = start_dt
             while current_dt <= end_dt:
-                daily_datas.append(get_or_generate_daily_report(current_dt.strftime("%Y-%m-%d")))
+                daily_datas.append(await get_or_generate_daily_report(current_dt.strftime("%Y-%m-%d")))
                 current_dt += datetime.timedelta(days=1)
             
             aggregated = _aggregate_reports(daily_datas)
@@ -4112,7 +4113,7 @@ def export_daily_rate_cut_report(
             if not target_date: 
                 target_date = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
             
-            data = get_or_generate_daily_report(target_date)
+            data = await get_or_generate_daily_report(target_date)
             report_data = data["item_report"] if report_type == 'item' else data["township_report"]
             date_str = target_date
 
@@ -4220,14 +4221,14 @@ def export_daily_rate_cut_report(
 
 
 @app.get("/account/submitted-allocation-report/export")
-def export_submitted_allocation_report(
+async def export_submitted_allocation_report(
     request: Request,
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     user: dict = Depends(require_permission("view_daily_report"))
 ):
     try:
-        report_response = get_submitted_allocation_report(start_date, end_date, user)
+        report_response = await get_submitted_allocation_report(start_date, end_date, user)
         allocation_data = report_response["data"]
 
         # --- NEW: Apply Dynamic Filters ---
