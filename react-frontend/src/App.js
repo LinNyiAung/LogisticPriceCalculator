@@ -4261,10 +4261,24 @@ const PricingApp = () => {
                     )}
                   </div>
                 </div>
-                 <div className="flex gap-4 mb-6">
-                    <button onClick={calculateCosts} disabled={isLoading} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-70 disabled:cursor-not-allowed"><Calculator size={20} /> {isLoading ? 'Calculating...' : 'Calculate Costs'}</button>
-                    {calculatedTotalCost !== null && (<button disabled={isSaving} onClick={() => handleSaveCalculation(false)} className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-70 disabled:cursor-not-allowed"><Save size={20} /> Save as New</button>)}
-                </div>
+                 {currentHistoryId === null ? (
+                    <div className="flex gap-4 mb-6">
+                        <button onClick={calculateCosts} disabled={isLoading} className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-70 disabled:cursor-not-allowed">
+                            <Calculator size={20} /> {isLoading ? 'Calculating...' : 'Calculate Costs'}
+                        </button>
+                        {calculatedTotalCost !== null && (
+                            <button disabled={isSaving} onClick={() => handleSaveCalculation(false)} className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-70 disabled:cursor-not-allowed">
+                                <Save size={20} /> Save as New
+                            </button>
+                        )}
+                    </div>
+                ) : (
+                    <div className="flex gap-4 mb-6 p-4 bg-gray-100 rounded-lg justify-center border border-gray-200">
+                        <span className="text-gray-500 font-semibold flex items-center gap-2">
+                            <History size={20} /> Loaded Saved Calculation (View Only)
+                        </span>
+                    </div>
+                )}
                 </>
               )}
           </div>
