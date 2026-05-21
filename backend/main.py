@@ -195,141 +195,15 @@ async def startup_db():
             )
         """)
 
-        # Safely attempt to add columns for existing databases
-        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [channel] TEXT")
-        except aiosqlite.OperationalError: pass
-        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [status] TEXT DEFAULT 'saved'")
-        except aiosqlite.OperationalError: pass
-        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [created_by] TEXT")
-        except aiosqlite.OperationalError: pass
-        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [submitted_by] TEXT")
-        except aiosqlite.OperationalError: pass
-        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [submitted_at] TEXT")
-        except aiosqlite.OperationalError: pass
-        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [claimed_by] TEXT")
-        except aiosqlite.OperationalError: pass
-        try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [claimed_at] TEXT")
-        except aiosqlite.OperationalError: pass
-        try: await cursor.execute("ALTER TABLE Item_Pricing ADD COLUMN bu TEXT")
-        except aiosqlite.OperationalError: pass
-
-        # --- Migrate legacy calculated_products JSON to Calculation_Products table ---
-        try:
-            await cursor.execute("SELECT id, calculated_products FROM Calculation_History WHERE calculated_products IS NOT NULL AND calculated_products != '[]' AND calculated_products != ''")
-            legacy_rows = await cursor.fetchall()
-            migrated = 0
-            for calc_id, cp_json in legacy_rows:
-                await cursor.execute("SELECT COUNT(*) FROM Calculation_Products WHERE calc_id = ?", (calc_id,))
-                if (await cursor.fetchone())[0] > 0:
-                    continue  # already migrated
-                import json as _json
-                try:
-                    products = _json.loads(cp_json)
-                    for p in products:
-                        await cursor.execute("""
-                            INSERT INTO Calculation_Products
-                            (calc_id, code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
-                             b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
-                             calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost)
-                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                        """, (
-                            calc_id,
-                            p.get('code', ''), p.get('name', ''), p.get('uom', ''),
-                            p.get('weight', 0), p.get('doc_date', ''), p.get('sin_no', ''),
-                            p.get('principal', ''), p.get('brand', ''), p.get('ctns', 0),
-                            p.get('bu', ''), p.get('b_code', ''), p.get('b_name', ''),
-                            p.get('b_dept', ''), p.get('b_principal', ''), p.get('b_desc', ''),
-                            p.get('s_dept', ''), p.get('s_principal', ''),
-                            p.get('calculation_type', ''), p.get('system_rate'),
-                            p.get('unit_cost', 0), p.get('total_cost', 0),
-                            p.get('standard_unit_cost')
-                        ))
-                    migrated += 1
-                except Exception:
-                    pass
-            if migrated > 0:
-                await conn.commit()
-                logger.info(f"Migrated {migrated} legacy calculation records to Calculation_Products table")
-        except Exception as mig_err:
-            logger.warning(f"Legacy Calculation_Products migration skipped: {mig_err}")
-
-        # --- Migrate legacy Daily_Report_History JSON to Daily_Item_Report / Daily_Township_Report ---
-        try:
-            await cursor.execute("PRAGMA table_info(Daily_Report_History)")
-            drh_cols = [row[1] for row in await cursor.fetchall()]
-            if 'item_report_json' in drh_cols:
-                await cursor.execute("SELECT target_date, item_report_json, township_report_json FROM Daily_Report_History WHERE item_report_json IS NOT NULL")
-                legacy_daily = await cursor.fetchall()
-                migrated_daily = 0
-                import json as _json2
-                for target_date, ir_json, tr_json in legacy_daily:
-                    await cursor.execute("SELECT COUNT(*) FROM Daily_Item_Report WHERE target_date = ?", (target_date,))
-                    if (await cursor.fetchone())[0] > 0:
-                        continue
-                    try:
-                        items = _json2.loads(ir_json) if ir_json else []
-                        for it in items:
-                            await cursor.execute("""
-                                INSERT INTO Daily_Item_Report
-                                (target_date, bu, branch, driver_name, item_code, item_name, principal, brand,
-                                 ctns, allocated_cost, cost_per_carton, driver_total_ctns, branch_cost, sales_amount)
-                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                            """, (
-                                target_date, it.get('bu',''), it.get('branch',''), it.get('driver_name',''),
-                                it.get('item_code',''), it.get('item_name',''), it.get('principal',''), it.get('brand',''),
-                                it.get('ctns',0), it.get('allocated_cost',0), it.get('cost_per_carton',0),
-                                it.get('driver_total_ctns',0), it.get('branch_cost',0), it.get('sales_amount',0)
-                            ))
-                        townships = _json2.loads(tr_json) if tr_json else []
-                        for tw in townships:
-                            await cursor.execute("""
-                                INSERT INTO Daily_Township_Report
-                                (target_date, branch, driver_name, township, customer_code, contact_person,
-                                 ctns, driver_total_ctns, branch_cost, cost_per_carton, allocated_cost,
-                                 total_drop_points, cost_per_drop_point, sales_amount)
-                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                            """, (
-                                target_date, tw.get('branch',''), tw.get('driver_name',''), tw.get('township',''),
-                                tw.get('customer_code',''), tw.get('contact_person',''),
-                                tw.get('ctns',0), tw.get('driver_total_ctns',0), tw.get('branch_cost',0),
-                                tw.get('cost_per_carton',0), tw.get('allocated_cost',0),
-                                tw.get('total_drop_points',0), tw.get('cost_per_drop_point',0), tw.get('sales_amount',0)
-                            ))
-                        migrated_daily += 1
-                    except Exception:
-                        pass
-                if migrated_daily > 0:
-                    await conn.commit()
-                    logger.info(f"Migrated {migrated_daily} legacy daily reports to normalized tables")
-        except Exception as mig_err2:
-            logger.warning(f"Legacy Daily_Report migration skipped: {mig_err2}")
-        
-        # --- User Table with Auto-Incrementing ID & Migration ---
-        await cursor.execute("PRAGMA table_info(Users)")
-        user_columns = [row[1] for row in await cursor.fetchall()]
-        
-        if user_columns and "id" not in user_columns:
-            logger.info("Migrating Users table to use 'id' as primary key...")
-            await cursor.execute("""
-                CREATE TABLE Users_new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE,
-                    hashed_password TEXT,
-                    role TEXT
-                )
-            """)
-            await cursor.execute("INSERT INTO Users_new (username, hashed_password, role) SELECT username, hashed_password, role FROM Users")
-            await cursor.execute("DROP TABLE Users")
-            await cursor.execute("ALTER TABLE Users_new RENAME TO Users")
-        elif not user_columns:
-            await cursor.execute("""
-                CREATE TABLE Users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE,
-                    hashed_password TEXT,
-                    role TEXT
-                )
-            """)
+        # --- User Table ---
+        await cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE,
+                hashed_password TEXT,
+                role TEXT
+            )
+        """)
 
         # --- Roles Table ---
         await cursor.execute("""
@@ -381,30 +255,6 @@ async def startup_db():
             )
         """)
 
-        # --- Migrate Branch_Code columns if they exist with old names ---
-        await cursor.execute("PRAGMA table_info(Branch_Code)")
-        bc_cols = [row[1] for row in await cursor.fetchall()]
-        if bc_cols and "Log-Pric" in bc_cols:
-            logger.info("Migrating Branch_Code table to new schema...")
-            await cursor.execute("ALTER TABLE Branch_Code RENAME TO Branch_Code_old")
-            await cursor.execute("""
-                CREATE TABLE Branch_Code (
-                    [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                    [log_pric] TEXT UNIQUE,
-                    [code] TEXT,
-                    [name] TEXT,
-                    [dept] TEXT,
-                    [principal] TEXT,
-                    [description] TEXT
-                )
-            """)
-            await cursor.execute("""
-                INSERT INTO Branch_Code (log_pric, code, name, dept, principal, description)
-                SELECT [Log-Pric], [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code_old
-            """)
-            await cursor.execute("DROP TABLE Branch_Code_old")
-            logger.info("Branch_Code migration complete.")
-
         # --- SD Code Mapping Table ---
         await cursor.execute("""
             CREATE TABLE IF NOT EXISTS SD_Code (
@@ -418,29 +268,6 @@ async def startup_db():
             )
         """)
 
-        # --- Migrate SD_Code columns if they exist with old names ---
-        await cursor.execute("PRAGMA table_info(SD_Code)")
-        sd_cols = [row[1] for row in await cursor.fetchall()]
-        if sd_cols and "Log-Pric" in sd_cols:
-            logger.info("Migrating SD_Code table to new schema...")
-            await cursor.execute("ALTER TABLE SD_Code RENAME TO SD_Code_old")
-            await cursor.execute("""
-                CREATE TABLE SD_Code (
-                    [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                    [channel] TEXT,
-                    [code] TEXT,
-                    [name] TEXT,
-                    [dept] TEXT,
-                    [principal] TEXT,
-                    [log_pric] TEXT UNIQUE
-                )
-            """)
-            await cursor.execute("""
-                INSERT INTO SD_Code (channel, code, name, dept, principal, log_pric)
-                SELECT [Channel], [Code], [Name], [Dept], [Principal], [Log-Pric] FROM SD_Code_old
-            """)
-            await cursor.execute("DROP TABLE SD_Code_old")
-            logger.info("SD_Code migration complete.")
 
         # --- Gate Change Log Table ---
         await cursor.execute("""
