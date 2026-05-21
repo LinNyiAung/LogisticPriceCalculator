@@ -4151,7 +4151,7 @@ async def export_submitted_allocation_report(
         border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
 
         headers = [
-            "Calc ID", "Date", "Doc Date", "SIN No", "Gate Name", "From Loc", "To Loc", "Channel",
+            "Calc ID", "Date", "Doc Date", "SIN No", "Gate Name", "From Loc", "To Loc", "Channel", # Channel is here
             "BU", "Item Code", "Item Name", "Principal", "Brand", "B-Code", "B-Name", "B-Desc", "S-Dept", 
             "S-Principal", "Cartons", "Weight", "Unit Cost", "Total Cost", "Calculation Type"
         ]
@@ -4172,7 +4172,7 @@ async def export_submitted_allocation_report(
             row_data = [
                 row.get("calc_id", ""), formatted_date, row.get("doc_date", ""),
                 row.get("sin_no", ""), row.get("gate_name", ""), row.get("from_loc", ""),
-                row.get("to_loc", ""), row.get("channel", ""), row.get("bu", ""),
+                row.get("to_loc", ""), row.get("channel", ""), row.get("bu", ""), # Ensure channel is at the 8th position
                 row.get("item_code", ""), row.get("item_name", ""), row.get("principal", ""),
                 row.get("brand", ""), row.get("b_code", ""), row.get("b_name", ""),
                 row.get("b_desc", ""), row.get("s_dept", ""), row.get("s_principal", ""),

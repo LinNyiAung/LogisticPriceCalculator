@@ -651,7 +651,7 @@ const PricingApp = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
   });
   const [allocationFilters, setAllocationFilters] = useState({ 
-    calc_id: '', date_filter: '', sin_no: '', gate_name: '', route: '', bu: '', item_code: '', item_name: '', principal: '', brand: '', ctns: '', unit_cost: '', total_cost: '' 
+    calc_id: '', date_filter: '', sin_no: '', gate_name: '', route: '', channel: '', bu: '', item_code: '', item_name: '', principal: '', brand: '', ctns: '', unit_cost: '', total_cost: '' 
   });
 
   const [usersList, setUsersList] = useState([]);
@@ -3053,6 +3053,7 @@ const PricingApp = () => {
           const matchSinNo = (row.sin_no || '').toLowerCase().includes(allocationFilters.sin_no.toLowerCase());
           const matchGateName = (row.gate_name || '').toLowerCase().includes(allocationFilters.gate_name.toLowerCase());
           const matchRoute = ((row.from_loc || '') + ' ' + (row.to_loc || '')).toLowerCase().includes(allocationFilters.route.toLowerCase());
+          const matchChannel = (row.channel || '').toLowerCase().includes((allocationFilters.channel || '').toLowerCase());
           const matchBu = (row.bu || '').toLowerCase().includes(allocationFilters.bu.toLowerCase());
           const matchItemCode = (row.item_code || '').toLowerCase().includes(allocationFilters.item_code.toLowerCase());
           const matchItemName = (row.item_name || '').toLowerCase().includes(allocationFilters.item_name.toLowerCase());
@@ -3062,7 +3063,7 @@ const PricingApp = () => {
           const matchUnitCost = String(row.unit_cost || '').toLowerCase().includes(allocationFilters.unit_cost.toLowerCase());
           const matchTotalCost = String(row.total_cost || '').toLowerCase().includes(allocationFilters.total_cost.toLowerCase());
 
-          return matchCalcId && matchDate && matchSinNo && matchGateName && matchRoute && matchBu && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchCtns && matchUnitCost && matchTotalCost;
+          return matchCalcId && matchDate && matchSinNo && matchGateName && matchRoute && matchChannel && matchBu && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchCtns && matchUnitCost && matchTotalCost;
       });
 
       const displayedDailyItem = filteredDailyReportData.slice(0, visibleCounts.dailyItem);
@@ -3437,6 +3438,10 @@ const PricingApp = () => {
                                                   <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.route} onChange={(e) => setAllocationFilters({...allocationFilters, route: e.target.value})} />
                                               </th>
                                               <th className="border p-2 text-left">
+                                                  <div>Channel</div>
+                                                  <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.channel || ''} onChange={(e) => setAllocationFilters({...allocationFilters, channel: e.target.value})} />
+                                              </th>
+                                              <th className="border p-2 text-left">
                                                   <div>BU</div>
                                                   <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={allocationFilters.bu} onChange={(e) => setAllocationFilters({...allocationFilters, bu: e.target.value})} />
                                               </th>
@@ -3483,6 +3488,7 @@ const PricingApp = () => {
                                                       <td className="border p-2 font-semibold">{row.sin_no}</td>
                                                       <td className="border p-2 text-gray-700">{row.gate_name}</td>
                                                       <td className="border p-2 text-gray-500">{row.from_loc} &rarr; {row.to_loc}</td>
+                                                      <td className="border p-2 text-gray-700">{row.channel || '-'}</td>
                                                       <td className="border p-2 font-bold text-gray-700">{row.bu}</td>
                                                       <td className="border p-2">{row.item_code}</td>
                                                       <td className="border p-2 max-w-[200px] truncate" title={row.item_name}>{row.item_name}</td>
