@@ -371,26 +371,76 @@ async def startup_db():
         # --- Branch Code Mapping Table ---
         await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Branch_Code (
-                [Log-Pric] TEXT,
-                [Code] TEXT,
-                [Name] TEXT,
-                [Dept] TEXT,
-                [Principal] TEXT,
-                [Description] TEXT
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [log_pric] TEXT UNIQUE,
+                [code] TEXT,
+                [name] TEXT,
+                [dept] TEXT,
+                [principal] TEXT,
+                [description] TEXT
             )
         """)
+
+        # --- Migrate Branch_Code columns if they exist with old names ---
+        await cursor.execute("PRAGMA table_info(Branch_Code)")
+        bc_cols = [row[1] for row in await cursor.fetchall()]
+        if bc_cols and "Log-Pric" in bc_cols:
+            logger.info("Migrating Branch_Code table to new schema...")
+            await cursor.execute("ALTER TABLE Branch_Code RENAME TO Branch_Code_old")
+            await cursor.execute("""
+                CREATE TABLE Branch_Code (
+                    [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                    [log_pric] TEXT UNIQUE,
+                    [code] TEXT,
+                    [name] TEXT,
+                    [dept] TEXT,
+                    [principal] TEXT,
+                    [description] TEXT
+                )
+            """)
+            await cursor.execute("""
+                INSERT INTO Branch_Code (log_pric, code, name, dept, principal, description)
+                SELECT [Log-Pric], [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code_old
+            """)
+            await cursor.execute("DROP TABLE Branch_Code_old")
+            logger.info("Branch_Code migration complete.")
 
         # --- SD Code Mapping Table ---
         await cursor.execute("""
             CREATE TABLE IF NOT EXISTS SD_Code (
-                [Channel] TEXT,
-                [Code] TEXT,
-                [Name] TEXT,
-                [Dept] TEXT,
-                [Principal] TEXT,
-                [Log-Pric] TEXT
+                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                [channel] TEXT,
+                [code] TEXT,
+                [name] TEXT,
+                [dept] TEXT,
+                [principal] TEXT,
+                [log_pric] TEXT UNIQUE
             )
         """)
+
+        # --- Migrate SD_Code columns if they exist with old names ---
+        await cursor.execute("PRAGMA table_info(SD_Code)")
+        sd_cols = [row[1] for row in await cursor.fetchall()]
+        if sd_cols and "Log-Pric" in sd_cols:
+            logger.info("Migrating SD_Code table to new schema...")
+            await cursor.execute("ALTER TABLE SD_Code RENAME TO SD_Code_old")
+            await cursor.execute("""
+                CREATE TABLE SD_Code (
+                    [id] INTEGER PRIMARY KEY AUTOINCREMENT,
+                    [channel] TEXT,
+                    [code] TEXT,
+                    [name] TEXT,
+                    [dept] TEXT,
+                    [principal] TEXT,
+                    [log_pric] TEXT UNIQUE
+                )
+            """)
+            await cursor.execute("""
+                INSERT INTO SD_Code (channel, code, name, dept, principal, log_pric)
+                SELECT [Channel], [Code], [Name], [Dept], [Principal], [Log-Pric] FROM SD_Code_old
+            """)
+            await cursor.execute("DROP TABLE SD_Code_old")
+            logger.info("SD_Code migration complete.")
 
         # --- Gate Change Log Table ---
         await cursor.execute("""
@@ -1207,12 +1257,12 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
             
         gate_row = await cursor_log.fetchone()
         
-        await cursor_log.execute("SELECT [Log-Pric], [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code")
+        await cursor_log.execute("SELECT log_pric, code, name, dept, principal, description FROM Branch_Code")
         branch_code_map = {row[0].strip().lower(): {
             "Code": row[1], "Name": row[2], "Dept": row[3], "Principal": row[4], "Description": row[5]
         } for row in await cursor_log.fetchall() if row[3]}
 
-        await cursor_log.execute("SELECT [Dept], [Principal], [Log-Pric] FROM SD_Code")
+        await cursor_log.execute("SELECT dept, principal, log_pric FROM SD_Code")
         sd_code_map = {row[2].strip().lower(): {
             "Dept": row[0], "Principal": row[1]
         } for row in await cursor_log.fetchall() if row[2]}
@@ -2065,7 +2115,7 @@ async def get_branch_codes(user: dict = Depends(get_current_user)):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT [Log-Pric], [Code], [Name], [Dept], [Principal], [Description] FROM Branch_Code")
+        await cursor.execute("SELECT log_pric, code, name, dept, principal, description FROM Branch_Code")
         rows = await cursor.fetchall()
         await conn.close()
         return [{"log_pric": r[0], "code": r[1], "name": r[2], "dept": r[3], "principal": r[4], "description": r[5]} for r in rows]
@@ -2086,8 +2136,8 @@ async def save_branch_code(data: BranchCodeData, user: dict = Depends(get_curren
             
             await cursor.execute("""
                 UPDATE Branch_Code 
-                SET [Log-Pric] = ?, [Code] = ?, [Name] = ?, [Dept] = ?, [Principal] = ?, [Description] = ? 
-                WHERE [Log-Pric] = ?
+                SET log_pric = ?, code = ?, name = ?, dept = ?, principal = ?, description = ? 
+                WHERE log_pric = ?
             """, (data.log_pric, data.code, data.name, data.dept, data.principal, data.description, data.original_log_pric))
             await log_user_activity(user['username'], "UPDATE_BRANCH_CODE", f"Updated Branch Code: {data.log_pric}")
         else:
@@ -2096,7 +2146,7 @@ async def save_branch_code(data: BranchCodeData, user: dict = Depends(get_curren
                 raise HTTPException(status_code=403, detail="Requires 'add_branch_code' permission")
             
             await cursor.execute("""
-                INSERT INTO Branch_Code ([Log-Pric], [Code], [Name], [Dept], [Principal], [Description]) 
+                INSERT INTO Branch_Code (log_pric, code, name, dept, principal, description) 
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (data.log_pric, data.code, data.name, data.dept, data.principal, data.description))
             await log_user_activity(user['username'], "ADD_BRANCH_CODE", f"Added Branch Code: {data.log_pric}")
@@ -2112,7 +2162,7 @@ async def delete_branch_code(log_pric: str, user: dict = Depends(require_permiss
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("DELETE FROM Branch_Code WHERE [Log-Pric] = ?", (log_pric,))
+        await cursor.execute("DELETE FROM Branch_Code WHERE log_pric = ?", (log_pric,))
         if cursor.rowcount == 0:
             await conn.close()
             raise HTTPException(status_code=404, detail="Branch code not found")
@@ -2130,7 +2180,7 @@ async def get_sd_codes(user: dict = Depends(get_current_user)):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT [Channel], [Code], [Name], [Dept], [Principal], [Log-Pric] FROM SD_Code")
+        await cursor.execute("SELECT channel, code, name, dept, principal, log_pric FROM SD_Code")
         rows = await cursor.fetchall()
         await conn.close()
         return [{"channel": r[0], "code": r[1], "name": r[2], "dept": r[3], "principal": r[4], "log_pric": r[5]} for r in rows]
@@ -2151,8 +2201,8 @@ async def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user))
             
             await cursor.execute("""
                 UPDATE SD_Code 
-                SET [Channel] = ?, [Code] = ?, [Name] = ?, [Dept] = ?, [Principal] = ?, [Log-Pric] = ? 
-                WHERE [Log-Pric] = ?
+                SET channel = ?, code = ?, name = ?, dept = ?, principal = ?, log_pric = ? 
+                WHERE log_pric = ?
             """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric, data.original_log_pric))
             await log_user_activity(user['username'], "UPDATE_SD_CODE", f"Updated SD Code: {data.log_pric}")
         else:
@@ -2161,7 +2211,7 @@ async def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user))
                 raise HTTPException(status_code=403, detail="Requires 'add_sd_code' permission")
             
             await cursor.execute("""
-                INSERT INTO SD_Code ([Channel], [Code], [Name], [Dept], [Principal], [Log-Pric]) 
+                INSERT INTO SD_Code (channel, code, name, dept, principal, log_pric) 
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric))
             await log_user_activity(user['username'], "ADD_SD_CODE", f"Added SD Code: {data.log_pric}")
@@ -2177,7 +2227,7 @@ async def delete_sd_code(log_pric: str, user: dict = Depends(require_permission(
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("DELETE FROM SD_Code WHERE [Log-Pric] = ?", (log_pric,))
+        await cursor.execute("DELETE FROM SD_Code WHERE log_pric = ?", (log_pric,))
         if cursor.rowcount == 0:
             await conn.close()
             raise HTTPException(status_code=404, detail="SD code not found")
