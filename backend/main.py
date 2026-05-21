@@ -45,28 +45,28 @@ async def startup_db():
         # Gate table 
         await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Gate (
-                [Gate ID] INTEGER PRIMARY KEY,
-                [Gate Name] TEXT,
-                [From] TEXT,
-                [To] TEXT,
-                [UOM] TEXT,
-                [Unit] INTEGER,
-                [Cost] REAL
+                id INTEGER PRIMARY KEY,
+                gate_name TEXT,
+                from_loc TEXT,
+                to_loc TEXT,
+                uom TEXT,
+                unit INTEGER,
+                cost REAL
             )
         """)
         
         # Item_Pricing table
         await cursor.execute("""
             CREATE TABLE IF NOT EXISTS Item_Pricing (
-                [Pricing ID] INTEGER PRIMARY KEY,
-                [Gate ID] INTEGER,
-                [BU] TEXT,
-                [Item ID] TEXT,
-                [Item Name] TEXT,
-                [Principal] TEXT,
-                [Brand] TEXT,
-                [Transportation Cost] TEXT,
-                FOREIGN KEY([Gate ID]) REFERENCES Gate([Gate ID])
+                id INTEGER PRIMARY KEY,
+                gate_id INTEGER,
+                bu TEXT,
+                item_id TEXT,
+                item_name TEXT,
+                principal TEXT,
+                brand TEXT,
+                transportation_cost TEXT,
+                FOREIGN KEY(gate_id) REFERENCES Gate(id)
             )
         """)
 
@@ -210,7 +210,7 @@ async def startup_db():
         except aiosqlite.OperationalError: pass
         try: await cursor.execute("ALTER TABLE Calculation_History ADD COLUMN [claimed_at] TEXT")
         except aiosqlite.OperationalError: pass
-        try: await cursor.execute("ALTER TABLE Item_Pricing ADD COLUMN [BU] TEXT")
+        try: await cursor.execute("ALTER TABLE Item_Pricing ADD COLUMN bu TEXT")
         except aiosqlite.OperationalError: pass
 
         # --- Migrate legacy calculated_products JSON to Calculation_Products table ---
@@ -402,7 +402,7 @@ async def startup_db():
                 [field_name] TEXT,
                 [old_value] TEXT,
                 [new_value] TEXT,
-                FOREIGN KEY([gate_id]) REFERENCES Gate([Gate ID])
+                FOREIGN KEY([gate_id]) REFERENCES Gate(id)
             )
         """)
 
@@ -416,7 +416,7 @@ async def startup_db():
                 [field_name] TEXT,
                 [old_value] TEXT,
                 [new_value] TEXT,
-                FOREIGN KEY([pricing_id]) REFERENCES Item_Pricing([Pricing ID])
+                FOREIGN KEY([pricing_id]) REFERENCES Item_Pricing(id)
             )
         """)
 
@@ -1126,7 +1126,7 @@ async def determine_calculation_type_sql(gate_id):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT [Cost] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
+        await cursor.execute("SELECT cost FROM Gate WHERE id = ?", (gate_id,))
         row = await cursor.fetchone()
         await conn.close()
 
@@ -1201,9 +1201,9 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
         cursor_log = await conn_log.cursor()
         
         if from_loc and to_loc:
-            await cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit] FROM Gate WHERE [Gate Name] = ? AND [From] = ? AND [To] = ?", (gate_name, from_loc, to_loc))
+            await cursor_log.execute("SELECT id, from_loc, to_loc, cost, unit FROM Gate WHERE gate_name = ? AND from_loc = ? AND to_loc = ?", (gate_name, from_loc, to_loc))
         else:
-            await cursor_log.execute("SELECT [Gate ID], [From], [To], [Cost], [Unit] FROM Gate WHERE [Gate Name] = ?", (gate_name,))
+            await cursor_log.execute("SELECT id, from_loc, to_loc, cost, unit FROM Gate WHERE gate_name = ?", (gate_name,))
             
         gate_row = await cursor_log.fetchone()
         
@@ -1230,7 +1230,7 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
     cost = float(gate_row[3] or 0)
     gate_unit = float(gate_row[4]) if gate_row[4] else 1.0
     
-    await cursor_log.execute("SELECT [Item ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
+    await cursor_log.execute("SELECT item_id, transportation_cost FROM Item_Pricing WHERE gate_id = ?", (gate_id,))
     pricing_rows = await cursor_log.fetchall()
     await conn_log.close()
     
@@ -2533,14 +2533,14 @@ async def export_item_pricing_excel(gate_id: int):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT [Gate Name], [From], [To] FROM Gate WHERE [Gate ID] = ?", (gate_id,))
+        await cursor.execute("SELECT gate_name, from_loc, to_loc FROM Gate WHERE id = ?", (gate_id,))
         gate_row = await cursor.fetchone()
         if not gate_row:
             await conn.close()
             raise HTTPException(status_code=404, detail="Gate not found")
         gate_name, from_loc, to_loc = gate_row[0], gate_row[1] or "", gate_row[2] or ""
         
-        await cursor.execute("SELECT [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? ORDER BY [Item ID]", (gate_id,))
+        await cursor.execute("SELECT bu, item_id, item_name, principal, brand, transportation_cost FROM Item_Pricing WHERE gate_id = ? ORDER BY item_id", (gate_id,))
         rows = await cursor.fetchall()
         await conn.close()
         
@@ -2654,11 +2654,11 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         
-        await cursor.execute("SELECT [Item ID], [Pricing ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
+        await cursor.execute("SELECT item_id, id, transportation_cost FROM Item_Pricing WHERE gate_id = ?", (gate_id,))
         existing_items_data = {row[0]: {'pricing_id': row[1], 'cost': row[2]} for row in await cursor.fetchall()}
         existing_items = set(existing_items_data.keys())
         
-        await cursor.execute("SELECT [Pricing ID] FROM Item_Pricing")
+        await cursor.execute("SELECT id FROM Item_Pricing")
         used_ids = {row[0] for row in await cursor.fetchall()}
         
         updated_items_set = set()
@@ -2683,8 +2683,8 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
 
                 await cursor.execute("""
                     UPDATE Item_Pricing
-                    SET [BU] = ?, [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ?
-                    WHERE [Gate ID] = ? AND [Item ID] = ?
+                    SET bu = ?, item_name = ?, principal = ?, brand = ?, transportation_cost = ?
+                    WHERE gate_id = ? AND item_id = ?
                 """, (row["bu"], row["name"], row["principal"], row["brand"], row["cost"], gate_id, item_code))
                 updates_made += 1
             else:
@@ -2694,7 +2694,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                         used_ids.add(new_id)
                         break
                 await cursor.execute("""
-                    INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost])
+                    INSERT INTO Item_Pricing (id, gate_id, bu, item_id, item_name, principal, brand, transportation_cost)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (new_id, gate_id, row["bu"], item_code, row["name"], row["principal"], row["brand"], row["cost"]))
                 inserts_made += 1
@@ -2706,7 +2706,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         for item_code in items_to_delete:
             pricing_id = existing_items_data[item_code]['pricing_id']
             await cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (pricing_id,))
-            await cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
+            await cursor.execute("DELETE FROM Item_Pricing WHERE gate_id = ? AND item_id = ?", (gate_id, item_code))
             deletes_made += 1
             
         await conn.commit()
@@ -2732,23 +2732,23 @@ async def get_all_gates(
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         
-        query = "SELECT [Gate ID], [Gate Name], [From], [To], [UOM], [Unit], [Cost] FROM Gate WHERE 1=1"
+        query = "SELECT id, gate_name, from_loc, to_loc, uom, unit, cost FROM Gate WHERE 1=1"
         params = []
         
         if gate_name:
-            query += " AND [Gate Name] LIKE ?"
+            query += " AND gate_name LIKE ?"
             params.append(f"%{gate_name}%")
         if from_loc:
-            query += " AND [From] LIKE ?"
+            query += " AND from_loc LIKE ?"
             params.append(f"%{from_loc}%")
         if to_loc:
-            query += " AND [To] LIKE ?"
+            query += " AND to_loc LIKE ?"
             params.append(f"%{to_loc}%")
         if uom:
-            query += " AND [UOM] LIKE ?"
+            query += " AND uom LIKE ?"
             params.append(f"%{uom}%")
         if cost:
-            query += " AND CAST([Cost] AS TEXT) LIKE ?"
+            query += " AND CAST(cost AS TEXT) LIKE ?"
             params.append(f"%{cost}%")
 
         await cursor.execute(query, params)
@@ -2782,8 +2782,8 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
 
         # --- NEW VALIDATION: Prevent duplicate gate name + from/to locations ---
         await cursor.execute("""
-            SELECT [Gate ID] FROM Gate 
-            WHERE [Gate Name] = ? AND [From] = ? AND [To] = ?
+            SELECT id FROM Gate 
+            WHERE gate_name = ? AND from_loc = ? AND to_loc = ?
         """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc))
         existing_gate = await cursor.fetchone()
 
@@ -2803,7 +2803,7 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'edit_gate' permission")
             
-            await cursor.execute("SELECT [Gate ID], [UOM], [Unit], [Cost] FROM Gate WHERE [Gate ID] = ?", (gate_data.gate_id,))
+            await cursor.execute("SELECT id, uom, unit, cost FROM Gate WHERE id = ?", (gate_data.gate_id,))
             current_row = await cursor.fetchone()
             
             if current_row:
@@ -2827,7 +2827,7 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
                     await cursor.executemany("INSERT INTO Gate_Change_Log (gate_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
 
             await cursor.execute("""
-                UPDATE Gate SET [Gate Name] = ?, [From] = ?, [To] = ?, [UOM] = ?, [Unit] = ?, [Cost] = ? WHERE [Gate ID] = ?
+                UPDATE Gate SET gate_name = ?, from_loc = ?, to_loc = ?, uom = ?, unit = ?, cost = ? WHERE id = ?
             """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, gate_data.gate_id))
             await log_user_activity(user['username'], "UPDATE_GATE", f"Updated gate ID {gate_data.gate_id}: {gate_data.gate_name}")
         else:
@@ -2835,7 +2835,7 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_gate' permission")
                 
-            await cursor.execute("INSERT INTO Gate ([Gate Name], [From], [To], [UOM], [Unit], [Cost]) VALUES (?, ?, ?, ?, ?, ?)", 
+            await cursor.execute("INSERT INTO Gate (gate_name, from_loc, to_loc, uom, unit, cost) VALUES (?, ?, ?, ?, ?, ?)", 
                   (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost))
             await log_user_activity(user['username'], "CREATE_GATE", f"Created gate: {gate_data.gate_name}")
         
@@ -2863,8 +2863,8 @@ async def delete_gate(gate_id: int, user: dict = Depends(require_permission("del
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         await cursor.execute("DELETE FROM Gate_Change_Log WHERE gate_id = ?", (gate_id,))
-        await cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
-        await cursor.execute("DELETE FROM Gate WHERE [Gate ID] = ?", (gate_id,))
+        await cursor.execute("DELETE FROM Item_Pricing WHERE gate_id = ?", (gate_id,))
+        await cursor.execute("DELETE FROM Gate WHERE id = ?", (gate_id,))
         if cursor.rowcount == 0:
              await conn.close()
              raise HTTPException(status_code=404, detail="Gate not found")
@@ -2881,7 +2881,7 @@ async def get_item_pricing(gate_id: int, user: dict = Depends(get_current_user))
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT [Pricing ID], [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ?", (gate_id,))
+        await cursor.execute("SELECT id, bu, item_id, item_name, principal, brand, transportation_cost FROM Item_Pricing WHERE gate_id = ?", (gate_id,))
         rows = await cursor.fetchall()
         items = [{"pricing_id": r[0], "bu": r[1], "item_code": r[2], "item_name": r[3], "principal": r[4], "brand": r[5], "transportation_cost": r[6]} for r in rows]
         await conn.close()
@@ -2894,7 +2894,7 @@ async def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT [Pricing ID], [Transportation Cost] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (item_data.gate_id, item_data.original_item_code or item_data.item_code))
+        await cursor.execute("SELECT id, transportation_cost FROM Item_Pricing WHERE gate_id = ? AND item_id = ?", (item_data.gate_id, item_data.original_item_code or item_data.item_code))
         existing = await cursor.fetchone()
 
         if existing:
@@ -2916,7 +2916,7 @@ async def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get
             if changes:
                  await cursor.executemany("INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
 
-            await cursor.execute("UPDATE Item_Pricing SET [Item ID] = ?, [BU] = ?, [Item Name] = ?, [Principal] = ?, [Brand] = ?, [Transportation Cost] = ? WHERE [Pricing ID] = ?", 
+            await cursor.execute("UPDATE Item_Pricing SET item_id = ?, bu = ?, item_name = ?, principal = ?, brand = ?, transportation_cost = ? WHERE id = ?", 
                 (item_data.item_code, item_data.bu, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost, pricing_id))
             await log_user_activity(user['username'], "UPDATE_ITEM_PRICING", f"Updated pricing for item {item_data.item_code} on gate ID {item_data.gate_id}")
         else:
@@ -2926,9 +2926,9 @@ async def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get
                 
             while True:
                 new_id = random.randint(10000000, 99999999)
-                await cursor.execute("SELECT 1 FROM Item_Pricing WHERE [Pricing ID] = ?", (new_id,))
+                await cursor.execute("SELECT 1 FROM Item_Pricing WHERE id = ?", (new_id,))
                 if not await cursor.fetchone(): break
-            await cursor.execute("INSERT INTO Item_Pricing ([Pricing ID], [Gate ID], [BU], [Item ID], [Item Name], [Principal], [Brand], [Transportation Cost]) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+            await cursor.execute("INSERT INTO Item_Pricing (id, gate_id, bu, item_id, item_name, principal, brand, transportation_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
                 (new_id, item_data.gate_id, item_data.bu, item_data.item_code, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost))
             await log_user_activity(user['username'], "CREATE_ITEM_PRICING", f"Added pricing for item {item_data.item_code} to gate ID {item_data.gate_id}")
 
@@ -2955,11 +2955,11 @@ async def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT [Pricing ID] FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
+        await cursor.execute("SELECT id FROM Item_Pricing WHERE gate_id = ? AND item_id = ?", (gate_id, item_code))
         row = await cursor.fetchone()
         if row: await cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (row[0],))
 
-        await cursor.execute("DELETE FROM Item_Pricing WHERE [Gate ID] = ? AND [Item ID] = ?", (gate_id, item_code))
+        await cursor.execute("DELETE FROM Item_Pricing WHERE gate_id = ? AND item_id = ?", (gate_id, item_code))
         if cursor.rowcount == 0:
             await conn.close()
             raise HTTPException(status_code=404, detail="Item not found")
@@ -3034,7 +3034,7 @@ async def get_from_locations():
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT DISTINCT [From] FROM Gate WHERE [From] IS NOT NULL ORDER BY [From]")
+        await cursor.execute("SELECT DISTINCT from_loc FROM Gate WHERE from_loc IS NOT NULL ORDER BY from_loc")
         rows = await cursor.fetchall()
         await conn.close()
         return {"locations": [r[0] for r in rows if r[0]]}
@@ -3045,8 +3045,8 @@ async def get_to_locations(from_loc: Optional[str] = None):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        if from_loc: await cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [From] = ? AND [To] IS NOT NULL ORDER BY [To]", (from_loc,))
-        else: await cursor.execute("SELECT DISTINCT [To] FROM Gate WHERE [To] IS NOT NULL ORDER BY [To]")
+        if from_loc: await cursor.execute("SELECT DISTINCT to_loc FROM Gate WHERE from_loc = ? AND to_loc IS NOT NULL ORDER BY to_loc", (from_loc,))
+        else: await cursor.execute("SELECT DISTINCT to_loc FROM Gate WHERE to_loc IS NOT NULL ORDER BY to_loc")
         rows = await cursor.fetchall()
         await conn.close()
         return {"locations": [r[0] for r in rows if r[0]]}
