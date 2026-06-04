@@ -1,6 +1,5 @@
 import logging
 import aioodbc
-import aiosqlite
 import json
 import datetime
 import calendar
@@ -12,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Any
+from decimal import Decimal
 import os
 import io
 import openpyxl
@@ -37,287 +37,306 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 # --- Initialization ---
 
 async def startup_db():
-    """Ensure logistic.db has the required tables and updated roles"""
+    """Ensure the LogCalculator SQL Server database has the required tables."""
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        
-        # Gate table 
+
+        # Gate table
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Gate (
-                id INTEGER PRIMARY KEY,
-                gate_name TEXT,
-                from_loc TEXT,
-                to_loc TEXT,
-                uom TEXT,
-                unit INTEGER,
-                cost REAL
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Gate' AND xtype='U')
+            CREATE TABLE Gate (
+                id        INT IDENTITY(1,1) PRIMARY KEY,
+                gate_name NVARCHAR(255),
+                from_loc  NVARCHAR(255),
+                to_loc    NVARCHAR(255),
+                uom       NVARCHAR(100),
+                unit      INT,
+                cost      DECIMAL(18,6)
             )
         """)
-        
+
         # Item_Pricing table
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Item_Pricing (
-                id INTEGER PRIMARY KEY,
-                gate_id INTEGER,
-                bu TEXT,
-                item_id TEXT,
-                item_name TEXT,
-                principal TEXT,
-                brand TEXT,
-                transportation_cost TEXT,
-                FOREIGN KEY(gate_id) REFERENCES Gate(id)
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Item_Pricing' AND xtype='U')
+            CREATE TABLE Item_Pricing (
+                id                  INT PRIMARY KEY,
+                gate_id             INT,
+                bu                  NVARCHAR(100),
+                item_id             NVARCHAR(255),
+                item_name           NVARCHAR(500),
+                principal           NVARCHAR(255),
+                brand               NVARCHAR(255),
+                transportation_cost NVARCHAR(255),
+                FOREIGN KEY (gate_id) REFERENCES Gate(id)
             )
         """)
 
-        # Calculation History Table
+        # Calculation_History table
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Calculation_History (
-                [id] INTEGER PRIMARY KEY, 
-                [created_at] TEXT,
-                [gate_name] TEXT,
-                [from_loc] TEXT,
-                [to_loc] TEXT,
-                [doc_nums] TEXT,
-                [manual_total_cost] REAL,
-                [additional_charges] REAL,
-                [final_total_cost] REAL,
-                [channel] TEXT,
-                [status] TEXT DEFAULT 'saved',
-                [created_by] TEXT,
-                [submitted_by] TEXT,
-                [submitted_at] TEXT,
-                [claimed_by] TEXT,
-                [claimed_at] TEXT
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Calculation_History' AND xtype='U')
+            CREATE TABLE Calculation_History (
+                id                 BIGINT PRIMARY KEY,
+                created_at         NVARCHAR(30),
+                gate_name          NVARCHAR(255),
+                from_loc           NVARCHAR(255),
+                to_loc             NVARCHAR(255),
+                doc_nums           NVARCHAR(MAX),
+                manual_total_cost  DECIMAL(18,6),
+                additional_charges DECIMAL(18,6),
+                final_total_cost   DECIMAL(18,6),
+                channel            NVARCHAR(100),
+                status             NVARCHAR(50)  DEFAULT 'saved',
+                created_by         NVARCHAR(255),
+                submitted_by       NVARCHAR(255),
+                submitted_at       NVARCHAR(30),
+                claimed_by         NVARCHAR(255),
+                claimed_at         NVARCHAR(30)
             )
         """)
 
-        # Calculation Products Table (replaces calculated_products JSON column)
+        # Calculation_Products table
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Calculation_Products (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [calc_id] INTEGER NOT NULL,
-                [code] TEXT,
-                [name] TEXT,
-                [uom] TEXT,
-                [weight] REAL,
-                [doc_date] TEXT,
-                [sin_no] TEXT,
-                [principal] TEXT,
-                [brand] TEXT,
-                [ctns] REAL,
-                [bu] TEXT,
-                [b_code] TEXT,
-                [b_name] TEXT,
-                [b_dept] TEXT,
-                [b_principal] TEXT,
-                [b_desc] TEXT,
-                [s_dept] TEXT,
-                [s_principal] TEXT,
-                [calculation_type] TEXT,
-                [system_rate] REAL,
-                [unit_cost] REAL,
-                [total_cost] REAL,
-                [standard_unit_cost] REAL,
-                FOREIGN KEY([calc_id]) REFERENCES Calculation_History([id])
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Calculation_Products' AND xtype='U')
+            CREATE TABLE Calculation_Products (
+                id                 INT IDENTITY(1,1) PRIMARY KEY,
+                calc_id            BIGINT NOT NULL,
+                code               NVARCHAR(255),
+                name               NVARCHAR(500),
+                uom                NVARCHAR(100),
+                weight             DECIMAL(18,6),
+                doc_date           NVARCHAR(30),
+                sin_no             NVARCHAR(255),
+                principal          NVARCHAR(255),
+                brand              NVARCHAR(255),
+                ctns               DECIMAL(18,6),
+                bu                 NVARCHAR(100),
+                b_code             NVARCHAR(255),
+                b_name             NVARCHAR(500),
+                b_dept             NVARCHAR(255),
+                b_principal        NVARCHAR(255),
+                b_desc             NVARCHAR(500),
+                s_dept             NVARCHAR(255),
+                s_principal        NVARCHAR(255),
+                calculation_type   NVARCHAR(100),
+                system_rate        DECIMAL(18,6),
+                unit_cost          DECIMAL(18,6),
+                total_cost         DECIMAL(18,6),
+                standard_unit_cost DECIMAL(18,6),
+                FOREIGN KEY (calc_id) REFERENCES Calculation_History(id)
             )
         """)
 
-        # Rate Cart Table
+        # Rate_Cart table
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Rate_Cart (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [location] TEXT UNIQUE,
-                [cost] REAL
-            )
-        """)
-        
-        # Daily Report History Table (metadata only — rows live in child tables)
-        await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Daily_Report_History (
-                [target_date] TEXT PRIMARY KEY,
-                [created_at] TEXT
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Rate_Cart' AND xtype='U')
+            CREATE TABLE Rate_Cart (
+                id       INT IDENTITY(1,1) PRIMARY KEY,
+                location NVARCHAR(255) UNIQUE,
+                cost     DECIMAL(18,6)
             )
         """)
 
-        # Daily Item Report Table (replaces item_report_json)
+        # Daily_Report_History table
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Daily_Item_Report (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [target_date] TEXT NOT NULL,
-                [bu] TEXT,
-                [branch] TEXT,
-                [driver_name] TEXT,
-                [item_code] TEXT,
-                [item_name] TEXT,
-                [principal] TEXT,
-                [brand] TEXT,
-                [ctns] REAL,
-                [allocated_cost] REAL,
-                [cost_per_carton] REAL,
-                [driver_total_ctns] REAL,
-                [branch_cost] REAL,
-                [sales_amount] REAL,
-                FOREIGN KEY([target_date]) REFERENCES Daily_Report_History([target_date])
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Daily_Report_History' AND xtype='U')
+            CREATE TABLE Daily_Report_History (
+                target_date NVARCHAR(10) PRIMARY KEY,
+                created_at  NVARCHAR(30)
             )
         """)
 
-        # Daily Township Report Table (replaces township_report_json)
+        # Daily_Item_Report table
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Daily_Township_Report (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [target_date] TEXT NOT NULL,
-                [branch] TEXT,
-                [driver_name] TEXT,
-                [township] TEXT,
-                [customer_code] TEXT,
-                [contact_person] TEXT,
-                [ctns] REAL,
-                [driver_total_ctns] REAL,
-                [branch_cost] REAL,
-                [cost_per_carton] REAL,
-                [allocated_cost] REAL,
-                [total_drop_points] REAL,
-                [cost_per_drop_point] REAL,
-                [sales_amount] REAL,
-                FOREIGN KEY([target_date]) REFERENCES Daily_Report_History([target_date])
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Daily_Item_Report' AND xtype='U')
+            CREATE TABLE Daily_Item_Report (
+                id                INT IDENTITY(1,1) PRIMARY KEY,
+                target_date       NVARCHAR(10) NOT NULL,
+                bu                NVARCHAR(100),
+                branch            NVARCHAR(255),
+                driver_name       NVARCHAR(255),
+                item_code         NVARCHAR(255),
+                item_name         NVARCHAR(500),
+                principal         NVARCHAR(255),
+                brand             NVARCHAR(255),
+                ctns              DECIMAL(18,6),
+                allocated_cost    DECIMAL(18,6),
+                cost_per_carton   DECIMAL(18,6),
+                driver_total_ctns DECIMAL(18,6),
+                branch_cost       DECIMAL(18,6),
+                sales_amount      DECIMAL(18,6),
+                FOREIGN KEY (target_date) REFERENCES Daily_Report_History(target_date)
             )
         """)
-        
-        # User Activity Log Table
+
+        # Daily_Township_Report table
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS User_Activity_Log (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [username] TEXT,
-                [action] TEXT,
-                [details] TEXT,
-                [timestamp] TEXT
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Daily_Township_Report' AND xtype='U')
+            CREATE TABLE Daily_Township_Report (
+                id                  INT IDENTITY(1,1) PRIMARY KEY,
+                target_date         NVARCHAR(10) NOT NULL,
+                branch              NVARCHAR(255),
+                driver_name         NVARCHAR(255),
+                township            NVARCHAR(255),
+                customer_code       NVARCHAR(255),
+                contact_person      NVARCHAR(500),
+                ctns                DECIMAL(18,6),
+                driver_total_ctns   DECIMAL(18,6),
+                branch_cost         DECIMAL(18,6),
+                cost_per_carton     DECIMAL(18,6),
+                allocated_cost      DECIMAL(18,6),
+                total_drop_points   DECIMAL(18,6),
+                cost_per_drop_point DECIMAL(18,6),
+                sales_amount        DECIMAL(18,6),
+                FOREIGN KEY (target_date) REFERENCES Daily_Report_History(target_date)
+            )
+        """)
+
+        # User_Activity_Log table
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='User_Activity_Log' AND xtype='U')
+            CREATE TABLE User_Activity_Log (
+                id        INT IDENTITY(1,1) PRIMARY KEY,
+                username  NVARCHAR(255),
+                action    NVARCHAR(255),
+                details   NVARCHAR(MAX),
+                timestamp NVARCHAR(30)
             )
         """)
 
         # --- User Table ---
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE,
-                hashed_password TEXT,
-                role TEXT
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Users' AND xtype='U')
+            CREATE TABLE Users (
+                id              INT IDENTITY(1,1) PRIMARY KEY,
+                username        NVARCHAR(255) UNIQUE,
+                hashed_password NVARCHAR(500),
+                role            NVARCHAR(100)
             )
         """)
 
         # --- Roles Table ---
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Roles (
-                name TEXT PRIMARY KEY,
-                permissions TEXT
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Roles' AND xtype='U')
+            CREATE TABLE Roles (
+                name        NVARCHAR(100) PRIMARY KEY,
+                permissions NVARCHAR(MAX)
             )
         """)
 
-        # --- Reference Tables (Locations, UOMs, Channels, Rate Cart Locations) ---
+        # --- Reference Tables ---
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Locations (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [name] TEXT UNIQUE
-            )
-        """)
-
-        await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Rate_Cart_Locations (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [name] TEXT UNIQUE
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Locations' AND xtype='U')
+            CREATE TABLE Locations (
+                id   INT IDENTITY(1,1) PRIMARY KEY,
+                name NVARCHAR(255) UNIQUE
             )
         """)
 
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS UOMs (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [name] TEXT UNIQUE
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Rate_Cart_Locations' AND xtype='U')
+            CREATE TABLE Rate_Cart_Locations (
+                id   INT IDENTITY(1,1) PRIMARY KEY,
+                name NVARCHAR(255) UNIQUE
             )
         """)
 
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Channels (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [name] TEXT UNIQUE
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='UOMs' AND xtype='U')
+            CREATE TABLE UOMs (
+                id   INT IDENTITY(1,1) PRIMARY KEY,
+                name NVARCHAR(100) UNIQUE
+            )
+        """)
+
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Channels' AND xtype='U')
+            CREATE TABLE Channels (
+                id   INT IDENTITY(1,1) PRIMARY KEY,
+                name NVARCHAR(255) UNIQUE
             )
         """)
 
         # --- Branch Code Mapping Table ---
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Branch_Code (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [log_pric] TEXT UNIQUE,
-                [code] TEXT,
-                [name] TEXT,
-                [dept] TEXT,
-                [principal] TEXT,
-                [description] TEXT
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Branch_Code' AND xtype='U')
+            CREATE TABLE Branch_Code (
+                id          INT IDENTITY(1,1) PRIMARY KEY,
+                log_pric    NVARCHAR(255) UNIQUE,
+                code        NVARCHAR(100),
+                name        NVARCHAR(500),
+                dept        NVARCHAR(255),
+                principal   NVARCHAR(255),
+                description NVARCHAR(500)
             )
         """)
 
         # --- SD Code Mapping Table ---
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS SD_Code (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [channel] TEXT,
-                [code] TEXT,
-                [name] TEXT,
-                [dept] TEXT,
-                [principal] TEXT,
-                [log_pric] TEXT UNIQUE
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='SD_Code' AND xtype='U')
+            CREATE TABLE SD_Code (
+                id        INT IDENTITY(1,1) PRIMARY KEY,
+                channel   NVARCHAR(100),
+                code      NVARCHAR(100),
+                name      NVARCHAR(500),
+                dept      NVARCHAR(255),
+                principal NVARCHAR(255),
+                log_pric  NVARCHAR(255) UNIQUE
             )
         """)
 
-
         # --- Gate Change Log Table ---
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Gate_Change_Log (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [gate_id] INTEGER,
-                [changed_by] TEXT,
-                [change_date] TEXT,
-                [field_name] TEXT,
-                [old_value] TEXT,
-                [new_value] TEXT,
-                FOREIGN KEY([gate_id]) REFERENCES Gate(id)
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Gate_Change_Log' AND xtype='U')
+            CREATE TABLE Gate_Change_Log (
+                id          INT IDENTITY(1,1) PRIMARY KEY,
+                gate_id     INT,
+                changed_by  NVARCHAR(255),
+                change_date NVARCHAR(30),
+                field_name  NVARCHAR(255),
+                old_value   NVARCHAR(MAX),
+                new_value   NVARCHAR(MAX),
+                FOREIGN KEY (gate_id) REFERENCES Gate(id)
             )
         """)
 
         # --- Item Change Log Table ---
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Item_Change_Log (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [pricing_id] INTEGER,
-                [changed_by] TEXT,
-                [change_date] TEXT,
-                [field_name] TEXT,
-                [old_value] TEXT,
-                [new_value] TEXT,
-                FOREIGN KEY([pricing_id]) REFERENCES Item_Pricing(id)
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Item_Change_Log' AND xtype='U')
+            CREATE TABLE Item_Change_Log (
+                id          INT IDENTITY(1,1) PRIMARY KEY,
+                pricing_id  INT,
+                changed_by  NVARCHAR(255),
+                change_date NVARCHAR(30),
+                field_name  NVARCHAR(255),
+                old_value   NVARCHAR(MAX),
+                new_value   NVARCHAR(MAX),
+                FOREIGN KEY (pricing_id) REFERENCES Item_Pricing(id)
             )
         """)
 
         # --- Rate Cart Change Log Table ---
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Rate_Cart_Change_Log (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [location] TEXT,
-                [changed_by] TEXT,
-                [change_date] TEXT,
-                [field_name] TEXT,
-                [old_value] TEXT,
-                [new_value] TEXT,
-                FOREIGN KEY([location]) REFERENCES Rate_Cart([location])
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Rate_Cart_Change_Log' AND xtype='U')
+            CREATE TABLE Rate_Cart_Change_Log (
+                id          INT IDENTITY(1,1) PRIMARY KEY,
+                location    NVARCHAR(255),
+                changed_by  NVARCHAR(255),
+                change_date NVARCHAR(30),
+                field_name  NVARCHAR(255),
+                old_value   NVARCHAR(MAX),
+                new_value   NVARCHAR(MAX),
+                FOREIGN KEY (location) REFERENCES Rate_Cart(location)
             )
         """)
-        
-        
+
         # --- Location Mapping Table ---
         await cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Location_Mapping (
-                [id] INTEGER PRIMARY KEY AUTOINCREMENT,
-                [to_location] TEXT UNIQUE,
-                [branch_code] TEXT
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Location_Mapping' AND xtype='U')
+            CREATE TABLE Location_Mapping (
+                id          INT IDENTITY(1,1) PRIMARY KEY,
+                to_location NVARCHAR(255) UNIQUE,
+                branch_code NVARCHAR(100)
             )
         """)
         
@@ -329,7 +348,11 @@ async def startup_db():
                 ("Magaway", "MGW"), ("Taunggyi", "TGI"), ("Taunggu", "TGU"),
                 ("Pathein", "PTN"), ("Mawlamyine", "MLM"), ("Bago", "BGO")
             ]
-            await cursor.executemany("INSERT INTO Location_Mapping (to_location, branch_code) VALUES (?, ?)", default_mappings)
+            for to_loc, br_code in default_mappings:
+                await cursor.execute(
+                    "IF NOT EXISTS (SELECT 1 FROM Location_Mapping WHERE to_location=?) INSERT INTO Location_Mapping (to_location, branch_code) VALUES (?,?)",
+                    (to_loc, to_loc, br_code)
+                )
             
         
         # --- SEED DEFAULTS AND MIGRATE TO GRANULAR PERMISSIONS ---
@@ -393,21 +416,25 @@ async def startup_db():
 
         await cursor.execute("SELECT COUNT(*) FROM Locations")
         if (await cursor.fetchone())[0] == 0:
-            await cursor.executemany("INSERT INTO Locations (name) VALUES (?)", default_locs)
+            for (loc_name,) in default_locs:
+                await cursor.execute("IF NOT EXISTS (SELECT 1 FROM Locations WHERE name=?) INSERT INTO Locations (name) VALUES (?)", (loc_name, loc_name))
 
         await cursor.execute("SELECT COUNT(*) FROM Rate_Cart_Locations")
         if (await cursor.fetchone())[0] == 0:
-            await cursor.executemany("INSERT INTO Rate_Cart_Locations (name) VALUES (?)", default_locsrc)
+            for (rc_name,) in default_locsrc:
+                await cursor.execute("IF NOT EXISTS (SELECT 1 FROM Rate_Cart_Locations WHERE name=?) INSERT INTO Rate_Cart_Locations (name) VALUES (?)", (rc_name, rc_name))
 
         await cursor.execute("SELECT COUNT(*) FROM UOMs")
         if (await cursor.fetchone())[0] == 0:
             default_uoms = [('Kg',), ('Ton',)]
-            await cursor.executemany("INSERT INTO UOMs (name) VALUES (?)", default_uoms)
+            for (uom_name,) in default_uoms:
+                await cursor.execute("IF NOT EXISTS (SELECT 1 FROM UOMs WHERE name=?) INSERT INTO UOMs (name) VALUES (?)", (uom_name, uom_name))
 
         await cursor.execute("SELECT COUNT(*) FROM Channels")
         if (await cursor.fetchone())[0] == 0:
             default_channels = [('SD',), ('Branch',), ('Telecom Branch',), ('Telecom SD',), ('Outlet',)]
-            await cursor.executemany("INSERT INTO Channels (name) VALUES (?)", default_channels)
+            for (ch_name,) in default_channels:
+                await cursor.execute("IF NOT EXISTS (SELECT 1 FROM Channels WHERE name=?) INSERT INTO Channels (name) VALUES (?)", (ch_name, ch_name))
         
         await conn.commit()
         await conn.close()
@@ -472,10 +499,22 @@ async def get_dwbi_connection():
     return await aioodbc.connect(dsn=conn_str, autocommit=False)
 
 async def get_logistic_connection():
-    """Create and return a SQLite connection to logistic.db (Read/Write Source)"""
-    db_path = os.path.join(os.path.dirname(__file__), 'logistic.db')
-    conn = await aiosqlite.connect(db_path)
-    return conn
+    """Create and return a SQL Server connection to LogCalculator (Read/Write Source)"""
+    db_user = os.getenv("DWBI_USER")
+    db_password = os.getenv("DWBI_PASSWORD")
+
+    if not db_user or not db_password:
+        logger.error("Missing DWBI database credentials in .env file!")
+        raise ValueError("Database credentials are not configured properly.")
+
+    conn_str = (
+        'DRIVER={ODBC Driver 17 for SQL Server};'
+        'SERVER=phm\\reportingsvr;'
+        'DATABASE=LogCalculator;'
+        f'UID={db_user};'
+        f'PWD={db_password};'
+    )
+    return await aioodbc.connect(dsn=conn_str, autocommit=False)
 
 # --- Helper: Activity Logger ---
 async def log_user_activity(username: str, action: str, details: str = ""):
@@ -540,7 +579,7 @@ class LocationMappingItem(BaseModel):
 
 class RateCartData(BaseModel):
     location: str
-    cost: float
+    cost: Decimal
 
 class RateCartLogItem(BaseModel):
     id: int
@@ -558,7 +597,7 @@ class GateData(BaseModel):
     to_loc: str
     uom: Optional[str] = None       
     unit: Optional[int] = None      
-    cost: Optional[float] = None 
+    cost: Optional[Decimal] = None 
     original_gate_name: Optional[str] = None
 
 class GateLogItem(BaseModel):
@@ -596,9 +635,9 @@ class CalculationSaveRequest(BaseModel):
     from_loc: str
     to_loc: str
     doc_nums: List[str]
-    manual_total_cost: Optional[float] = None
-    additional_charges: Optional[float] = 0.0
-    final_total_cost: float
+    manual_total_cost: Optional[Decimal] = None
+    additional_charges: Optional[Decimal] = Decimal("0.0")
+    final_total_cost: Decimal
     channel: Optional[str] = ""
     status: Optional[str] = "saved"
     calculated_products: List[Any] = []
@@ -785,14 +824,14 @@ async def get_activity_logs(
             count_query += " AND details LIKE ?"
             params.append(f"%{details}%")
             
-        query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+        query += " ORDER BY timestamp DESC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
         
         # Get the total count for pagination
         await cursor.execute(count_query, params)
         total_count = (await cursor.fetchone())[0]
         
         # Get the paginated rows
-        params.extend([limit, offset])
+        params.extend([offset, limit])
         await cursor.execute(query, params)
         rows = await cursor.fetchall()
         
@@ -1499,11 +1538,13 @@ async def generate_and_save_daily_report(target_date: str):
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Upsert metadata row
+        # Upsert metadata row (SQL Server MERGE)
         await cursor.execute("""
-            INSERT INTO Daily_Report_History (target_date, created_at)
-            VALUES (?, ?)
-            ON CONFLICT(target_date) DO UPDATE SET created_at = excluded.created_at
+            MERGE Daily_Report_History AS target
+            USING (SELECT ? AS target_date, ? AS created_at) AS source
+            ON target.target_date = source.target_date
+            WHEN MATCHED THEN UPDATE SET created_at = source.created_at
+            WHEN NOT MATCHED THEN INSERT (target_date, created_at) VALUES (source.target_date, source.created_at);
         """, (target_date, now_str))
 
         # Replace item report rows
@@ -1730,9 +1771,11 @@ async def add_ref_location(item: ReferenceItem, user: dict = Depends(require_per
         try:
             await cursor.execute("INSERT INTO Locations (name) VALUES (?)", (item.name,))
             await conn.commit()
-        except aiosqlite.IntegrityError:
-            await conn.close()
-            raise HTTPException(status_code=400, detail="Location already exists")
+        except Exception as e:
+            if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
+                await conn.close()
+                raise HTTPException(status_code=400, detail="Location already exists")
+            raise
         await conn.close()
         await log_user_activity(user['username'], "ADD_REFERENCE", f"Added location: {item.name}")
         return {"message": "Added successfully"}
@@ -1776,9 +1819,11 @@ async def add_ref_rate_cart_location(item: ReferenceItem, user: dict = Depends(r
         try:
             await cursor.execute("INSERT INTO Rate_Cart_Locations (name) VALUES (?)", (item.name,))
             await conn.commit()
-        except aiosqlite.IntegrityError:
-            await conn.close()
-            raise HTTPException(status_code=400, detail="Rate Cart Location already exists")
+        except Exception as e:
+            if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
+                await conn.close()
+                raise HTTPException(status_code=400, detail="Rate Cart Location already exists")
+            raise
         await conn.close()
         await log_user_activity(user['username'], "ADD_REFERENCE", f"Added rate cart location: {item.name}")
         return {"message": "Added successfully"}
@@ -1821,9 +1866,11 @@ async def add_ref_uom(item: ReferenceItem, user: dict = Depends(require_permissi
         try:
             await cursor.execute("INSERT INTO UOMs (name) VALUES (?)", (item.name,))
             await conn.commit()
-        except aiosqlite.IntegrityError:
-            await conn.close()
-            raise HTTPException(status_code=400, detail="UOM already exists")
+        except Exception as e:
+            if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
+                await conn.close()
+                raise HTTPException(status_code=400, detail="UOM already exists")
+            raise
         await conn.close()
         await log_user_activity(user['username'], "ADD_REFERENCE", f"Added UOM: {item.name}")
         return {"message": "Added successfully"}
@@ -1865,9 +1912,11 @@ async def add_ref_channel(item: ReferenceItem, user: dict = Depends(require_perm
         try:
             await cursor.execute("INSERT INTO Channels (name) VALUES (?)", (item.name,))
             await conn.commit()
-        except aiosqlite.IntegrityError:
-            await conn.close()
-            raise HTTPException(status_code=400, detail="Channel already exists")
+        except Exception as e:
+            if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
+                await conn.close()
+                raise HTTPException(status_code=400, detail="Channel already exists")
+            raise
         await conn.close()
         await log_user_activity(user['username'], "ADD_REFERENCE", f"Added channel: {item.name}")
         return {"message": "Added successfully"}
@@ -1909,13 +1958,14 @@ async def add_ref_location_mapping(item: LocationMappingItem, user: dict = Depen
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        try:
-            await cursor.execute("INSERT INTO Location_Mapping (to_location, branch_code) VALUES (?, ?)", (item.to_location, item.branch_code))
-            await conn.commit()
-        except aiosqlite.IntegrityError:
-            # If it already exists, update it
-            await cursor.execute("UPDATE Location_Mapping SET branch_code = ? WHERE to_location = ?", (item.branch_code, item.to_location))
-            await conn.commit()
+        await cursor.execute("""
+            MERGE Location_Mapping AS target
+            USING (SELECT ? AS to_location, ? AS branch_code) AS source
+            ON target.to_location = source.to_location
+            WHEN MATCHED THEN UPDATE SET branch_code = source.branch_code
+            WHEN NOT MATCHED THEN INSERT (to_location, branch_code) VALUES (source.to_location, source.branch_code);
+        """, (item.to_location, item.branch_code))
+        await conn.commit()
         await conn.close()
         await log_user_activity(user['username'], "ADD_REFERENCE", f"Mapped {item.to_location} to {item.branch_code}")
         return {"message": "Mapping saved successfully"}
@@ -3077,7 +3127,7 @@ async def get_submitted_allocation_report(
             try:
                 datetime.datetime.strptime(start_date, "%Y-%m-%d")
                 datetime.datetime.strptime(end_date, "%Y-%m-%d")
-                query += " AND SUBSTR(ch.submitted_at, 1, 10) BETWEEN ? AND ?"
+                query += " AND SUBSTRING(ch.submitted_at, 1, 10) BETWEEN ? AND ?"
                 params.extend([start_date, end_date])
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
@@ -3620,13 +3670,13 @@ async def get_third_party_allocation(
         params = []
 
         if start_date and end_date:
-            query += " AND SUBSTR(ch.submitted_at, 1, 10) BETWEEN ? AND ?"
+            query += " AND SUBSTRING(ch.submitted_at, 1, 10) BETWEEN ? AND ?"
             params.extend([start_date, end_date])
         elif start_date:
-            query += " AND SUBSTR(ch.submitted_at, 1, 10) >= ?"
+            query += " AND SUBSTRING(ch.submitted_at, 1, 10) >= ?"
             params.append(start_date)
         elif end_date:
-            query += " AND SUBSTR(ch.submitted_at, 1, 10) <= ?"
+            query += " AND SUBSTRING(ch.submitted_at, 1, 10) <= ?"
             params.append(end_date)
 
         await cursor.execute(query, params)
