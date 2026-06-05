@@ -353,33 +353,6 @@ async def startup_db():
                     "IF NOT EXISTS (SELECT 1 FROM Location_Mapping WHERE to_location=?) INSERT INTO Location_Mapping (to_location, branch_code) VALUES (?,?)",
                     (to_loc, to_loc, br_code)
                 )
-            
-        
-        # --- SEED DEFAULTS AND MIGRATE TO GRANULAR PERMISSIONS ---
-        # await cursor.execute("SELECT COUNT(*) FROM Roles")
-        # if (await cursor.fetchone())[0] == 0:
-        #     default_roles = [
-        #         ('admin', json.dumps([
-        #             'view_calculator', 'view_history',
-        #             'view_users', 'add_user', 'edit_user', 'delete_user',
-        #             'view_roles', 'add_role', 'edit_role', 'delete_role',
-        #             'view_gates', 'add_gate', 'edit_gate', 'delete_gate',
-        #             'view_items', 'add_item', 'edit_item', 'delete_item',
-        #             'view_references', 'add_reference', 'delete_reference',
-        #             'view_all_history', 'delete_history', 'claim_calculation', 'submit_calculation',
-        #             'view_rate_carts', 'add_rate_cart', 'edit_rate_cart', 'delete_rate_cart',
-        #             'view_daily_report', 'view_dashboard', 'view_activity_logs' 
-        #         ])),
-        #         ('account', json.dumps([
-        #             'view_calculator', 'view_history',
-        #             'view_gates', 'add_gate', 'edit_gate', 
-        #             'view_items', 'add_item', 'edit_item', 
-        #             'view_references', 'add_reference', 'delete_reference',
-        #             'claim_calculation', 'view_rate_carts', 'add_rate_cart', 'edit_rate_cart'
-        #         ])),
-        #         ('logistics', json.dumps(['view_calculator', 'view_history', 'submit_calculation', 'view_gates', 'view_items', 'view_references', 'view_rate_carts']))
-        #     ]
-        #     await cursor.executemany("INSERT INTO Roles (name, permissions) VALUES (?, ?)", default_roles)
 
         # Create default users
         await cursor.execute("SELECT * FROM Users WHERE username = 'account'")
@@ -554,7 +527,6 @@ async def cleanup_old_activity_logs():
 
 # --- Pydantic Models ---
 
-
 class BranchCodeData(BaseModel):
     original_log_pric: Optional[str] = None
     log_pric: str
@@ -705,7 +677,6 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-# Replace your existing get_current_user function with this updated version:
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -720,7 +691,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         if username is None:
             raise credentials_exception
             
-        # --- NEW: Fetch fresh role and permissions from DB on every request ---
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         await cursor.execute("""
@@ -733,7 +703,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         await conn.close()
 
         if not user_record:
-            raise credentials_exception # Boot user out if they were deleted
+            raise credentials_exception 
             
         fresh_role = user_record[0]
         fresh_permissions = json.loads(user_record[1]) if user_record[1] else []
@@ -744,7 +714,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         raise credentials_exception
 
 
-# --- Add this new endpoint anywhere below get_current_user ---
 @app.get("/users/me")
 async def get_user_me(current_user: dict = Depends(get_current_user)):
     """Returns the fresh user session data directly from the DB"""
@@ -806,7 +775,6 @@ async def get_activity_logs(
         count_query = "SELECT COUNT(*) FROM User_Activity_Log WHERE 1=1"
         params = []
         
-        # Dynamically build the WHERE clause based on provided filters
         if timestamp:
             query += " AND timestamp LIKE ?"
             count_query += " AND timestamp LIKE ?"
@@ -826,11 +794,9 @@ async def get_activity_logs(
             
         query += " ORDER BY timestamp DESC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
         
-        # Get the total count for pagination
         await cursor.execute(count_query, params)
         total_count = (await cursor.fetchone())[0]
         
-        # Get the paginated rows
         params.extend([offset, limit])
         await cursor.execute(query, params)
         rows = await cursor.fetchall()
@@ -892,8 +858,6 @@ async def update_role(role_name: str, role_data: RoleUpdate, user: dict = Depend
 
 @app.delete("/roles/{role_name}")
 async def delete_role(role_name: str, user: dict = Depends(require_permission("delete_role"))):
-    # if role_name in ['admin', 'account', 'logistics']:
-    #     raise HTTPException(status_code=400, detail="Cannot delete default system roles")
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
@@ -1048,10 +1012,10 @@ async def determine_calculation_type_sql(gate_id):
 
         if row and row[0] is not None:
             try:
-                price = float(row[0])
+                price = Decimal(str(row[0]))
                 if price > 0:
                     return "gate_pricing"
-            except ValueError:
+            except (ValueError, TypeError):
                 pass
         return "direct_pricing"
     except Exception as e:
@@ -1060,17 +1024,17 @@ async def determine_calculation_type_sql(gate_id):
 
 def get_rounded_ctns(val):
     if not val:
-        return 0
+        return Decimal("0")
     try:
-        f_val = float(val)
+        f_val = Decimal(str(val))
         if f_val <= 0:
-            return 0
-        return max(1, round(f_val))
+            return Decimal("0")
+        return max(Decimal("1"), round(f_val))
     except (ValueError, TypeError):
-        return 0
+        return Decimal("0")
 
-async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, manual_total_cost=None, additional_charges=0.0):
-    add_charges = float(additional_charges) if additional_charges is not None else 0.0
+async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, manual_total_cost=None, additional_charges=Decimal("0.0")):
+    add_charges = Decimal(str(additional_charges)) if additional_charges is not None else Decimal("0.0")
 
     pg_nums = [str(d).replace("PG - ", "").replace("PG-", "") for d in doc_nums if not str(d).startswith("PDG")]
     pdg_nums = [str(d).replace("PDG - ", "").replace("PDG-", "") for d in doc_nums if str(d).startswith("PDG")]
@@ -1143,8 +1107,8 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
     gate_id = gate_row[0]
     matched_from_loc = gate_row[1]
     matched_to_loc = gate_row[2]
-    cost = float(gate_row[3] or 0)
-    gate_unit = float(gate_row[4]) if gate_row[4] else 1.0
+    cost = Decimal(str(gate_row[3] or 0))
+    gate_unit = Decimal(str(gate_row[4] or 1.0))
     
     await cursor_log.execute("SELECT item_id, transportation_cost FROM Item_Pricing WHERE gate_id = ?", (gate_id,))
     pricing_rows = await cursor_log.fetchall()
@@ -1158,22 +1122,22 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
             item_pricing[i_code] = {'type': 'ton', 'value': None}
         else:
             try:
-                val = float(t_cost)
+                val = Decimal(t_cost)
                 item_pricing[i_code] = {'type': 'direct', 'value': val}
             except:
                 item_pricing[i_code] = {'type': 'unknown', 'value': None}
 
-    if cost > 0: calc_type = "gate_pricing"
+    if cost > Decimal("0"): calc_type = "gate_pricing"
     else: calc_type = "direct_pricing"
 
     calculated_products = []
-    total_cost = 0.0
-    estimated_total_cost = 0.0
+    total_cost = Decimal("0.0")
+    estimated_total_cost = Decimal("0.0")
 
     if calc_type == "gate_pricing":
         ton_items = []
         direct_items = []
-        ton_cost_total = 0.0
+        ton_cost_total = Decimal("0.0")
         
         for row in pick_rows:
             doc_date_val = row[4]
@@ -1193,7 +1157,7 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
                 "code": row[0] if row[0] else "",
                 "name": row[1] if row[1] else "",
                 "uom": row[2] if row[2] else "",
-                "weight": float(row[3]) if row[3] else 0.0,
+                "weight": Decimal(str(row[3])) if row[3] else Decimal("0.0"),
                 "doc_date": doc_date_str,         
                 "sin_no": f"{row[9]} - {str(row[5])}" if row[5] else "",           
                 "principal": principal_val,
@@ -1211,31 +1175,32 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
             
             p_info = item_pricing.get(item_data['code'], {})
             p_type = p_info.get('type', 'ton')
-            p_val = p_info.get('value', 0.0)
+            p_val = p_info.get('value', Decimal("0.0"))
             
             if p_type == 'direct':
                 estimated_total_cost += (item_data['ctns'] * p_val)
                 item_data['standard_unit_cost'] = p_val
                 direct_items.append(item_data)
             else:
-                effective_rate = cost / gate_unit if gate_unit > 0 else cost
+                effective_rate = cost / gate_unit if gate_unit > Decimal("0") else cost
                 cost_item = item_data['weight'] * effective_rate
                 estimated_total_cost += cost_item
                 ton_cost_total += cost_item
                 item_data['total_cost'] = cost_item
                 ton_items.append(item_data)
 
-        direct_unit_cost = 0.0
+        direct_unit_cost = Decimal("0.0")
         if manual_total_cost is not None:
-            remainder = manual_total_cost - ton_cost_total
+            manual_total_cost_dec = Decimal(str(manual_total_cost))
+            remainder = manual_total_cost_dec - ton_cost_total
             total_direct_ctns = sum(item['ctns'] for item in direct_items)
-            if total_direct_ctns > 0: direct_unit_cost = remainder / total_direct_ctns
-            total_cost = manual_total_cost
+            if total_direct_ctns > Decimal("0"): direct_unit_cost = remainder / total_direct_ctns
+            total_cost = manual_total_cost_dec
         else:
             total_cost = estimated_total_cost
 
         for item in ton_items:
-            avg_unit_cost = item['total_cost'] / item['ctns'] if item['ctns'] > 0 else 0
+            avg_unit_cost = item['total_cost'] / item['ctns'] if item['ctns'] > Decimal("0") else Decimal("0.0")
             calculated_products.append({
                 **item, "calculation_type": "weight", "system_rate": None,
                 "unit_cost": avg_unit_cost, "total_cost": item['total_cost'] 
@@ -1262,14 +1227,14 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
             item_code = row[0] if row[0] else ""
             pricing_info = item_pricing.get(item_code, {})
             
-            weight = float(row[3]) if row[3] else 0.0
+            weight = Decimal(str(row[3])) if row[3] else Decimal("0.0")
             ctns = get_rounded_ctns(row[7])
             principal_val = row[6] or ""
             brand_val = row[8] or ""
             bc_info = branch_code_map.get(principal_val.strip().lower(), {})
             sd_info = sd_code_map.get(principal_val.strip().lower(), {})
 
-            unit_cost = pricing_info.get('value', 0.0) or 0.0
+            unit_cost = pricing_info.get('value', Decimal("0.0")) or Decimal("0.0")
             item_cost = ctns * unit_cost
             
             total_cost += item_cost
@@ -1283,17 +1248,17 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
                 "b_dept": bc_info.get("Dept", ""), "b_principal": bc_info.get("Principal", ""), 
                 "b_desc": bc_info.get("Description", ""), "s_dept": sd_info.get("Dept", ""), 
                 "s_principal": sd_info.get("Principal", ""), "calculation_type": "direct", 
-                "system_rate": unit_cost if unit_cost > 0 else None,
+                "system_rate": unit_cost if unit_cost > Decimal("0") else None,
                 "unit_cost": unit_cost, "total_cost": item_cost
             })
 
-    if add_charges != 0 and calculated_products:
-        total_ctns = sum(p.get('ctns', 0) for p in calculated_products)
+    if add_charges != Decimal("0") and calculated_products:
+        total_ctns = sum(p.get('ctns', Decimal("0")) for p in calculated_products)
         for p in calculated_products:
-            proportion = p.get('ctns', 0) / total_ctns
+            proportion = p.get('ctns', Decimal("0")) / total_ctns if total_ctns > 0 else Decimal("0")
             extra_cost = add_charges * proportion
             p['total_cost'] += extra_cost
-            if p['ctns'] > 0: 
+            if p['ctns'] > Decimal("0"): 
                 p['unit_cost'] = p['total_cost'] / p['ctns']
 
     calculated_products.sort(key=lambda x: (x.get('sin_no', ''), x['code']))
@@ -1339,8 +1304,8 @@ async def save_rate_cart(data: RateCartData, user: dict = Depends(get_current_us
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'edit_rate_cart' permission")
             
-            old_cost = existing[0]
-            if float(old_cost) != float(data.cost):
+            old_cost = Decimal(str(existing[0]))
+            if old_cost != data.cost:
                 await cursor.execute("""
                     INSERT INTO Rate_Cart_Change_Log (location, changed_by, change_date, field_name, old_value, new_value)
                     VALUES (?, ?, ?, ?, ?, ?)
@@ -1401,7 +1366,7 @@ async def get_rate_carts_for_date(target_date: str) -> dict:
     cursor = await conn.cursor()
     
     await cursor.execute("SELECT location, cost FROM Rate_Cart")
-    current_costs = {row[0].strip().upper(): float(row[1]) for row in await cursor.fetchall()}
+    current_costs = {row[0].strip().upper(): Decimal(str(row[1])) for row in await cursor.fetchall()}
     
     query_threshold = target_date + " 23:59:59"
     await cursor.execute("""
@@ -1417,7 +1382,7 @@ async def get_rate_carts_for_date(target_date: str) -> dict:
     for row in logs:
         loc = row[0].strip().upper()
         old_val_str = row[2]
-        old_val = float(old_val_str) if old_val_str else 0.0
+        old_val = Decimal(str(old_val_str)) if old_val_str else Decimal("0.0")
         historical_costs[loc] = old_val
 
     return historical_costs
@@ -1448,7 +1413,7 @@ async def _get_daily_report_data(target_date: str):
         principal = row[3].strip() if row[3] else ""
         brand = row[4].strip() if row[4] else ""
         driver_name = row[5].strip() if row[5] else ""
-        ctns = float(row[6]) if row[6] else 0.0
+        ctns = Decimal(str(row[6] or 0))
         customer_code = row[7].strip() if row[7] else "UNKNOWN"
         
         contact_person_raw = row[8].strip() if row[8] else ""
@@ -1458,7 +1423,7 @@ async def _get_daily_report_data(target_date: str):
             contact_person = contact_person_raw
         
         township = row[9].strip() if row[9] else "UNKNOWN"
-        sales_amount = float(row[10]) if row[10] else 0.0
+        sales_amount = Decimal(str(row[10] or 0))
         bu = row[11].strip() if (len(row) > 11 and row[11]) else ""
 
         granular_data.append({
@@ -1469,7 +1434,7 @@ async def _get_daily_report_data(target_date: str):
         })
         
         driver_key = (branch, driver_name)
-        driver_totals[driver_key] = driver_totals.get(driver_key, 0.0) + ctns
+        driver_totals[driver_key] = driver_totals.get(driver_key, Decimal("0.0")) + ctns
         
         if driver_key not in driver_customers:
             driver_customers[driver_key] = set()
@@ -1480,23 +1445,23 @@ async def _get_daily_report_data(target_date: str):
 
     for g in granular_data:
         b, d = g["branch"], g["driver_name"]
-        d_total = driver_totals.get((b, d), 0.0)
-        b_cost = rate_carts.get(b, 0.0)
+        d_total = driver_totals.get((b, d), Decimal("0.0"))
+        b_cost = rate_carts.get(b, Decimal("0.0"))
         
-        cost_per_ctn = (b_cost / d_total) if d_total > 0 else 0.0
+        cost_per_ctn = (b_cost / d_total) if d_total > Decimal("0.0") else Decimal("0.0")
         allocated_cost = g["ctns"] * cost_per_ctn
 
-        d_total_customers = len(driver_customers.get((b, d), set()))
-        cost_per_drop_point = (b_cost / d_total_customers) if d_total_customers > 0 else 0.0
+        d_total_customers = Decimal(str(len(driver_customers.get((b, d), set()))))
+        cost_per_drop_point = (b_cost / d_total_customers) if d_total_customers > Decimal("0.0") else Decimal("0.0")
 
         i_key = (b, d, g["item_code"])
         if i_key not in item_report_dict:
             item_report_dict[i_key] = {
-                "target_date": target_date, # INJECT DATE
+                "target_date": target_date, 
                 "bu": g["bu"], "branch": b, "driver_name": d, "item_code": g["item_code"],
                 "item_name": g["item_name"], "principal": g["principal"], "brand": g["brand"],
-                "ctns": 0.0, "allocated_cost": 0.0, "cost_per_carton": cost_per_ctn,
-                "driver_total_ctns": d_total, "branch_cost": b_cost, "sales_amount": 0.0
+                "ctns": Decimal("0.0"), "allocated_cost": Decimal("0.0"), "cost_per_carton": cost_per_ctn,
+                "driver_total_ctns": d_total, "branch_cost": b_cost, "sales_amount": Decimal("0.0")
             }
         item_report_dict[i_key]["ctns"] += g["ctns"]
         item_report_dict[i_key]["allocated_cost"] += allocated_cost
@@ -1505,13 +1470,13 @@ async def _get_daily_report_data(target_date: str):
         t_key = (g["branch"], g["township"], g["customer_code"], g["driver_name"])
         if t_key not in township_report_dict:
             township_report_dict[t_key] = {
-                "target_date": target_date, # INJECT DATE
+                "target_date": target_date, 
                 "branch": b, "driver_name": g["driver_name"], "township": g["township"], 
                 "customer_code": g["customer_code"], "contact_person": g["contact_person"], 
-                "ctns": 0.0, "driver_total_ctns": d_total, "branch_cost": b_cost,
-                "cost_per_carton": cost_per_ctn, "allocated_cost": 0.0,
+                "ctns": Decimal("0.0"), "driver_total_ctns": d_total, "branch_cost": b_cost,
+                "cost_per_carton": cost_per_ctn, "allocated_cost": Decimal("0.0"),
                 "total_drop_points": d_total_customers, "cost_per_drop_point": cost_per_drop_point,
-                "sales_amount": 0.0
+                "sales_amount": Decimal("0.0")
             }
         township_report_dict[t_key]["ctns"] += g["ctns"]
         township_report_dict[t_key]["allocated_cost"] += allocated_cost
@@ -1538,7 +1503,6 @@ async def generate_and_save_daily_report(target_date: str):
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Upsert metadata row (SQL Server MERGE)
         await cursor.execute("""
             MERGE Daily_Report_History AS target
             USING (SELECT ? AS target_date, ? AS created_at) AS source
@@ -1547,7 +1511,6 @@ async def generate_and_save_daily_report(target_date: str):
             WHEN NOT MATCHED THEN INSERT (target_date, created_at) VALUES (source.target_date, source.created_at);
         """, (target_date, now_str))
 
-        # Replace item report rows
         await cursor.execute("DELETE FROM Daily_Item_Report WHERE target_date = ?", (target_date,))
         for it in data["item_report"]:
             await cursor.execute("""
@@ -1558,11 +1521,10 @@ async def generate_and_save_daily_report(target_date: str):
             """, (
                 target_date, it.get("bu",""), it.get("branch",""), it.get("driver_name",""),
                 it.get("item_code",""), it.get("item_name",""), it.get("principal",""), it.get("brand",""),
-                it.get("ctns",0), it.get("allocated_cost",0), it.get("cost_per_carton",0),
-                it.get("driver_total_ctns",0), it.get("branch_cost",0), it.get("sales_amount",0)
+                it.get("ctns", Decimal("0.0")), it.get("allocated_cost", Decimal("0.0")), it.get("cost_per_carton", Decimal("0.0")),
+                it.get("driver_total_ctns", Decimal("0.0")), it.get("branch_cost", Decimal("0.0")), it.get("sales_amount", Decimal("0.0"))
             ))
 
-        # Replace township report rows
         await cursor.execute("DELETE FROM Daily_Township_Report WHERE target_date = ?", (target_date,))
         for tw in data["township_report"]:
             await cursor.execute("""
@@ -1574,9 +1536,9 @@ async def generate_and_save_daily_report(target_date: str):
             """, (
                 target_date, tw.get("branch",""), tw.get("driver_name",""), tw.get("township",""),
                 tw.get("customer_code",""), tw.get("contact_person",""),
-                tw.get("ctns",0), tw.get("driver_total_ctns",0), tw.get("branch_cost",0),
-                tw.get("cost_per_carton",0), tw.get("allocated_cost",0),
-                tw.get("total_drop_points",0), tw.get("cost_per_drop_point",0), tw.get("sales_amount",0)
+                tw.get("ctns", Decimal("0.0")), tw.get("driver_total_ctns", Decimal("0.0")), tw.get("branch_cost", Decimal("0.0")),
+                tw.get("cost_per_carton", Decimal("0.0")), tw.get("allocated_cost", Decimal("0.0")),
+                tw.get("total_drop_points", Decimal("0.0")), tw.get("cost_per_drop_point", Decimal("0.0")), tw.get("sales_amount", Decimal("0.0"))
             ))
 
         await conn.commit()
@@ -1593,7 +1555,6 @@ async def daily_job_generator():
     await generate_and_save_daily_report(target_date)
 
 async def get_or_generate_daily_report(target_date: str):
-    """Fetches daily report from local history DB, or generates it if not found."""
     conn = await get_logistic_connection()
     cursor = await conn.cursor()
     await cursor.execute("SELECT target_date FROM Daily_Report_History WHERE target_date = ?", (target_date,))
@@ -1611,7 +1572,7 @@ async def get_or_generate_daily_report(target_date: str):
         for it in item_report:
             it["target_date"] = target_date
             for k in ["ctns","allocated_cost","cost_per_carton","driver_total_ctns","branch_cost","sales_amount"]:
-                it[k] = float(it[k]) if it[k] is not None else 0.0
+                it[k] = Decimal(str(it[k])) if it[k] is not None else Decimal("0.0")
 
         await cursor.execute("""
             SELECT branch, driver_name, township, customer_code, contact_person,
@@ -1626,7 +1587,7 @@ async def get_or_generate_daily_report(target_date: str):
         for tw in township_report:
             tw["target_date"] = target_date
             for k in ["ctns","driver_total_ctns","branch_cost","cost_per_carton","allocated_cost","total_drop_points","cost_per_drop_point","sales_amount"]:
-                tw[k] = float(tw[k]) if tw[k] is not None else 0.0
+                tw[k] = Decimal(str(tw[k])) if tw[k] is not None else Decimal("0.0")
 
         await conn.close()
         return {"item_report": item_report, "township_report": township_report}
@@ -1635,16 +1596,12 @@ async def get_or_generate_daily_report(target_date: str):
         return await _get_daily_report_data(target_date)
 
 def _aggregate_reports(daily_datas: List[dict]):
-    """Aggregates multiple daily reports into a single consolidated report for date ranges."""
     item_report_dict = {}
     township_report_dict = {}
 
     for data in daily_datas:
-        
-        # --- 1. Fix Item Report Aggregation ---
         for item in data.get("item_report", []):
             t_date = item.get("target_date", "")
-            # Include target_date in key to prevent squashing different dates together
             i_key = (t_date, item.get("branch", ""), item.get("driver_name", ""), item.get("item_code", ""))
             if i_key not in item_report_dict:
                 item_report_dict[i_key] = {
@@ -1652,50 +1609,47 @@ def _aggregate_reports(daily_datas: List[dict]):
                     "bu": item.get("bu", ""), "branch": item.get("branch", ""), "driver_name": item.get("driver_name", ""),
                     "item_code": item.get("item_code", ""), "item_name": item.get("item_name", ""), 
                     "principal": item.get("principal", ""), "brand": item.get("brand", ""),
-                    "ctns": 0.0, "allocated_cost": 0.0, "driver_total_ctns": 0.0, 
-                    "branch_cost": float(item.get("branch_cost", 0.0)), "sales_amount": 0.0
+                    "ctns": Decimal("0.0"), "allocated_cost": Decimal("0.0"), "driver_total_ctns": Decimal("0.0"), 
+                    "branch_cost": Decimal(str(item.get("branch_cost", Decimal("0.0")))), "sales_amount": Decimal("0.0")
                 }
             else:
-                item_report_dict[i_key]["branch_cost"] = float(item.get("branch_cost", item_report_dict[i_key]["branch_cost"]))
+                item_report_dict[i_key]["branch_cost"] = Decimal(str(item.get("branch_cost", item_report_dict[i_key]["branch_cost"])))
 
-            item_report_dict[i_key]["ctns"] += float(item.get("ctns", 0.0))
-            item_report_dict[i_key]["allocated_cost"] += float(item.get("allocated_cost", 0.0))
-            item_report_dict[i_key]["sales_amount"] += float(item.get("sales_amount", 0.0))
-            item_report_dict[i_key]["driver_total_ctns"] += float(item.get("driver_total_ctns", 0.0))
+            item_report_dict[i_key]["ctns"] += Decimal(str(item.get("ctns", Decimal("0.0"))))
+            item_report_dict[i_key]["allocated_cost"] += Decimal(str(item.get("allocated_cost", Decimal("0.0"))))
+            item_report_dict[i_key]["sales_amount"] += Decimal(str(item.get("sales_amount", Decimal("0.0"))))
+            item_report_dict[i_key]["driver_total_ctns"] += Decimal(str(item.get("driver_total_ctns", Decimal("0.0"))))
 
-        # --- 2. Fix Township Report Aggregation ---
         for tw in data.get("township_report", []):
             t_date = tw.get("target_date", "")
-            # Include target_date in key
             t_key = (t_date, tw.get("branch", ""), tw.get("township", ""), tw.get("customer_code", ""), tw.get("driver_name", ""))
             if t_key not in township_report_dict:
                 township_report_dict[t_key] = {
                     "target_date": t_date,
                     "branch": tw.get("branch", ""), "driver_name": tw.get("driver_name", ""), 
                     "township": tw.get("township", ""), "customer_code": tw.get("customer_code", ""), 
-                    "contact_person": tw.get("contact_person", ""), "ctns": 0.0, "allocated_cost": 0.0, 
-                    "driver_total_ctns": 0.0, "branch_cost": float(tw.get("branch_cost", 0.0)), "total_drop_points": 0.0, "sales_amount": 0.0
+                    "contact_person": tw.get("contact_person", ""), "ctns": Decimal("0.0"), "allocated_cost": Decimal("0.0"), 
+                    "driver_total_ctns": Decimal("0.0"), "branch_cost": Decimal(str(tw.get("branch_cost", Decimal("0.0")))), 
+                    "total_drop_points": Decimal("0.0"), "sales_amount": Decimal("0.0")
                 }
             else:
-                township_report_dict[t_key]["branch_cost"] = float(tw.get("branch_cost", township_report_dict[t_key]["branch_cost"]))
+                township_report_dict[t_key]["branch_cost"] = Decimal(str(tw.get("branch_cost", township_report_dict[t_key]["branch_cost"])))
 
-            township_report_dict[t_key]["ctns"] += float(tw.get("ctns", 0.0))
-            township_report_dict[t_key]["allocated_cost"] += float(tw.get("allocated_cost", 0.0))
-            township_report_dict[t_key]["sales_amount"] += float(tw.get("sales_amount", 0.0))
-            township_report_dict[t_key]["driver_total_ctns"] += float(tw.get("driver_total_ctns", 0.0))
-            township_report_dict[t_key]["total_drop_points"] += float(tw.get("total_drop_points", 0.0))
+            township_report_dict[t_key]["ctns"] += Decimal(str(tw.get("ctns", Decimal("0.0"))))
+            township_report_dict[t_key]["allocated_cost"] += Decimal(str(tw.get("allocated_cost", Decimal("0.0"))))
+            township_report_dict[t_key]["sales_amount"] += Decimal(str(tw.get("sales_amount", Decimal("0.0"))))
+            township_report_dict[t_key]["driver_total_ctns"] += Decimal(str(tw.get("driver_total_ctns", Decimal("0.0"))))
+            township_report_dict[t_key]["total_drop_points"] += Decimal(str(tw.get("total_drop_points", Decimal("0.0"))))
 
-    # Recalculate accurate averages across the whole period for items
     item_report_list = list(item_report_dict.values())
     for item in item_report_list:
-        item["cost_per_carton"] = item["allocated_cost"] / item["ctns"] if item["ctns"] > 0 else 0.0
+        item["cost_per_carton"] = item["allocated_cost"] / item["ctns"] if item["ctns"] > Decimal("0.0") else Decimal("0.0")
     item_report_list.sort(key=lambda x: (x.get("target_date", ""), x["branch"], x["driver_name"], x["item_code"]))
 
-    # Recalculate accurate averages across the whole period for townships
     township_report_list = list(township_report_dict.values())
     for tw in township_report_list:
-        tw["cost_per_carton"] = tw["allocated_cost"] / tw["ctns"] if tw["ctns"] > 0 else 0.0
-        tw["cost_per_drop_point"] = tw["allocated_cost"] / tw["total_drop_points"] if tw["total_drop_points"] > 0 else 0.0
+        tw["cost_per_carton"] = tw["allocated_cost"] / tw["ctns"] if tw["ctns"] > Decimal("0.0") else Decimal("0.0")
+        tw["cost_per_drop_point"] = tw["allocated_cost"] / tw["total_drop_points"] if tw["total_drop_points"] > Decimal("0.0") else Decimal("0.0")
     township_report_list.sort(key=lambda x: (x.get("target_date", ""), x["branch"], x["driver_name"], x["township"], x["customer_code"]))
 
     return {
@@ -1711,7 +1665,6 @@ async def get_daily_rate_cart_report(
     user: dict = Depends(require_permission("view_daily_report"))
 ):
     try:
-        # 1. Range Selection Logic
         if start_date and end_date:
             try:
                 start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d")
@@ -1736,7 +1689,6 @@ async def get_daily_rate_cart_report(
                 "township_report": aggregated["township_report"]
             }
             
-        # 2. Single Day View (Default behavior)
         else:
             if not target_date:
                 target_date = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
@@ -1802,7 +1754,6 @@ async def delete_ref_location(name: str, user: dict = Depends(require_permission
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-
 @app.get("/references/rate-cart-locations")
 async def get_ref_rate_cart_locations():
     try:
@@ -1849,7 +1800,6 @@ async def delete_ref_rate_cart_location(name: str, user: dict = Depends(require_
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
-
 
 @app.get("/references/uoms")
 async def get_ref_uoms():
@@ -1942,9 +1892,7 @@ async def delete_ref_channel(name: str, user: dict = Depends(require_permission(
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
-    
-    
-    
+
 @app.get("/references/location-mappings")
 async def get_ref_location_mappings():
     try:
@@ -1986,9 +1934,7 @@ async def delete_ref_location_mapping(to_location: str, user: dict = Depends(req
         await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted mapping for: {to_location}")
         return {"message": "Deleted successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
-    
-    
-    
+
 # --- Branch Code Management Endpoints ---
 
 @app.get("/account/branch-codes")
@@ -2118,8 +2064,6 @@ async def delete_sd_code(log_pric: str, user: dict = Depends(require_permission(
         return {"message": "SD code deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting SD code: {str(e)}")
-    
-    
 
 # --- Calculation History Endpoints ---
 
@@ -2143,13 +2087,13 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
                 """, (
                     calc_id,
                     p.get("code", ""), p.get("name", ""), p.get("uom", ""),
-                    p.get("weight", 0), p.get("doc_date", ""), p.get("sin_no", ""),
-                    p.get("principal", ""), p.get("brand", ""), p.get("ctns", 0),
+                    Decimal(str(p.get("weight", 0))), p.get("doc_date", ""), p.get("sin_no", ""),
+                    p.get("principal", ""), p.get("brand", ""), Decimal(str(p.get("ctns", 0))),
                     p.get("bu", ""), p.get("b_code", ""), p.get("b_name", ""),
                     p.get("b_dept", ""), p.get("b_principal", ""), p.get("b_desc", ""),
                     p.get("s_dept", ""), p.get("s_principal", ""),
                     p.get("calculation_type", ""), p.get("system_rate"),
-                    p.get("unit_cost", 0), p.get("total_cost", 0),
+                    Decimal(str(p.get("unit_cost", 0))), Decimal(str(p.get("total_cost", 0))),
                     p.get("standard_unit_cost")
                 ))
 
@@ -2386,10 +2330,10 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
             else: doc_date_str = str(doc_date_val) if doc_date_val else ""
 
             b_desc = item.get('b_desc', '')
-            ctns_val = item.get('ctns', 0)
-            total_cost_val = item.get('total_cost', 0)
+            ctns_val = Decimal(str(item.get('ctns', 0)))
+            total_cost_val = Decimal(str(item.get('total_cost', 0)))
             ctns_formatted = int(ctns_val) if float(ctns_val).is_integer() else ctns_val
-            price_per_ctn = total_cost_val / ctns_val if ctns_val > 0 else 0
+            price_per_ctn = total_cost_val / ctns_val if ctns_val > Decimal("0") else Decimal("0.0")
             price_formatted = int(price_per_ctn) if float(price_per_ctn).is_integer() else round(price_per_ctn, 2)
 
             concat_desc = f"{b_desc.strip()} - {ctns_formatted} ctns @{price_formatted} kyats"
@@ -2410,15 +2354,15 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
             ws.cell(row=row_num, column=11, value=item.get('name', '')).border = border
             ws.cell(row=row_num, column=12, value=ctns_formatted).border = border
             
-            ctn_price_cell = ws.cell(row=row_num, column=13, value=price_per_ctn) 
+            ctn_price_cell = ws.cell(row=row_num, column=13, value=float(price_per_ctn)) 
             ctn_price_cell.number_format = '#,##0.00'
             ctn_price_cell.border = border
 
-            amt_cell = ws.cell(row=row_num, column=14, value=total_cost_val) 
+            amt_cell = ws.cell(row=row_num, column=14, value=float(total_cost_val)) 
             amt_cell.number_format = '#,##0.00'
             amt_cell.border = border
 
-            weight_cell = ws.cell(row=row_num, column=15, value=item.get('weight', 0)) 
+            weight_cell = ws.cell(row=row_num, column=15, value=float(item.get('weight', 0))) 
             weight_cell.number_format = '#,##0.00'
             weight_cell.border = border
 
@@ -2711,7 +2655,6 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
 
-        # --- NEW VALIDATION: Prevent duplicate gate name + from/to locations ---
         await cursor.execute("""
             SELECT id FROM Gate 
             WHERE gate_name = ? AND from_loc = ? AND to_loc = ?
@@ -2720,14 +2663,11 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
 
         if existing_gate:
             if gate_data.gate_id is None:
-                # Adding a new gate that perfectly matches an existing one
                 await conn.close()
                 raise HTTPException(status_code=400, detail="A gate with this name, origin, and destination already exists.")
             elif existing_gate[0] != gate_data.gate_id:
-                # Editing a gate to conflict with a different existing gate
                 await conn.close()
                 raise HTTPException(status_code=400, detail="Another gate with this name, origin, and destination already exists.")
-        # -----------------------------------------------------------------------
 
         if gate_data.gate_id is not None:
             if "edit_gate" not in perms:
@@ -2743,8 +2683,8 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
                 new_uom = gate_data.uom if gate_data.uom else None
                 old_unit = old_unit if old_unit is not None else None
                 new_unit = gate_data.unit if gate_data.unit is not None else None
-                old_cost = float(old_cost) if old_cost is not None else None
-                new_cost = float(gate_data.cost) if gate_data.cost is not None else None
+                old_cost = Decimal(str(old_cost)) if old_cost is not None else None
+                new_cost = gate_data.cost if gate_data.cost is not None else None
 
                 change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 username = user['username']
@@ -2929,14 +2869,12 @@ async def validate_dwbi_item(code: str = Query(...)):
     except Exception as e: 
         raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
     
-    
 @app.get("/dwbi/principals/search")
 async def search_dwbi_principals(q: str = Query(..., min_length=2)):
     try:
         conn = await get_dwbi_connection()
         cursor = await conn.cursor()
         search_term = f"%{q}%"
-        # Using DISTINCT so we only get unique ItmsGrpNam values
         await cursor.execute("SELECT DISTINCT TOP 50 ItmsGrpNam FROM Itemmasterallpp WHERE ItmsGrpNam LIKE ?", (search_term,))
         rows = await cursor.fetchall()
         principals = [r[0] for r in rows if r[0]]
@@ -2989,8 +2927,8 @@ async def calculate_with_gate(
     from_loc: Optional[str] = Query(None),
     to_loc: Optional[str] = Query(None),
     doc_nums: List[str] = Query(...),
-    manual_total_cost: Optional[float] = None, 
-    additional_charges: Optional[float] = 0.0,
+    manual_total_cost: Optional[Decimal] = None, 
+    additional_charges: Optional[Decimal] = Decimal("0.0"),
     user: dict = Depends(require_permission("view_calculator"))
 ):
     try:
@@ -3033,25 +2971,24 @@ async def get_doc_nums():
         return {"doc_nums": doc_nums}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-
 @app.get("/products-by-doc-nums")
 async def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_nums")):
     try:
-        if not doc_nums: return {"products": [], "total_weight": 0}
+        if not doc_nums: return {"products": [], "total_weight": Decimal("0.0")}
         
         pg_nums = [str(d).replace("PG - ", "").replace("PG-", "") for d in doc_nums if not str(d).startswith("PDG")]
         pdg_nums = [str(d).replace("PDG - ", "").replace("PDG-", "") for d in doc_nums if str(d).startswith("PDG")]
         
         conn = await get_dwbi_connection()
         cursor = await conn.cursor()
-        products, total_weight = [], 0.0
+        products, total_weight = [], Decimal("0.0")
         
         if pg_nums:
             placeholders = ','.join('?' * len(pg_nums))
             await cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand), 'PG' FROM PG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode", pg_nums)
             rows = await cursor.fetchall()
             for row in rows:
-                weight = float(row[3]) if row[3] else 0.0
+                weight = Decimal(str(row[3])) if row[3] else Decimal("0.0")
                 total_weight += weight
                 products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7], "sin_no": f"{row[7]} - {row[4]}"})
                 
@@ -3060,12 +2997,12 @@ async def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_n
             await cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), DocNum, SUM(QtyCtn), MAX(Brand), 'PDG' FROM PDG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode", pdg_nums)
             rows = await cursor.fetchall()
             for row in rows:
-                weight = float(row[3]) if row[3] else 0.0
+                weight = Decimal(str(row[3])) if row[3] else Decimal("0.0")
                 total_weight += weight
                 products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7], "sin_no": f"{row[7]} - {row[4]}"})
         
         await conn.close()
-        return {"products": products, "total_weight": round(total_weight, 2)}
+        return {"products": products, "total_weight": total_weight}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/products/{doc_num}")
@@ -3087,16 +3024,15 @@ async def get_products_by_doc_num(doc_num: str):
             await conn.close()
             raise HTTPException(status_code=404, detail="No products found")
             
-        products, total_weight = [], 0.0
+        products, total_weight = [], Decimal("0.0")
         for row in rows:
-            weight = float(row[3]) if row[3] else 0.0
+            weight = Decimal(str(row[3])) if row[3] else Decimal("0.0")
             total_weight += weight
             products.append({"item_code": row[0] or "", "description": row[1] or "", "uom": row[2] or "", "item_weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7]})
             
         await conn.close()
-        return {"products": products, "total_weight": round(total_weight, 2)}
+        return {"products": products, "total_weight": total_weight}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-    
     
 # --- Submitted Calculation Allocation Report Endpoints ---
 
@@ -3106,15 +3042,10 @@ async def get_submitted_allocation_report(
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     user: dict = Depends(require_permission("view_daily_report"))
 ):
-    """
-    Fetches and flattens calculated products from submitted or claimed calculation histories
-    to generate a comprehensive allocation report.
-    """
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
 
-        # Query flattened product rows joined with parent calculation
         query = """
             SELECT
                 ch.id, ch.submitted_at, ch.gate_name, ch.from_loc, ch.to_loc, ch.channel,
@@ -3144,9 +3075,9 @@ async def get_submitted_allocation_report(
 
         allocation_data = []
         for row in rows:
-            ctns = float(row[18] or 0)
-            cost = float(row[20] or 0)
-            if ctns <= 0 and cost <= 0:
+            ctns = Decimal(str(row[18] or 0))
+            cost = Decimal(str(row[20] or 0))
+            if ctns <= Decimal("0") and cost <= Decimal("0"):
                 continue
             allocation_data.append({
                 "calc_id": row[0],
@@ -3168,9 +3099,9 @@ async def get_submitted_allocation_report(
                 "s_dept": row[16] or "",
                 "s_principal": row[17] or "",
                 "ctns": ctns,
-                "weight": float(row[19] or 0),
+                "weight": Decimal(str(row[19] or 0)),
                 "total_cost": cost,
-                "unit_cost": row[21] or 0,
+                "unit_cost": Decimal(str(row[21] or 0)),
                 "calculation_type": row[22] or ""
             })
 
@@ -3185,7 +3116,6 @@ async def get_submitted_allocation_report(
     except Exception as e:
         logger.error(f"Error generating submitted allocation report: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating submitted allocation report: {str(e)}")
-    
     
 # --- Dashboard Helper Functions ---
 
@@ -3205,9 +3135,6 @@ async def _generate_allocation_data(target_month: str, target_branch: Optional[s
             temp_year -= 1
 
     valid_months = set(months_list)
-
-    # Keep month0_label because the return statement needs it, 
-    # but remove month1_label and month2_label.
     month0_label = months_list[0]
 
     start_date = f"{months_list[-1]}-01"
@@ -3246,54 +3173,47 @@ async def _generate_allocation_data(target_month: str, target_branch: Optional[s
             brand = item.get("brand", "").strip() or "UNKNOWN"
             branch = item.get("branch", "").strip() or "UNKNOWN"
             
-            # Collect unique branches for the frontend dropdown
             available_branches.add(branch)
             
-            # Apply branch filter if provided
             if target_branch and target_branch.strip().lower() != branch.lower():
                 continue
             
             try:
-                ctns = float(item.get("ctns", 0) or 0)
-                allocated_cost = float(item.get("allocated_cost", 0) or 0)
+                ctns = Decimal(str(item.get("ctns", "0.0") or "0.0"))
+                allocated_cost = Decimal(str(item.get("allocated_cost", "0.0") or "0.0"))
             except ValueError:
                 continue
 
-            if ctns <= 0:
+            if ctns <= Decimal("0"):
                 continue
                 
             if brand not in brands_data:
-                brands_data[brand] = {m: {"cost": 0.0, "ctns": 0.0} for m in months_list}
+                brands_data[brand] = {m: {"cost": Decimal("0.0"), "ctns": Decimal("0.0")} for m in months_list}
 
             brands_data[brand][task_month]["cost"] += allocated_cost
             brands_data[brand][task_month]["ctns"] += ctns
 
     dashboard_results = []
     for brand, data in brands_data.items():
-        # Cleaned up result dictionary
-        result = {
-            "brand": brand
-        }
+        result = {"brand": brand}
         
         trend_data = []
         for m_label in reversed(months_list):
             t_cost = data[m_label]["cost"]
             t_ctns = data[m_label]["ctns"]
-            avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
+            avg_cost = (t_cost / t_ctns) if t_ctns > Decimal("0") else Decimal("0.0")
             
             trend_data.append({
                 "month": m_label,
-                "avg_cost": round(avg_cost, 2),
-                "total_ctns": round(t_ctns, 2),
-                "total_cost": round(t_cost, 2)
+                "avg_cost": round(float(avg_cost), 2),
+                "total_ctns": round(float(t_ctns), 2),
+                "total_cost": round(float(t_cost), 2)
             })
         
         result["trend"] = trend_data
         dashboard_results.append(result)
 
-    # Fix the sorting to use the current month from the trend array instead of the deleted month_0 field
     dashboard_results.sort(key=lambda x: x["trend"][-1]["total_ctns"], reverse=True)
-    
     return dashboard_results, month0_label, sorted(list(available_branches))
 
 
@@ -3313,8 +3233,6 @@ async def _generate_calculated_data(target_month: str, target_to_loc: Optional[s
             temp_year -= 1
 
     valid_months = set(months_list)
-
-    # Keep month0_label for the return statement
     month0_label = months_list[0]
 
     conn = await get_logistic_connection()
@@ -3336,11 +3254,11 @@ async def _generate_calculated_data(target_month: str, target_to_loc: Optional[s
     for row in rows:
         brand = (row[0] or "").strip() or "UNKNOWN"
         try:
-            ctns = float(row[1] or 0)
-            cost = float(row[2] or 0)
+            ctns = Decimal(str(row[1] or 0))
+            cost = Decimal(str(row[2] or 0))
         except ValueError:
             continue
-        if ctns <= 0:
+        if ctns <= Decimal("0"):
             continue
 
         doc_date_str = str(row[3] or "")
@@ -3361,35 +3279,31 @@ async def _generate_calculated_data(target_month: str, target_to_loc: Optional[s
 
         if task_month in valid_months:
             if brand not in brands_data:
-                brands_data[brand] = {m: {"cost": 0.0, "ctns": 0.0} for m in months_list}
+                brands_data[brand] = {m: {"cost": Decimal("0.0"), "ctns": Decimal("0.0")} for m in months_list}
 
             brands_data[brand][task_month]["cost"] += cost
             brands_data[brand][task_month]["ctns"] += ctns
 
     dashboard_results = []
     for brand, data in brands_data.items():
-        # Cleaned up result dictionary
-        result = {
-            "brand": brand
-        }
+        result = {"brand": brand}
         
         trend_data = []
         for m_label in reversed(months_list):
             t_cost = data[m_label]["cost"]
             t_ctns = data[m_label]["ctns"]
-            avg_cost = (t_cost / t_ctns) if t_ctns > 0 else 0.0
+            avg_cost = (t_cost / t_ctns) if t_ctns > Decimal("0") else Decimal("0.0")
             
             trend_data.append({
                 "month": m_label,
-                "avg_cost": round(avg_cost, 2),
-                "total_ctns": round(t_ctns, 2),
-                "total_cost": round(t_cost, 2)
+                "avg_cost": round(float(avg_cost), 2),
+                "total_ctns": round(float(t_ctns), 2),
+                "total_cost": round(float(t_cost), 2)
             })
         
         result["trend"] = trend_data
         dashboard_results.append(result)
 
-    # Fix the sorting to use the current month from the trend array
     dashboard_results.sort(key=lambda x: x["trend"][-1]["total_ctns"], reverse=True)
     return dashboard_results, month0_label, sorted(list(available_to_locs))
 
@@ -3415,7 +3329,6 @@ async def get_brand_allocation_cost_dashboard(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating dashboard data: {str(e)}")
     
-    
 @app.get("/dashboard/calculated-brand-cost")
 async def get_calculated_brand_cost_dashboard(
     target_month: Optional[str] = None, 
@@ -3434,7 +3347,6 @@ async def get_calculated_brand_cost_dashboard(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating calculated dashboard data: {str(e)}")
-
 
 @app.get("/dashboard/combined")
 async def get_combined_dashboard(
@@ -3468,10 +3380,6 @@ async def get_principal_brand_allocation(
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     user: dict = Depends(require_permission("view_dashboard"))
 ):
-    """
-    Independent endpoint that fetches available historical data 
-    and groups it dynamically: BU -> Branch -> Principal -> Brand -> Item Name -> Date.
-    """
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
@@ -3508,12 +3416,12 @@ async def get_principal_brand_allocation(
             principal = str(row[4] or "").strip() or "UNKNOWN"
             brand = str(row[5] or "").strip() or "UNKNOWN"
             try:
-                ctns = float(row[6] or 0)
-                cost = float(row[7] or 0)
+                ctns = Decimal(str(row[6] or 0))
+                cost = Decimal(str(row[7] or 0))
             except ValueError:
                 continue
 
-            if ctns <= 0: continue
+            if ctns <= Decimal("0"): continue
 
             for item in [{"bu": bu, "branch": branch, "principal": principal, "brand": brand,
                           "item_name": item_name, "ctns": ctns, "allocated_cost": cost}]:
@@ -3524,64 +3432,63 @@ async def get_principal_brand_allocation(
                 item_name = str(item.get("item_name", "")).strip() or "UNKNOWN"
 
                 try:
-                    ctns = float(item.get("ctns", 0) or 0)
-                    cost = float(item.get("allocated_cost", 0) or 0)
+                    ctns = Decimal(str(item.get("ctns", "0.0") or "0.0"))
+                    cost = Decimal(str(item.get("allocated_cost", "0.0") or "0.0"))
                 except ValueError:
                     continue
 
-                if ctns <= 0: continue
+                if ctns <= Decimal("0"): continue
 
-                # Build dictionary: BU -> Branch -> Principal -> Brand -> Item Name -> Date
                 if bu not in hierarchy: hierarchy[bu] = {}
                 if branch not in hierarchy[bu]: hierarchy[bu][branch] = {}
                 if principal not in hierarchy[bu][branch]: hierarchy[bu][branch][principal] = {}
                 if brand not in hierarchy[bu][branch][principal]: hierarchy[bu][branch][principal][brand] = {}
                 if item_name not in hierarchy[bu][branch][principal][brand]:
-                    hierarchy[bu][branch][principal][brand][item_name] = {"ctns": 0.0, "cost": 0.0, "dates": {}}
+                    hierarchy[bu][branch][principal][brand][item_name] = {"ctns": Decimal("0.0"), "cost": Decimal("0.0"), "dates": {}}
                 
                 hierarchy[bu][branch][principal][brand][item_name]["ctns"] += ctns
                 hierarchy[bu][branch][principal][brand][item_name]["cost"] += cost
 
                 if target_date not in hierarchy[bu][branch][principal][brand][item_name]["dates"]:
-                    hierarchy[bu][branch][principal][brand][item_name]["dates"][target_date] = {"ctns": 0.0, "cost": 0.0}
+                    hierarchy[bu][branch][principal][brand][item_name]["dates"][target_date] = {"ctns": Decimal("0.0"), "cost": Decimal("0.0")}
                 
                 hierarchy[bu][branch][principal][brand][item_name]["dates"][target_date]["ctns"] += ctns
                 hierarchy[bu][branch][principal][brand][item_name]["dates"][target_date]["cost"] += cost
 
         result = []
         for bu, branch_data in hierarchy.items():
-            bu_total_cost = 0.0; bu_total_ctns = 0.0; bu_branches = []
+            bu_total_cost = Decimal("0.0"); bu_total_ctns = Decimal("0.0"); bu_branches = []
             
             for branch, princ_data in branch_data.items():
-                b_total_cost = 0.0; b_total_ctns = 0.0; branch_principals = []
+                b_total_cost = Decimal("0.0"); b_total_ctns = Decimal("0.0"); branch_principals = []
                 
                 for princ, brand_data in princ_data.items():
-                    p_total_cost = 0.0; p_total_ctns = 0.0; princ_brands = []
+                    p_total_cost = Decimal("0.0"); p_total_ctns = Decimal("0.0"); princ_brands = []
                     
                     for brnd, item_data in brand_data.items():
-                        br_total_cost = 0.0; br_total_ctns = 0.0; br_items = []
+                        br_total_cost = Decimal("0.0"); br_total_ctns = Decimal("0.0"); br_items = []
                         
                         for itm, d_data in item_data.items():
                             i_total_cost = d_data["cost"]; i_total_ctns = d_data["ctns"]
                             
                             i_dates = []
                             for date, d_vals in d_data["dates"].items():
-                                d_avg_cost = d_vals["cost"] / d_vals["ctns"] if d_vals["ctns"] > 0 else 0
+                                d_avg_cost = d_vals["cost"] / d_vals["ctns"] if d_vals["ctns"] > Decimal("0") else Decimal("0.0")
                                 i_dates.append({
                                     "date": date,
-                                    "avg_cost": round(d_avg_cost, 2),
-                                    "total_cost": round(d_vals["cost"], 2),
-                                    "total_ctns": round(d_vals["ctns"], 2)
+                                    "avg_cost": round(float(d_avg_cost), 2),
+                                    "total_cost": round(float(d_vals["cost"]), 2),
+                                    "total_ctns": round(float(d_vals["ctns"]), 2)
                                 })
                             
                             i_dates.sort(key=lambda x: x["date"], reverse=True)
-                            i_avg_cost = i_total_cost / i_total_ctns if i_total_ctns > 0 else 0
+                            i_avg_cost = i_total_cost / i_total_ctns if i_total_ctns > Decimal("0") else Decimal("0.0")
                             
                             br_items.append({
                                 "item_name": itm,
-                                "avg_cost": round(i_avg_cost, 2),
-                                "total_cost": round(i_total_cost, 2),
-                                "total_ctns": round(i_total_ctns, 2),
+                                "avg_cost": round(float(i_avg_cost), 2),
+                                "total_cost": round(float(i_total_cost), 2),
+                                "total_ctns": round(float(i_total_ctns), 2),
                                 "dates": i_dates
                             })
                             
@@ -3589,13 +3496,13 @@ async def get_principal_brand_allocation(
                             br_total_ctns += i_total_ctns
                         
                         br_items.sort(key=lambda x: x["item_name"])
-                        br_avg_cost = br_total_cost / br_total_ctns if br_total_ctns > 0 else 0
+                        br_avg_cost = br_total_cost / br_total_ctns if br_total_ctns > Decimal("0") else Decimal("0.0")
                         
                         princ_brands.append({
                             "brand": brnd,
-                            "avg_cost": round(br_avg_cost, 2),
-                            "total_cost": round(br_total_cost, 2),
-                            "total_ctns": round(br_total_ctns, 2),
+                            "avg_cost": round(float(br_avg_cost), 2),
+                            "total_cost": round(float(br_total_cost), 2),
+                            "total_ctns": round(float(br_total_ctns), 2),
                             "items": br_items
                         })
                         
@@ -3603,13 +3510,13 @@ async def get_principal_brand_allocation(
                         p_total_ctns += br_total_ctns
                         
                     princ_brands.sort(key=lambda x: x["brand"])
-                    p_avg_cost = p_total_cost / p_total_ctns if p_total_ctns > 0 else 0
+                    p_avg_cost = p_total_cost / p_total_ctns if p_total_ctns > Decimal("0") else Decimal("0.0")
                     
                     branch_principals.append({
                         "principal": princ,
-                        "avg_cost": round(p_avg_cost, 2),
-                        "total_cost": round(p_total_cost, 2),
-                        "total_ctns": round(p_total_ctns, 2),
+                        "avg_cost": round(float(p_avg_cost), 2),
+                        "total_cost": round(float(p_total_cost), 2),
+                        "total_ctns": round(float(p_total_ctns), 2),
                         "brands": princ_brands
                     })
                     
@@ -3617,13 +3524,13 @@ async def get_principal_brand_allocation(
                     b_total_ctns += p_total_ctns
                 
                 branch_principals.sort(key=lambda x: x["principal"])
-                b_avg_cost = b_total_cost / b_total_ctns if b_total_ctns > 0 else 0
+                b_avg_cost = b_total_cost / b_total_ctns if b_total_ctns > Decimal("0") else Decimal("0.0")
                 
                 bu_branches.append({
                     "branch": branch,
-                    "avg_cost": round(b_avg_cost, 2),
-                    "total_cost": round(b_total_cost, 2),
-                    "total_ctns": round(b_total_ctns, 2),
+                    "avg_cost": round(float(b_avg_cost), 2),
+                    "total_cost": round(float(b_total_cost), 2),
+                    "total_ctns": round(float(b_total_ctns), 2),
                     "principals": branch_principals
                 })
                 
@@ -3631,13 +3538,13 @@ async def get_principal_brand_allocation(
                 bu_total_ctns += b_total_ctns
             
             bu_branches.sort(key=lambda x: x["branch"])
-            bu_avg_cost = bu_total_cost / bu_total_ctns if bu_total_ctns > 0 else 0
+            bu_avg_cost = bu_total_cost / bu_total_ctns if bu_total_ctns > Decimal("0") else Decimal("0.0")
             
             result.append({
                 "bu": bu,
-                "avg_cost": round(bu_avg_cost, 2),
-                "total_cost": round(bu_total_cost, 2),
-                "total_ctns": round(bu_total_ctns, 2),
+                "avg_cost": round(float(bu_avg_cost), 2),
+                "total_cost": round(float(bu_total_cost), 2),
+                "total_ctns": round(float(bu_total_ctns), 2),
                 "branches": bu_branches
             })
         
@@ -3648,18 +3555,12 @@ async def get_principal_brand_allocation(
         logger.error(f"Error generating dynamic allocation hierarchy: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating hierarchy data: {str(e)}")
     
-    
-    
 @app.get("/dashboard/third-party-allocation")
 async def get_third_party_allocation(
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     user: dict = Depends(require_permission("view_dashboard"))
 ):
-    """
-    Independent endpoint that fetches calculated third-party data 
-    and groups it dynamically: BU -> To_Loc (Branch) -> Principal -> Brand -> Item Name -> Date.
-    """
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
@@ -3701,14 +3602,13 @@ async def get_third_party_allocation(
             item_name = str(row[5] or "").strip() or "UNKNOWN"
 
             try:
-                ctns = float(row[6] or 0)
-                cost = float(row[7] or 0)
+                ctns = Decimal(str(row[6] or 0))
+                cost = Decimal(str(row[7] or 0))
             except ValueError:
                 continue
 
-            if ctns <= 0: continue
+            if ctns <= Decimal("0"): continue
 
-            # dummy loop wrapper so indent below is unchanged
             for item in [{"bu": bu, "principal": principal, "brand": brand, "name": item_name, "ctns": ctns, "total_cost": cost}]:
                 bu = str(item.get("bu", "")).strip() or "UNKNOWN"
                 principal = str(item.get("principal", "")).strip() or "UNKNOWN"
@@ -3716,64 +3616,63 @@ async def get_third_party_allocation(
                 item_name = str(item.get("name", "")).strip() or "UNKNOWN"
 
                 try:
-                    ctns = float(item.get("ctns", 0) or 0)
-                    cost = float(item.get("total_cost", 0) or 0)
+                    ctns = Decimal(str(item.get("ctns", "0.0") or "0.0"))
+                    cost = Decimal(str(item.get("total_cost", "0.0") or "0.0"))
                 except ValueError:
                     continue
 
-                if ctns <= 0: continue
+                if ctns <= Decimal("0"): continue
 
-                # Build dictionary: BU -> To Loc -> Principal -> Brand -> Item Name -> Date
                 if bu not in hierarchy: hierarchy[bu] = {}
                 if to_loc not in hierarchy[bu]: hierarchy[bu][to_loc] = {}
                 if principal not in hierarchy[bu][to_loc]: hierarchy[bu][to_loc][principal] = {}
                 if brand not in hierarchy[bu][to_loc][principal]: hierarchy[bu][to_loc][principal][brand] = {}
                 if item_name not in hierarchy[bu][to_loc][principal][brand]:
-                    hierarchy[bu][to_loc][principal][brand][item_name] = {"ctns": 0.0, "cost": 0.0, "dates": {}}
+                    hierarchy[bu][to_loc][principal][brand][item_name] = {"ctns": Decimal("0.0"), "cost": Decimal("0.0"), "dates": {}}
                 
                 hierarchy[bu][to_loc][principal][brand][item_name]["ctns"] += ctns
                 hierarchy[bu][to_loc][principal][brand][item_name]["cost"] += cost
 
                 if target_date not in hierarchy[bu][to_loc][principal][brand][item_name]["dates"]:
-                    hierarchy[bu][to_loc][principal][brand][item_name]["dates"][target_date] = {"ctns": 0.0, "cost": 0.0}
+                    hierarchy[bu][to_loc][principal][brand][item_name]["dates"][target_date] = {"ctns": Decimal("0.0"), "cost": Decimal("0.0")}
                 
                 hierarchy[bu][to_loc][principal][brand][item_name]["dates"][target_date]["ctns"] += ctns
                 hierarchy[bu][to_loc][principal][brand][item_name]["dates"][target_date]["cost"] += cost
 
         result = []
         for bu, branch_data in hierarchy.items():
-            bu_total_cost = 0.0; bu_total_ctns = 0.0; bu_branches = []
+            bu_total_cost = Decimal("0.0"); bu_total_ctns = Decimal("0.0"); bu_branches = []
             
             for branch, princ_data in branch_data.items():
-                b_total_cost = 0.0; b_total_ctns = 0.0; branch_principals = []
+                b_total_cost = Decimal("0.0"); b_total_ctns = Decimal("0.0"); branch_principals = []
                 
                 for princ, brand_data in princ_data.items():
-                    p_total_cost = 0.0; p_total_ctns = 0.0; princ_brands = []
+                    p_total_cost = Decimal("0.0"); p_total_ctns = Decimal("0.0"); princ_brands = []
                     
                     for brnd, item_data in brand_data.items():
-                        br_total_cost = 0.0; br_total_ctns = 0.0; br_items = []
+                        br_total_cost = Decimal("0.0"); br_total_ctns = Decimal("0.0"); br_items = []
                         
                         for itm, d_data in item_data.items():
                             i_total_cost = d_data["cost"]; i_total_ctns = d_data["ctns"]
                             
                             i_dates = []
                             for date, d_vals in d_data["dates"].items():
-                                d_avg_cost = d_vals["cost"] / d_vals["ctns"] if d_vals["ctns"] > 0 else 0
+                                d_avg_cost = d_vals["cost"] / d_vals["ctns"] if d_vals["ctns"] > Decimal("0") else Decimal("0.0")
                                 i_dates.append({
                                     "date": date,
-                                    "avg_cost": round(d_avg_cost, 2),
-                                    "total_cost": round(d_vals["cost"], 2),
-                                    "total_ctns": round(d_vals["ctns"], 2)
+                                    "avg_cost": round(float(d_avg_cost), 2),
+                                    "total_cost": round(float(d_vals["cost"]), 2),
+                                    "total_ctns": round(float(d_vals["ctns"]), 2)
                                 })
                             
                             i_dates.sort(key=lambda x: x["date"], reverse=True)
-                            i_avg_cost = i_total_cost / i_total_ctns if i_total_ctns > 0 else 0
+                            i_avg_cost = i_total_cost / i_total_ctns if i_total_ctns > Decimal("0") else Decimal("0.0")
                             
                             br_items.append({
                                 "item_name": itm,
-                                "avg_cost": round(i_avg_cost, 2),
-                                "total_cost": round(i_total_cost, 2),
-                                "total_ctns": round(i_total_ctns, 2),
+                                "avg_cost": round(float(i_avg_cost), 2),
+                                "total_cost": round(float(i_total_cost), 2),
+                                "total_ctns": round(float(i_total_ctns), 2),
                                 "dates": i_dates
                             })
                             
@@ -3781,13 +3680,13 @@ async def get_third_party_allocation(
                             br_total_ctns += i_total_ctns
                         
                         br_items.sort(key=lambda x: x["item_name"])
-                        br_avg_cost = br_total_cost / br_total_ctns if br_total_ctns > 0 else 0
+                        br_avg_cost = br_total_cost / br_total_ctns if br_total_ctns > Decimal("0") else Decimal("0.0")
                         
                         princ_brands.append({
                             "brand": brnd,
-                            "avg_cost": round(br_avg_cost, 2),
-                            "total_cost": round(br_total_cost, 2),
-                            "total_ctns": round(br_total_ctns, 2),
+                            "avg_cost": round(float(br_avg_cost), 2),
+                            "total_cost": round(float(br_total_cost), 2),
+                            "total_ctns": round(float(br_total_ctns), 2),
                             "items": br_items
                         })
                         
@@ -3795,13 +3694,13 @@ async def get_third_party_allocation(
                         p_total_ctns += br_total_ctns
                         
                     princ_brands.sort(key=lambda x: x["brand"])
-                    p_avg_cost = p_total_cost / p_total_ctns if p_total_ctns > 0 else 0
+                    p_avg_cost = p_total_cost / p_total_ctns if p_total_ctns > Decimal("0") else Decimal("0.0")
                     
                     branch_principals.append({
                         "principal": princ,
-                        "avg_cost": round(p_avg_cost, 2),
-                        "total_cost": round(p_total_cost, 2),
-                        "total_ctns": round(p_total_ctns, 2),
+                        "avg_cost": round(float(p_avg_cost), 2),
+                        "total_cost": round(float(p_total_cost), 2),
+                        "total_ctns": round(float(p_total_ctns), 2),
                         "brands": princ_brands
                     })
                     
@@ -3809,13 +3708,13 @@ async def get_third_party_allocation(
                     b_total_ctns += p_total_ctns
                 
                 branch_principals.sort(key=lambda x: x["principal"])
-                b_avg_cost = b_total_cost / b_total_ctns if b_total_ctns > 0 else 0
+                b_avg_cost = b_total_cost / b_total_ctns if b_total_ctns > Decimal("0") else Decimal("0.0")
                 
                 bu_branches.append({
                     "branch": branch,
-                    "avg_cost": round(b_avg_cost, 2),
-                    "total_cost": round(b_total_cost, 2),
-                    "total_ctns": round(b_total_ctns, 2),
+                    "avg_cost": round(float(b_avg_cost), 2),
+                    "total_cost": round(float(b_total_cost), 2),
+                    "total_ctns": round(float(b_total_ctns), 2),
                     "principals": branch_principals
                 })
                 
@@ -3823,13 +3722,13 @@ async def get_third_party_allocation(
                 bu_total_ctns += b_total_ctns
             
             bu_branches.sort(key=lambda x: x["branch"])
-            bu_avg_cost = bu_total_cost / bu_total_ctns if bu_total_ctns > 0 else 0
+            bu_avg_cost = bu_total_cost / bu_total_ctns if bu_total_ctns > Decimal("0") else Decimal("0.0")
             
             result.append({
                 "bu": bu,
-                "avg_cost": round(bu_avg_cost, 2),
-                "total_cost": round(bu_total_cost, 2),
-                "total_ctns": round(bu_total_ctns, 2),
+                "avg_cost": round(float(bu_avg_cost), 2),
+                "total_cost": round(float(bu_total_cost), 2),
+                "total_ctns": round(float(bu_total_ctns), 2),
                 "branches": bu_branches
             })
         
@@ -3840,8 +3739,6 @@ async def get_third_party_allocation(
         logger.error(f"Error generating third party allocation hierarchy: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating hierarchy data: {str(e)}")
     
-    
-    
 # --- Cost Comparison Report Endpoint ---
 
 @app.get("/dashboard/cost-comparison")
@@ -3850,15 +3747,10 @@ async def get_cost_comparison(
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     user: dict = Depends(require_permission("view_dashboard"))
 ):
-    """
-    Endpoint for the combined Logistics Cost comparison tab.
-    Merges Rate Cart (Daily Report) and Calculated Cost (Third Party) data using DocDate.
-    """
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         
-        # 1. Fetch Rate Cart Data from Daily_Item_Report (normalized)
         rc_query = """
             SELECT target_date, bu, branch, principal, brand, item_code, item_name, ctns, allocated_cost
             FROM Daily_Item_Report
@@ -3878,7 +3770,6 @@ async def get_cost_comparison(
         await cursor.execute(rc_query, rc_params)
         rc_rows = await cursor.fetchall()
 
-        # 2. Fetch Calculated Cost Data from Calculation_Products (normalized)
         cc_query = """
             SELECT ch.submitted_at, ch.to_loc, cp.doc_date, cp.bu, cp.principal, cp.brand,
                    cp.code, cp.name, cp.ctns, cp.total_cost
@@ -3889,7 +3780,6 @@ async def get_cost_comparison(
         await cursor.execute(cc_query)
         cc_rows = await cursor.fetchall()
         
-        # 3. Fetch Location Mappings 
         await cursor.execute("SELECT to_location, branch_code FROM Location_Mapping")
         mapping_rows = await cursor.fetchall()
         
@@ -3907,7 +3797,6 @@ async def get_cost_comparison(
         
         comparison_dict = {}
         
-        # --- Process Rate Cart Data ---
         for row in rc_rows:
             date = row[0]
             if not date: continue
@@ -3919,21 +3808,20 @@ async def get_cost_comparison(
             item_code = str(row[5] or "").strip() or "UNKNOWN"
             item_name = str(row[6] or "").strip() or "UNKNOWN"
             try:
-                ctns = float(row[7] or 0)
-                cost = float(row[8] or 0)
+                ctns = Decimal(str(row[7] or 0))
+                cost = Decimal(str(row[8] or 0))
             except ValueError:
                 continue
 
-            if ctns <= 0: continue
+            if ctns <= Decimal("0"): continue
 
             key = (date, bu, branch, principal, brand, item_code, item_name)
             if key not in comparison_dict:
-                comparison_dict[key] = {"rc_ctns": 0.0, "rc_cost": 0.0, "cc_ctns": 0.0, "cc_cost": 0.0}
+                comparison_dict[key] = {"rc_ctns": Decimal("0.0"), "rc_cost": Decimal("0.0"), "cc_ctns": Decimal("0.0"), "cc_cost": Decimal("0.0")}
 
             comparison_dict[key]["rc_ctns"] += ctns
             comparison_dict[key]["rc_cost"] += cost
                 
-        # --- Process Calculated Cost Data ---
         for row in cc_rows:
             submitted_at = row[0]
             fallback_date = submitted_at[:10] if submitted_at else ""
@@ -3954,32 +3842,31 @@ async def get_cost_comparison(
             item_name = str(row[7] or "").strip() or "UNKNOWN"
 
             try:
-                ctns = float(row[8] or 0)
-                cost = float(row[9] or 0)
+                ctns = Decimal(str(row[8] or 0))
+                cost = Decimal(str(row[9] or 0))
             except ValueError:
                 continue
 
-            if ctns <= 0: continue
+            if ctns <= Decimal("0"): continue
 
             key = (item_date, bu, branch, principal, brand, item_code, item_name)
             if key not in comparison_dict:
-                comparison_dict[key] = {"rc_ctns": 0.0, "rc_cost": 0.0, "cc_ctns": 0.0, "cc_cost": 0.0}
+                comparison_dict[key] = {"rc_ctns": Decimal("0.0"), "rc_cost": Decimal("0.0"), "cc_ctns": Decimal("0.0"), "cc_cost": Decimal("0.0")}
 
             comparison_dict[key]["cc_ctns"] += ctns
             comparison_dict[key]["cc_cost"] += cost
                 
-        # --- Format Final Results ---
         result = []
         for key, val in comparison_dict.items():
             date, bu, branch, principal, brand, item_code, item_name = key
             
-            rc_avg = val["rc_cost"] / val["rc_ctns"] if val["rc_ctns"] > 0 else None
-            cc_avg = val["cc_cost"] / val["cc_ctns"] if val["cc_ctns"] > 0 else None
+            rc_avg = val["rc_cost"] / val["rc_ctns"] if val["rc_ctns"] > Decimal("0") else None
+            cc_avg = val["cc_cost"] / val["cc_ctns"] if val["cc_ctns"] > Decimal("0") else None
             
             if rc_avg is None and cc_avg is None:
                 continue
                 
-            total_avg = 0.0
+            total_avg = Decimal("0.0")
             if rc_avg is not None: total_avg += rc_avg
             if cc_avg is not None: total_avg += cc_avg
             
@@ -3995,9 +3882,9 @@ async def get_cost_comparison(
                 "brand": brand,
                 "item_code": item_code,
                 "item_name": item_name,
-                "avg_cost_rate_cart": round(rc_avg, 2) if rc_avg is not None else None,
-                "avg_cost_calculated": round(cc_avg, 2) if cc_avg is not None else None,
-                "total_avg_cost": round(total_avg, 2)
+                "avg_cost_rate_cart": round(float(rc_avg), 2) if rc_avg is not None else None,
+                "avg_cost_calculated": round(float(cc_avg), 2) if cc_avg is not None else None,
+                "total_avg_cost": round(float(total_avg), 2)
             })
             
         result.sort(key=lambda x: (x["date"], x["branch"], x["item_code"]), reverse=True)
@@ -4011,7 +3898,6 @@ async def get_cost_comparison(
         logger.error(f"Error generating cost comparison report: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating comparison data: {str(e)}")
     
-    
 # --- Daily Report Excel Export Endpoints ---
 
 @app.get("/account/daily-rate-cut-report/export")
@@ -4024,7 +3910,6 @@ async def export_daily_rate_cut_report(
     user: dict = Depends(require_permission("view_daily_report"))
 ):
     try:
-        # 1. Fetch Data
         if start_date and end_date:
             start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d")
             end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d")
@@ -4048,9 +3933,7 @@ async def export_daily_rate_cut_report(
             report_data = data["item_report"] if report_type == 'item' else data["township_report"]
             date_str = target_date
 
-        # --- NEW: Apply Dynamic Filters ---
         filters = dict(request.query_params)
-        # Pop the API specific parameters so they aren't treated as raw text filters
         for k in ['report_type', 'target_date', 'start_date', 'end_date']:
             filters.pop(k, None) 
             
@@ -4059,9 +3942,7 @@ async def export_daily_rate_cut_report(
             for row in report_data:
                 match = True
                 for key, val in filters.items():
-                    # Map the frontend 'date_filter' to the actual row key 'target_date'
                     actual_key = 'target_date' if key == 'date_filter' else key
-                    
                     row_val = str(row.get(actual_key, '')).lower()
                     if str(val).lower() not in row_val:
                         match = False
@@ -4069,9 +3950,7 @@ async def export_daily_rate_cut_report(
                 if match:
                     filtered_data.append(row)
             report_data = filtered_data
-        # ----------------------------------
 
-        # 2. Build Excel Workbook
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Item Allocation" if report_type == 'item' else "Township Allocation"
@@ -4081,7 +3960,6 @@ async def export_daily_rate_cut_report(
         border_style = Side(border_style="thin", color="000000")
         border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
 
-        # 3. Define Headers (Date added as the second column)
         if report_type == 'item':
             headers = [
                 "BU", "Date", "Branch", "Driver Name", "Principal", "Brand", "Item Code", "Item Name", 
@@ -4102,29 +3980,28 @@ async def export_daily_rate_cut_report(
             cell.alignment = Alignment(horizontal='center')
             cell.border = border
 
-        # 4. Write Rows (Adding row.get("target_date") at index 1)
         for idx, row in enumerate(report_data, 2):
             if report_type == 'item':
                 row_data = [
                     row.get("bu", "-"), row.get("target_date", ""), row.get("branch", ""), row.get("driver_name", ""),
                     row.get("principal", ""), row.get("brand", ""), row.get("item_code", ""),
-                    row.get("item_name", ""), row.get("ctns", 0), row.get("driver_total_ctns", 0),
-                    row.get("branch_cost", 0), row.get("cost_per_carton", 0), row.get("allocated_cost", 0),
-                    row.get("sales_amount", 0)
+                    row.get("item_name", ""), float(row.get("ctns", 0)), float(row.get("driver_total_ctns", 0)),
+                    float(row.get("branch_cost", 0)), float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
+                    float(row.get("sales_amount", 0))
                 ]
             else:
                 row_data = [
                     row.get("branch", ""), row.get("target_date", ""), row.get("driver_name", ""), row.get("township", ""),
-                    row.get("customer_code", ""), row.get("contact_person", ""), row.get("ctns", 0),
-                    row.get("driver_total_ctns", 0), row.get("branch_cost", 0), row.get("total_drop_points", 0),
-                    row.get("cost_per_drop_point", 0), row.get("cost_per_carton", 0), row.get("allocated_cost", 0),
-                    row.get("sales_amount", 0)
+                    row.get("customer_code", ""), row.get("contact_person", ""), float(row.get("ctns", 0)),
+                    float(row.get("driver_total_ctns", 0)), float(row.get("branch_cost", 0)), float(row.get("total_drop_points", 0)),
+                    float(row.get("cost_per_drop_point", 0)), float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
+                    float(row.get("sales_amount", 0))
                 ]
             
             for col_num, val in enumerate(row_data, 1):
                 cell = ws.cell(row=idx, column=col_num, value=val)
                 cell.border = border
-                if isinstance(val, (int, float)):
+                if isinstance(val, (int, float, Decimal)):
                     cell.number_format = '#,##0.00'
 
         for col in ws.columns:
@@ -4150,7 +4027,6 @@ async def export_daily_rate_cut_report(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error exporting daily report: {str(e)}")
 
-
 @app.get("/account/submitted-allocation-report/export")
 async def export_submitted_allocation_report(
     request: Request,
@@ -4162,7 +4038,6 @@ async def export_submitted_allocation_report(
         report_response = await get_submitted_allocation_report(start_date, end_date, user)
         allocation_data = report_response["data"]
 
-        # --- NEW: Apply Dynamic Filters ---
         filters = dict(request.query_params)
         for k in ['start_date', 'end_date']:
             filters.pop(k, None)
@@ -4172,7 +4047,6 @@ async def export_submitted_allocation_report(
             for row in allocation_data:
                 match = True
                 for key, val in filters.items():
-                    # Map the frontend text search filter to actual data key
                     actual_key = 'submitted_at' if key == 'date_filter' else key
                     
                     if actual_key == 'route':
@@ -4182,8 +4056,6 @@ async def export_submitted_allocation_report(
                             break
                     else:
                         row_val = str(row.get(actual_key, '')).lower()
-                        
-                        # Only match against the date part so time doesn't break the filter
                         if actual_key == 'submitted_at':
                             row_val = row_val[:10]
                             
@@ -4193,7 +4065,6 @@ async def export_submitted_allocation_report(
                 if match:
                     filtered_data.append(row)
             allocation_data = filtered_data
-        # ----------------------------------
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -4205,7 +4076,7 @@ async def export_submitted_allocation_report(
         border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
 
         headers = [
-            "Calc ID", "Date", "Doc Date", "SIN No", "Gate Name", "From Loc", "To Loc", "Channel", # Channel is here
+            "Calc ID", "Date", "Doc Date", "SIN No", "Gate Name", "From Loc", "To Loc", "Channel",
             "BU", "Item Code", "Item Name", "Principal", "Brand", "B-Code", "B-Name", "B-Desc", "S-Dept", 
             "S-Principal", "Cartons", "Weight", "Unit Cost", "Total Cost", "Calculation Type"
         ]
@@ -4218,26 +4089,24 @@ async def export_submitted_allocation_report(
             cell.border = border
 
         for idx, row in enumerate(allocation_data, 2):
-            
-            # Extract just the Date (YYYY-MM-DD) from the full timestamp
             raw_date = row.get("submitted_at", "")
             formatted_date = raw_date[:10] if raw_date else ""
 
             row_data = [
                 row.get("calc_id", ""), formatted_date, row.get("doc_date", ""),
                 row.get("sin_no", ""), row.get("gate_name", ""), row.get("from_loc", ""),
-                row.get("to_loc", ""), row.get("channel", ""), row.get("bu", ""), # Ensure channel is at the 8th position
+                row.get("to_loc", ""), row.get("channel", ""), row.get("bu", ""),
                 row.get("item_code", ""), row.get("item_name", ""), row.get("principal", ""),
                 row.get("brand", ""), row.get("b_code", ""), row.get("b_name", ""),
                 row.get("b_desc", ""), row.get("s_dept", ""), row.get("s_principal", ""),
-                row.get("ctns", 0), row.get("weight", 0), row.get("unit_cost", 0),
-                row.get("total_cost", 0), row.get("calculation_type", "")
+                float(row.get("ctns", 0)), float(row.get("weight", 0)), float(row.get("unit_cost", 0)),
+                float(row.get("total_cost", 0)), row.get("calculation_type", "")
             ]
             
             for col_num, val in enumerate(row_data, 1):
                 cell = ws.cell(row=idx, column=col_num, value=val)
                 cell.border = border
-                if isinstance(val, (int, float)):
+                if isinstance(val, (int, float, Decimal)):
                     cell.number_format = '#,##0.00'
 
         for col in ws.columns:
