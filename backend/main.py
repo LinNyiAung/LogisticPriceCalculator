@@ -1610,6 +1610,8 @@ async def get_or_generate_daily_report(target_date: str):
         item_report = [dict(zip(ir_cols, r)) for r in await cursor.fetchall()]
         for it in item_report:
             it["target_date"] = target_date
+            for k in ["ctns","allocated_cost","cost_per_carton","driver_total_ctns","branch_cost","sales_amount"]:
+                it[k] = float(it[k]) if it[k] is not None else 0.0
 
         await cursor.execute("""
             SELECT branch, driver_name, township, customer_code, contact_person,
@@ -1623,6 +1625,8 @@ async def get_or_generate_daily_report(target_date: str):
         township_report = [dict(zip(tr_cols, r)) for r in await cursor.fetchall()]
         for tw in township_report:
             tw["target_date"] = target_date
+            for k in ["ctns","driver_total_ctns","branch_cost","cost_per_carton","allocated_cost","total_drop_points","cost_per_drop_point","sales_amount"]:
+                tw[k] = float(tw[k]) if tw[k] is not None else 0.0
 
         await conn.close()
         return {"item_report": item_report, "township_report": township_report}
@@ -1649,15 +1653,15 @@ def _aggregate_reports(daily_datas: List[dict]):
                     "item_code": item.get("item_code", ""), "item_name": item.get("item_name", ""), 
                     "principal": item.get("principal", ""), "brand": item.get("brand", ""),
                     "ctns": 0.0, "allocated_cost": 0.0, "driver_total_ctns": 0.0, 
-                    "branch_cost": item.get("branch_cost", 0.0), "sales_amount": 0.0
+                    "branch_cost": float(item.get("branch_cost", 0.0)), "sales_amount": 0.0
                 }
             else:
-                item_report_dict[i_key]["branch_cost"] = item.get("branch_cost", item_report_dict[i_key]["branch_cost"])
+                item_report_dict[i_key]["branch_cost"] = float(item.get("branch_cost", item_report_dict[i_key]["branch_cost"]))
 
-            item_report_dict[i_key]["ctns"] += item.get("ctns", 0.0)
-            item_report_dict[i_key]["allocated_cost"] += item.get("allocated_cost", 0.0)
-            item_report_dict[i_key]["sales_amount"] += item.get("sales_amount", 0.0)
-            item_report_dict[i_key]["driver_total_ctns"] += item.get("driver_total_ctns", 0.0)
+            item_report_dict[i_key]["ctns"] += float(item.get("ctns", 0.0))
+            item_report_dict[i_key]["allocated_cost"] += float(item.get("allocated_cost", 0.0))
+            item_report_dict[i_key]["sales_amount"] += float(item.get("sales_amount", 0.0))
+            item_report_dict[i_key]["driver_total_ctns"] += float(item.get("driver_total_ctns", 0.0))
 
         # --- 2. Fix Township Report Aggregation ---
         for tw in data.get("township_report", []):
@@ -1670,16 +1674,16 @@ def _aggregate_reports(daily_datas: List[dict]):
                     "branch": tw.get("branch", ""), "driver_name": tw.get("driver_name", ""), 
                     "township": tw.get("township", ""), "customer_code": tw.get("customer_code", ""), 
                     "contact_person": tw.get("contact_person", ""), "ctns": 0.0, "allocated_cost": 0.0, 
-                    "driver_total_ctns": 0.0, "branch_cost": tw.get("branch_cost", 0.0), "total_drop_points": 0.0, "sales_amount": 0.0
+                    "driver_total_ctns": 0.0, "branch_cost": float(tw.get("branch_cost", 0.0)), "total_drop_points": 0.0, "sales_amount": 0.0
                 }
             else:
-                township_report_dict[t_key]["branch_cost"] = tw.get("branch_cost", township_report_dict[t_key]["branch_cost"])
+                township_report_dict[t_key]["branch_cost"] = float(tw.get("branch_cost", township_report_dict[t_key]["branch_cost"]))
 
-            township_report_dict[t_key]["ctns"] += tw.get("ctns", 0.0)
-            township_report_dict[t_key]["allocated_cost"] += tw.get("allocated_cost", 0.0)
-            township_report_dict[t_key]["sales_amount"] += tw.get("sales_amount", 0.0)
-            township_report_dict[t_key]["driver_total_ctns"] += tw.get("driver_total_ctns", 0.0)
-            township_report_dict[t_key]["total_drop_points"] += tw.get("total_drop_points", 0.0)
+            township_report_dict[t_key]["ctns"] += float(tw.get("ctns", 0.0))
+            township_report_dict[t_key]["allocated_cost"] += float(tw.get("allocated_cost", 0.0))
+            township_report_dict[t_key]["sales_amount"] += float(tw.get("sales_amount", 0.0))
+            township_report_dict[t_key]["driver_total_ctns"] += float(tw.get("driver_total_ctns", 0.0))
+            township_report_dict[t_key]["total_drop_points"] += float(tw.get("total_drop_points", 0.0))
 
     # Recalculate accurate averages across the whole period for items
     item_report_list = list(item_report_dict.values())
