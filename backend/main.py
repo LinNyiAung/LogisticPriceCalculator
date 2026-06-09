@@ -1029,10 +1029,12 @@ def get_rounded_ctns(val):
         f_val = Decimal(str(val))
         if f_val <= 0:
             return Decimal("0")
-        return max(Decimal("1"), round(f_val))
+        # Ensure the returned value is explicitly a Decimal
+        return Decimal(str(max(1, round(f_val))))
     except (ValueError, TypeError):
         return Decimal("0")
-
+    
+    
 async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, manual_total_cost=None, additional_charges=Decimal("0.0")):
     add_charges = Decimal(str(additional_charges)) if additional_charges is not None else Decimal("0.0")
 
