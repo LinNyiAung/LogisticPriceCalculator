@@ -3564,7 +3564,7 @@ const PricingApp = () => {
                         </div>
                     </div>
 
-                    {/* NEW MAPPING CARD */}
+                    {/* MAPPING CARD */}
                     <div className="bg-white rounded-lg shadow-md p-6 xl:col-span-2">
                         <h2 className="text-xl font-bold mb-4 text-rose-700">Location to Branch Mapping</h2>
                         <p className="text-sm text-gray-500 mb-4">Map full destination names to short branch codes (e.g. "Yangon" &rarr; "YGN") for accurate Dashboard comparison.</p>
@@ -3670,6 +3670,103 @@ const PricingApp = () => {
                         </div>
                     </div>
 
+                </div>
+
+                {/* --- NEW: CALCULATION LOGIC EXPLANATIONS SECTION --- */}
+                <div className="mt-8 bg-white rounded-lg shadow-md p-6">
+                    <h2 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                        <Calculator size={24} className="text-blue-600" /> 
+                        Calculation Logic Reference
+                    </h2>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        
+                        {/* 1. Logistics Cost Calculator Card */}
+                        <div className="bg-blue-50 rounded-lg p-6 border border-blue-100 shadow-sm">
+                            <h3 className="text-xl font-bold text-blue-800 mb-4 border-b border-blue-200 pb-2">
+                                Logistics Cost Calculator (Calculated Cost)
+                            </h3>
+                            
+                            <div className="space-y-5 text-sm text-gray-700">
+                                <div>
+                                    <h4 className="font-semibold text-gray-800 mb-1">1. Weight-Based Items</h4>
+                                    <p className="text-xs text-gray-500 mb-2 italic">Items without a fixed price.</p>
+                                    <div className="bg-white p-3 rounded-lg border border-blue-100 font-mono text-xs space-y-1 shadow-sm">
+                                        <div><span className="text-blue-600 font-bold">Effective Rate</span> = Gate Total Cost ÷ Gate Unit Capacity (eg, 100000mmk ÷ 1000kg)</div>
+                                        <div><span className="text-blue-600 font-bold">Item Cost</span> = Item Weight × Effective Rate</div>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <h4 className="font-semibold text-gray-800 mb-1">2. Fixed-Price Items</h4>
+                                    <p className="text-xs text-gray-500 mb-2 italic">Items with a predefined price.</p>
+                                    <div className="bg-white p-3 rounded-lg border border-blue-100 font-mono text-xs shadow-sm">
+                                        <span className="text-blue-600 font-bold">Item Cost</span> = Number of Cartons × Fixed Item Price
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <h4 className="font-semibold text-gray-800 mb-1">3. Manual Total Override</h4>
+                                    <p className="text-xs text-gray-500 mb-2 italic">If a custom total cost is entered.</p>
+                                    <div className="bg-white p-3 rounded-lg border border-blue-100 font-mono text-xs space-y-1 shadow-sm">
+                                        <div><span className="text-blue-600 font-bold">Remaining Budget</span> = Manual Total Cost - Sum of all Weight-Based Costs</div>
+                                        <div><span className="text-blue-600 font-bold">New Fixed Price per Carton</span> = Remaining Budget ÷ Total Fixed-Price Cartons</div>
+                                        <div><span className="text-blue-600 font-bold">Item Cost (Fixed-Price)</span> = Number of Cartons × New Fixed Price per Carton</div>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <h4 className="font-semibold text-gray-800 mb-1">4. Additional Charges Allocation</h4>
+                                    <p className="text-xs text-gray-500 mb-2 italic">If extra fees are added to the route.</p>
+                                    <div className="bg-white p-3 rounded-lg border border-blue-100 font-mono text-xs space-y-1 shadow-sm">
+                                        <div><span className="text-blue-600 font-bold">Item Proportion</span> = Item Cartons ÷ Total Cartons in Shipment</div>
+                                        <div><span className="text-blue-600 font-bold">Item Extra Fee</span> = Total Additional Charges × Item Proportion</div>
+                                    </div>
+                                </div>
+
+                                <div className="pt-4 border-t border-blue-200 mt-4">
+                                    <h4 className="font-bold text-gray-800 mb-2">Final Cost per Item</h4>
+                                    <div className="bg-blue-600 text-white p-3 rounded-lg font-mono text-sm font-bold shadow-md">
+                                        Final Item Cost = Item Cost + Item Extra Fee
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 2. Daily Allocation Report Card */}
+                        <div className="bg-green-50 rounded-lg p-6 border border-green-100 shadow-sm">
+                            <h3 className="text-xl font-bold text-green-800 mb-4 border-b border-green-200 pb-2">
+                                Daily Allocation Report (Rate Cart)
+                            </h3>
+                            
+                            <div className="space-y-6 text-sm text-gray-700">
+                                <div>
+                                    <h4 className="font-semibold text-gray-800 mb-1">1. Driver's Cost per Carton</h4>
+                                    <p className="text-xs text-gray-500 mb-2 italic">How much it costs the branch to deliver a single carton that day.</p>
+                                    <div className="bg-white p-3 rounded-lg border border-green-100 font-mono text-xs shadow-sm">
+                                        <span className="text-green-600 font-bold">Cost per Carton</span> = Branch Rate Cost ÷ Driver's Total Cartons for the Day
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <h4 className="font-semibold text-gray-800 mb-1">2. Item Allocated Cost</h4>
+                                    <p className="text-xs text-gray-500 mb-2 italic">How much of the driver's total cost is assigned to a specific item.</p>
+                                    <div className="bg-white p-3 rounded-lg border border-green-100 font-mono text-xs shadow-sm">
+                                        <span className="text-green-600 font-bold">Allocated Cost</span> = Item Cartons × Cost per Carton
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <h4 className="font-semibold text-gray-800 mb-1">3. Cost per Drop Point</h4>
+                                    <p className="text-xs text-gray-500 mb-2 italic">Used in Township Reports to calculate how much it costs to deliver to one specific customer location.</p>
+                                    <div className="bg-white p-3 rounded-lg border border-green-100 font-mono text-xs shadow-sm">
+                                        <span className="text-green-600 font-bold">Cost per Drop Point</span> = Branch Rate Cost ÷ Total Unique Customers Visited by Driver
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
                 </div>
             </div>
         </div>
