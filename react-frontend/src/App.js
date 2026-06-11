@@ -4213,7 +4213,14 @@ const PricingApp = () => {
           {notification && <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${getNotificationColor(notification.type)}`}>{notification.message}</div>}
           {renderNavigation()}
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Logistics Cost Calculator</h1>
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">
+            Logistics Cost Calculator 
+            {currentHistoryId !== null && (
+                <span className="text-xl text-blue-600 ml-3 bg-blue-50 px-3 py-1 rounded border border-blue-200 align-middle">
+                ID: #{currentHistoryId}
+                </span>
+            )}
+            </h1>
             <div className="bg-white rounded-lg border p-6 mb-6">
               <h2 className="text-xl font-bold mb-4">Select Doc Nums (Transfer IDs) <span className="text-red-500">*</span></h2>
               <div className="relative mb-4">
@@ -4440,7 +4447,7 @@ const PricingApp = () => {
                 ) : (
                     <div className="flex gap-4 mb-6 p-4 bg-gray-100 rounded-lg justify-center border border-gray-200">
                         <span className="text-gray-500 font-semibold flex items-center gap-2">
-                            <History size={20} /> Loaded Saved Calculation (View Only)
+                            <History size={20} /> Loaded Saved Calculation ID: #{currentHistoryId} (View Only)
                         </span>
                     </div>
                 )}
