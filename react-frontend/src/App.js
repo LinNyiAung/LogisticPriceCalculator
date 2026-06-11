@@ -612,6 +612,7 @@ const PricingApp = () => {
   const [isManualTotalCostEnabled, setIsManualTotalCostEnabled] = useState(false);
   const [additionalCharges, setAdditionalCharges] = useState('');
   const [estimatedTotalCost, setEstimatedTotalCost] = useState(null);
+  const [historicalGate, setHistoricalGate] = useState(null);
 
   const [historyData, setHistoryData] = useState([]);
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
@@ -1289,12 +1290,22 @@ const PricingApp = () => {
   const handleSaveCalculation = async (isUpdate = false) => {
     if (!selectedChannel) { showNotification('Channel is required to save.', 'error'); return; }
     setIsSaving(true);
+    
+    // Find the currently active gate details before saving
+    const currentGate = gates.find(g => g.gate_name === selectedGate && g.from_loc === selectedFrom && g.to_loc === selectedTo);
+
     try {
       const payload = {
-        id: isUpdate ? currentHistoryId : null, gate_name: selectedGate, from_loc: selectedFrom, to_loc: selectedTo,
-        doc_nums: selectedDocNums.map(String), manual_total_cost: (manualTotalCost && isManualTotalCostEnabled) ? parseFloat(manualTotalCost) : null,
-        additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0, final_total_cost: calculatedTotalCost, channel: selectedChannel, status: "saved",
-        calculated_products: calculatedProducts
+        id: isUpdate ? currentHistoryId : null, 
+        gate_name: selectedGate, from_loc: selectedFrom, to_loc: selectedTo,
+        doc_nums: selectedDocNums.map(String), 
+        manual_total_cost: (manualTotalCost && isManualTotalCostEnabled) ? parseFloat(manualTotalCost) : null,
+        additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0, 
+        final_total_cost: calculatedTotalCost, channel: selectedChannel, status: "saved",
+        calculated_products: calculatedProducts,
+        gate_cost: currentGate ? currentGate.cost : null,
+        gate_uom: currentGate ? currentGate.uom : null,
+        gate_unit: currentGate ? currentGate.unit : null,
       };
       const response = await authFetch(`${API_URL}/history/save`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (response.ok) { showNotification('Calculation saved successfully', 'success'); loadHistory(); } 
@@ -1579,21 +1590,21 @@ const PricingApp = () => {
     if (!docNum) return;
     if (selectedDocNums.includes(docNum)) { showNotification('Doc Num already selected', 'info'); return; }
     const newSelection = [...selectedDocNums, docNum];
-    setSelectedDocNums(newSelection); setSelectedFrom(''); setSelectedTo(''); setSelectedGate(''); setSelectedChannel(''); setCalculationType(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setAdditionalCharges(''); setCurrentHistoryId(null);
+    setSelectedDocNums(newSelection); setSelectedFrom(''); setSelectedTo(''); setSelectedGate(''); setSelectedChannel(''); setCalculationType(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setAdditionalCharges(''); setCurrentHistoryId(null); setHistoricalGate(null);
     fetchAggregatedProducts(newSelection);
   };
   const handleRemoveDocNum = (docNum) => {
     const newSelection = selectedDocNums.filter(id => id !== docNum);
-    setSelectedDocNums(newSelection); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setCurrentHistoryId(null);
+    setSelectedDocNums(newSelection); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setCurrentHistoryId(null); setHistoricalGate(null);
     fetchAggregatedProducts(newSelection);
   };
   const handleFromChange = (val) => {
-    setSelectedFrom(val); setSelectedTo(''); setSelectedGate(''); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null);
+    setSelectedFrom(val); setSelectedTo(''); setSelectedGate(''); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null); setHistoricalGate(null);
     if (val) loadToLocations(val); else setToLocations([]);
   };
-  const handleToChange = (val) => { setSelectedTo(val); setSelectedGate(''); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null); };
+  const handleToChange = (val) => { setSelectedTo(val); setSelectedGate(''); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null); setHistoricalGate(null);};
   const handleGateChange = (gateName) => {
-    setSelectedGate(gateName); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null);
+    setSelectedGate(gateName); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null); setHistoricalGate(null);
     const gateInfo = gates.find(g => g.gate_name === gateName && g.from_loc === selectedFrom && g.to_loc === selectedTo);
     if (gateInfo) setCalculationType(gateInfo.calculation_type);
   };
@@ -1617,6 +1628,12 @@ const PricingApp = () => {
         setSelectedChannel(fullRecord.channel || ''); 
         setManualTotalCost(fullRecord.manual_total_cost || ''); 
         setAdditionalCharges(fullRecord.additional_charges || '');
+
+        setHistoricalGate({
+            cost: fullRecord.gate_cost,
+            uom: fullRecord.gate_uom,
+            unit: fullRecord.gate_unit
+        });
         
         // 2. Set calculation type
         const gateInfo = gates.find(g => 
@@ -4260,13 +4277,58 @@ const PricingApp = () => {
             )}
 
             {products.length > 0 && selectedGate && (() => {
-              const currentGate = gates.find(g => g.gate_name === selectedGate && g.from_loc === selectedFrom && g.to_loc === selectedTo);
+              // 1. Get the live gate for comparison
+              const liveGate = gates.find(g => g.gate_name === selectedGate && g.from_loc === selectedFrom && g.to_loc === selectedTo);
+              
+              // 2. Check if we have a saved historical snapshot
+              const isHistoricalRecord = currentHistoryId !== null && historicalGate?.cost !== null && historicalGate?.cost !== undefined;
+              
+              // 3. Determine if the live gate has changed compared to the snapshot
+              let hasGateChanged = false;
+              
+              // NEW: ONLY run the comparison if the master gates list has actually loaded
+              if (isHistoricalRecord && gates.length > 0) {
+                if (!liveGate) {
+                   hasGateChanged = true; // The gate was deleted entirely from the live database
+                } else {
+                   // Compare values (converted to Numbers to avoid string/decimal mismatch bugs)
+                   const histCost = Number(historicalGate.cost);
+                   const liveCost = Number(liveGate.cost);
+                   
+                   if (histCost !== liveCost || historicalGate.uom !== liveGate.uom || historicalGate.unit !== liveGate.unit) {
+                       hasGateChanged = true;
+                   }
+                }
+              }
+
+              // 4. Decide what to display: Historical if loaded, otherwise Live
+              const displayCost = isHistoricalRecord ? historicalGate.cost : (liveGate?.cost || null);
+              const displayUom = isHistoricalRecord ? historicalGate.uom : (liveGate?.uom || null);
+              const displayUnit = isHistoricalRecord ? historicalGate.unit : (liveGate?.unit || 1);
+
               return (
                 <div className="bg-blue-50 rounded-lg border-2 border-blue-300 p-6 mb-6">
                   <div className="flex items-center justify-between flex-wrap gap-4">
-                    <div><h3 className="text-lg font-semibold text-gray-800">Calculation Type</h3><p className="text-gray-600 mt-1">{calculationType === 'gate_pricing' ? 'Gate Pricing Calculation' : calculationType === 'direct_pricing' ? 'Direct Pricing Calculation' : 'Unknown Type'}</p></div>
-                    {currentGate && currentGate.cost !== null && (<div className="text-center"><p className="text-sm text-gray-600">Gate Cost</p><p className="text-xl font-bold text-green-600">{formatNumber(currentGate.cost)} MMK {currentGate.uom && <span className="text-sm font-medium text-gray-500 ml-1">/ {currentGate.unit || 1} {currentGate.uom}</span>}</p></div>)}
-                    <div className="text-right"><p className="text-sm text-gray-600">Route</p><p className="text-xl font-bold text-blue-600">{selectedFrom} &rarr; {selectedTo}</p></div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800">Calculation Type</h3>
+                      <p className="text-gray-600 mt-1">{calculationType === 'gate_pricing' ? 'Gate Pricing Calculation' : calculationType === 'direct_pricing' ? 'Direct Pricing Calculation' : 'Unknown Type'}</p>
+                    </div>
+                    
+                    {displayCost !== null && (
+                      <div className="text-center">
+                        <p className="text-sm text-gray-600">
+                           Gate Cost {hasGateChanged && <span className="font-bold text-indigo-500">(Historical)</span>}
+                        </p>
+                        <p className="text-xl font-bold text-green-600">
+                          {formatNumber(displayCost)} MMK {displayUom && <span className="text-sm font-medium text-gray-500 ml-1">/ {displayUnit} {displayUom}</span>}
+                        </p>
+                      </div>
+                    )}
+                    
+                    <div className="text-right">
+                      <p className="text-sm text-gray-600">Route</p>
+                      <p className="text-xl font-bold text-blue-600">{selectedFrom} &rarr; {selectedTo}</p>
+                    </div>
                   </div>
                 </div>
               );

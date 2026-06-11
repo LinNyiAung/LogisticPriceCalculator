@@ -94,6 +94,17 @@ async def startup_db():
                 claimed_at         NVARCHAR(30)
             )
         """)
+        
+        
+        # Add historical gate snapshot columns if they don't exist
+        await cursor.execute("""
+            IF COL_LENGTH('Calculation_History', 'gate_cost') IS NULL
+            BEGIN
+                ALTER TABLE Calculation_History ADD gate_cost DECIMAL(18,6);
+                ALTER TABLE Calculation_History ADD gate_uom NVARCHAR(100);
+                ALTER TABLE Calculation_History ADD gate_unit INT;
+            END
+        """)
 
         # Calculation_Products table
         await cursor.execute("""
@@ -613,6 +624,10 @@ class CalculationSaveRequest(BaseModel):
     channel: Optional[str] = ""
     status: Optional[str] = "saved"
     calculated_products: List[Any] = []
+    # --- NEW FIELDS ---
+    gate_cost: Optional[Decimal] = None
+    gate_uom: Optional[str] = None
+    gate_unit: Optional[int] = None
 
 class ReferenceItem(BaseModel):
     name: str
@@ -2107,13 +2122,16 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
             await cursor.execute("""
                 UPDATE Calculation_History 
                 SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
-                    doc_nums = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?, channel = ?,
-                    status = ?
+                    doc_nums = ?, manual_total_cost = ?, additional_charges = ?, 
+                    final_total_cost = ?, channel = ?, status = ?,
+                    gate_cost = ?, gate_uom = ?, gate_unit = ?
                 WHERE id = ?
             """, (
                 created_at, data.gate_name, data.from_loc, data.to_loc,
                 doc_nums_json, data.manual_total_cost, data.additional_charges,
-                data.final_total_cost, data.channel, data.status, data.id
+                data.final_total_cost, data.channel, data.status, 
+                data.gate_cost, data.gate_uom, data.gate_unit, 
+                data.id
             ))
             await _upsert_products(data.id, data.calculated_products)
             message = "Calculation updated successfully"
@@ -2128,12 +2146,14 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
             await cursor.execute("""
                 INSERT INTO Calculation_History 
                 ([id], [created_at], [gate_name], [from_loc], [to_loc], 
-                 [doc_nums], [manual_total_cost], [additional_charges], [final_total_cost], [channel], [status], [created_by])
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 [doc_nums], [manual_total_cost], [additional_charges], [final_total_cost], 
+                 [channel], [status], [created_by], [gate_cost], [gate_uom], [gate_unit])
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 new_id, created_at, data.gate_name, data.from_loc, data.to_loc,
                 doc_nums_json, data.manual_total_cost, data.additional_charges, data.final_total_cost,
-                data.channel, data.status, user["username"]
+                data.channel, data.status, user["username"],
+                data.gate_cost, data.gate_uom, data.gate_unit # <-- Add these
             ))
             await _upsert_products(new_id, data.calculated_products)
             message = "Calculation saved successfully"
