@@ -114,7 +114,6 @@ async def startup_db():
                 calc_id            BIGINT NOT NULL,
                 code               NVARCHAR(255),
                 name               NVARCHAR(500),
-                uom                NVARCHAR(100),
                 weight             DECIMAL(18,6),
                 doc_date           NVARCHAR(30),
                 sin_no             NVARCHAR(255),
@@ -2097,13 +2096,13 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
             for p in products:
                 await cursor.execute("""
                     INSERT INTO Calculation_Products
-                    (calc_id, code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
+                    (calc_id, code, name, weight, doc_date, sin_no, principal, brand, ctns, bu,
                      b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
                      calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """, (
                     calc_id,
-                    p.get("code", ""), p.get("name", ""), p.get("uom", ""),
+                    p.get("code", ""), p.get("name", ""),
                     Decimal(str(p.get("weight", 0))), p.get("doc_date", ""), p.get("sin_no", ""),
                     p.get("principal", ""), p.get("brand", ""), Decimal(str(p.get("ctns", 0))),
                     p.get("bu", ""), p.get("b_code", ""), p.get("b_name", ""),
@@ -2213,13 +2212,13 @@ async def get_history_record(record_id: int, user: dict = Depends(require_permis
         record['doc_nums'] = json.loads(record['doc_nums']) if record['doc_nums'] else []
 
         await cursor.execute("""
-            SELECT code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
+            SELECT code, name, weight, doc_date, sin_no, principal, brand, ctns, bu,
                    b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
                    calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost
             FROM Calculation_Products WHERE calc_id = ?
         """, (record_id,))
         prod_rows = await cursor.fetchall()
-        prod_cols = ["code","name","uom","weight","doc_date","sin_no","principal","brand","ctns","bu",
+        prod_cols = ["code","name","weight","doc_date","sin_no","principal","brand","ctns","bu",
                      "b_code","b_name","b_dept","b_principal","b_desc","s_dept","s_principal",
                      "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost"]
         record['calculated_products'] = [dict(zip(prod_cols, r)) for r in prod_rows]
@@ -2295,7 +2294,7 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
         record['doc_nums'] = json.loads(record['doc_nums']) if record['doc_nums'] else []
         
         await cursor.execute("""
-            SELECT code, name, uom, weight, doc_date, sin_no, principal, brand, ctns, bu,
+            SELECT code, name, weight, doc_date, sin_no, principal, brand, ctns, bu,
                    b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
                    calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost
             FROM Calculation_Products WHERE calc_id = ?
@@ -2307,7 +2306,7 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
             await conn.close() # Close connection before raising an error
             raise HTTPException(status_code=404, detail="Historical product data not found for this saved record.")
             
-        prod_cols = ["code","name","uom","weight","doc_date","sin_no","principal","brand","ctns","bu",
+        prod_cols = ["code","name","weight","doc_date","sin_no","principal","brand","ctns","bu",
                      "b_code","b_name","b_dept","b_principal","b_desc","s_dept","s_principal",
                      "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost"]
         products = [dict(zip(prod_cols, r)) for r in prod_rows]
