@@ -1299,6 +1299,7 @@ const PricingApp = () => {
         id: isUpdate ? currentHistoryId : null, 
         gate_name: selectedGate, from_loc: selectedFrom, to_loc: selectedTo,
         doc_nums: selectedDocNums.map(String), 
+        total_weight: totalWeight,
         manual_total_cost: (manualTotalCost && isManualTotalCostEnabled) ? parseFloat(manualTotalCost) : null,
         additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0, 
         final_total_cost: calculatedTotalCost, channel: selectedChannel, status: "saved",

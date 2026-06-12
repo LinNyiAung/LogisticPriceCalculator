@@ -82,6 +82,7 @@ async def startup_db():
                 from_loc           NVARCHAR(255),
                 to_loc             NVARCHAR(255),
                 doc_nums           NVARCHAR(MAX),
+                total_weight       DECIMAL(18,6),
                 manual_total_cost  DECIMAL(18,6),
                 additional_charges DECIMAL(18,6),
                 final_total_cost   DECIMAL(18,6),
@@ -103,6 +104,14 @@ async def startup_db():
                 ALTER TABLE Calculation_History ADD gate_cost DECIMAL(18,6);
                 ALTER TABLE Calculation_History ADD gate_uom NVARCHAR(100);
                 ALTER TABLE Calculation_History ADD gate_unit INT;
+            END
+        """)
+
+        # Add total_weight column if it doesn't exist
+        await cursor.execute("""
+            IF COL_LENGTH('Calculation_History', 'total_weight') IS NULL
+            BEGIN
+                ALTER TABLE Calculation_History ADD total_weight DECIMAL(18,6);
             END
         """)
 
@@ -617,6 +626,7 @@ class CalculationSaveRequest(BaseModel):
     from_loc: str
     to_loc: str
     doc_nums: List[str]
+    total_weight: Optional[Decimal] = None
     manual_total_cost: Optional[Decimal] = None
     additional_charges: Optional[Decimal] = Decimal("0.0")
     final_total_cost: Decimal
@@ -2119,19 +2129,12 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
                 await conn.close()
                 raise HTTPException(status_code=404, detail="Record to update not found")
             await cursor.execute("""
-                UPDATE Calculation_History 
-                SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, 
-                    doc_nums = ?, manual_total_cost = ?, additional_charges = ?, 
-                    final_total_cost = ?, channel = ?, status = ?,
-                    gate_cost = ?, gate_uom = ?, gate_unit = ?
-                WHERE id = ?
-            """, (
-                created_at, data.gate_name, data.from_loc, data.to_loc,
-                doc_nums_json, data.manual_total_cost, data.additional_charges,
-                data.final_total_cost, data.channel, data.status, 
-                data.gate_cost, data.gate_uom, data.gate_unit, 
-                data.id
-            ))
+                    UPDATE Calculation_History 
+                    SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, doc_nums = ?, total_weight = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?, channel = ?, status = ?, gate_cost = ?, gate_uom = ?, gate_unit = ?
+                    WHERE id = ?
+                """, (
+                    created_at, data.gate_name, data.from_loc, data.to_loc, doc_nums_json, data.total_weight, data.manual_total_cost, data.additional_charges, data.final_total_cost, data.channel, data.status, data.gate_cost, data.gate_uom, data.gate_unit, data.id
+                ))
             await _upsert_products(data.id, data.calculated_products)
             message = "Calculation updated successfully"
             await log_user_activity(user['username'], "UPDATE_CALCULATION", f"Updated saved calculation ID: {data.id}")
@@ -2143,17 +2146,11 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
                 await asyncio.sleep(1)
 
             await cursor.execute("""
-                INSERT INTO Calculation_History 
-                ([id], [created_at], [gate_name], [from_loc], [to_loc], 
-                 [doc_nums], [manual_total_cost], [additional_charges], [final_total_cost], 
-                 [channel], [status], [created_by], [gate_cost], [gate_uom], [gate_unit])
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                new_id, created_at, data.gate_name, data.from_loc, data.to_loc,
-                doc_nums_json, data.manual_total_cost, data.additional_charges, data.final_total_cost,
-                data.channel, data.status, user["username"],
-                data.gate_cost, data.gate_uom, data.gate_unit # <-- Add these
-            ))
+                    INSERT INTO Calculation_History ([id], [created_at], [gate_name], [from_loc], [to_loc], [doc_nums], [total_weight], [manual_total_cost], [additional_charges], [final_total_cost], [channel], [status], [created_by], [gate_cost], [gate_uom], [gate_unit])
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    new_id, created_at, data.gate_name, data.from_loc, data.to_loc, doc_nums_json, data.total_weight, data.manual_total_cost, data.additional_charges, data.final_total_cost, data.channel, data.status, user["username"], data.gate_cost, data.gate_uom, data.gate_unit
+                ))
             await _upsert_products(new_id, data.calculated_products)
             message = "Calculation saved successfully"
             await log_user_activity(user['username'], "SAVE_CALCULATION", f"Saved new calculation ID: {new_id}")
