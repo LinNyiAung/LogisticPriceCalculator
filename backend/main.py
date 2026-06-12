@@ -115,6 +115,15 @@ async def startup_db():
             END
         """)
 
+        # Add warehouse code columns to Calculation_Products if they don't exist
+        await cursor.execute("""
+            IF COL_LENGTH('Calculation_Products', 'FromWhsCode') IS NULL
+            BEGIN
+                ALTER TABLE Calculation_Products ADD FromWhsCode NVARCHAR(255);
+                ALTER TABLE Calculation_Products ADD ToWhsCode NVARCHAR(255);
+            END
+        """)
+
         # Calculation_Products table
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Calculation_Products' AND xtype='U')
@@ -1074,7 +1083,7 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
         if pg_nums:
             placeholders = ','.join('?' * len(pg_nums))
             query_pg = f"""
-                SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(BatchQtyByCtn), MAX(Brand), 'PG'
+                SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(BatchQtyByCtn), MAX(Brand), 'PG', MAX(FromWhsCod), MAX(WhsCode)
                 FROM PG_Transfer_Details 
                 WHERE DocNum IN ({placeholders}) 
                 GROUP BY DocNum, ItemCode
@@ -1086,7 +1095,7 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
         if pdg_nums:
             placeholders = ','.join('?' * len(pdg_nums))
             query_pdg = f"""
-                SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(QtyCtn), MAX(Brand), 'PDG'
+                SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), MAX(DocDate), DocNum, MAX(Principal), SUM(QtyCtn), MAX(Brand), 'PDG', MAX(FromWhsCod), MAX(WhsCode)
                 FROM PDG_Transfer_Details 
                 WHERE DocNum IN ({placeholders}) 
                 GROUP BY DocNum, ItemCode
@@ -1196,7 +1205,9 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
                 "b_principal": bc_info.get("Principal", ""),
                 "b_desc": bc_info.get("Description", ""),
                 "s_dept": sd_info.get("Dept", ""),
-                "s_principal": sd_info.get("Principal", "")
+                "s_principal": sd_info.get("Principal", ""),
+                "FromWhsCode": row[10] if len(row) > 10 and row[10] else "",
+                "ToWhsCode": row[11] if len(row) > 11 and row[11] else ""
             }
             
             p_info = item_pricing.get(item_data['code'], {})
@@ -1275,7 +1286,9 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
                 "b_desc": bc_info.get("Description", ""), "s_dept": sd_info.get("Dept", ""), 
                 "s_principal": sd_info.get("Principal", ""), "calculation_type": "direct", 
                 "system_rate": unit_cost if unit_cost > Decimal("0") else None,
-                "unit_cost": unit_cost, "total_cost": item_cost
+                "unit_cost": unit_cost, "total_cost": item_cost,
+                "FromWhsCode": row[10] if len(row) > 10 and row[10] else "",
+                "ToWhsCode": row[11] if len(row) > 11 and row[11] else ""
             })
 
     if add_charges != Decimal("0") and calculated_products:
@@ -2108,8 +2121,9 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
                     INSERT INTO Calculation_Products
                     (calc_id, code, name, weight, doc_date, sin_no, principal, brand, ctns, bu,
                      b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
-                     calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                     calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost,
+                     FromWhsCode, ToWhsCode)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """, (
                     calc_id,
                     p.get("code", ""), p.get("name", ""),
@@ -2120,7 +2134,8 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
                     p.get("s_dept", ""), p.get("s_principal", ""),
                     p.get("calculation_type", ""), p.get("system_rate"),
                     Decimal(str(p.get("unit_cost", 0))), Decimal(str(p.get("total_cost", 0))),
-                    p.get("standard_unit_cost")
+                    p.get("standard_unit_cost"),
+                    p.get("FromWhsCode", ""), p.get("ToWhsCode", "")
                 ))
 
         if data.id:
@@ -2211,13 +2226,15 @@ async def get_history_record(record_id: int, user: dict = Depends(require_permis
         await cursor.execute("""
             SELECT code, name, weight, doc_date, sin_no, principal, brand, ctns, bu,
                    b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
-                   calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost
+                   calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost,
+                   FromWhsCode, ToWhsCode
             FROM Calculation_Products WHERE calc_id = ?
         """, (record_id,))
         prod_rows = await cursor.fetchall()
         prod_cols = ["code","name","weight","doc_date","sin_no","principal","brand","ctns","bu",
                      "b_code","b_name","b_dept","b_principal","b_desc","s_dept","s_principal",
-                     "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost"]
+                     "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost",
+                     "FromWhsCode", "ToWhsCode"]
         record['calculated_products'] = [dict(zip(prod_cols, r)) for r in prod_rows]
         await conn.close()
         return record
@@ -2293,7 +2310,8 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
         await cursor.execute("""
             SELECT code, name, weight, doc_date, sin_no, principal, brand, ctns, bu,
                    b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
-                   calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost
+                   calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost,
+                   FromWhsCode, ToWhsCode
             FROM Calculation_Products WHERE calc_id = ?
         """, (record_id,))
         
@@ -2305,7 +2323,8 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
             
         prod_cols = ["code","name","weight","doc_date","sin_no","principal","brand","ctns","bu",
                      "b_code","b_name","b_dept","b_principal","b_desc","s_dept","s_principal",
-                     "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost"]
+                     "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost",
+                     "FromWhsCode", "ToWhsCode"]
         products = [dict(zip(prod_cols, r)) for r in prod_rows]
         
         await conn.close()
@@ -3003,21 +3022,21 @@ async def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_n
         
         if pg_nums:
             placeholders = ','.join('?' * len(pg_nums))
-            await cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand), 'PG' FROM PG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode", pg_nums)
+            await cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand), 'PG', MAX(FromWhsCod), MAX(WhsCode) FROM PG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode", pg_nums)
             rows = await cursor.fetchall()
             for row in rows:
                 weight = Decimal(str(row[3])) if row[3] else Decimal("0.0")
                 total_weight += weight
-                products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7], "sin_no": f"{row[7]} - {row[4]}"})
+                products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7], "sin_no": f"{row[7]} - {row[4]}", "FromWhsCode": row[8] or "", "ToWhsCode": row[9] or ""})
                 
         if pdg_nums:
             placeholders = ','.join('?' * len(pdg_nums))
-            await cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), DocNum, SUM(QtyCtn), MAX(Brand), 'PDG' FROM PDG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode", pdg_nums)
+            await cursor.execute(f"SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), DocNum, SUM(QtyCtn), MAX(Brand), 'PDG', MAX(FromWhsCod), MAX(WhsCode) FROM PDG_Transfer_Details WHERE DocNum IN ({placeholders}) GROUP BY DocNum, ItemCode", pdg_nums)
             rows = await cursor.fetchall()
             for row in rows:
                 weight = Decimal(str(row[3])) if row[3] else Decimal("0.0")
                 total_weight += weight
-                products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7], "sin_no": f"{row[7]} - {row[4]}"})
+                products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7], "sin_no": f"{row[7]} - {row[4]}", "FromWhsCode": row[8] or "", "ToWhsCode": row[9] or ""})
         
         await conn.close()
         return {"products": products, "total_weight": total_weight}
@@ -3033,9 +3052,9 @@ async def get_products_by_doc_num(doc_num: str):
         cursor = await conn.cursor()
 
         if is_pdg:
-            await cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), DocNum, SUM(QtyCtn), MAX(Brand), 'PDG' FROM PDG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
+            await cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(LineTotalWeight), DocNum, SUM(QtyCtn), MAX(Brand), 'PDG', MAX(FromWhsCod), MAX(WhsCode) FROM PDG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
         else:
-            await cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand), 'PG' FROM PG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
+            await cursor.execute("SELECT ItemCode, MAX(Dscription), MAX(UoM), SUM(ItemWeight), DocNum, SUM(BatchQtyByCtn), MAX(Brand), 'PG', MAX(FromWhsCod), MAX(WhsCode) FROM PG_Transfer_Details WHERE DocNum = ? GROUP BY DocNum, ItemCode ORDER BY DocNum, ItemCode", (actual_num,))
             
         rows = await cursor.fetchall()
         if not rows:
@@ -3046,7 +3065,7 @@ async def get_products_by_doc_num(doc_num: str):
         for row in rows:
             weight = Decimal(str(row[3])) if row[3] else Decimal("0.0")
             total_weight += weight
-            products.append({"item_code": row[0] or "", "description": row[1] or "", "uom": row[2] or "", "item_weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7]})
+            products.append({"item_code": row[0] or "", "description": row[1] or "", "uom": row[2] or "", "item_weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7], "FromWhsCode": row[8] or "", "ToWhsCode": row[9] or ""})
             
         await conn.close()
         return {"products": products, "total_weight": total_weight}
