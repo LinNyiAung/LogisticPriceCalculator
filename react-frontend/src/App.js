@@ -771,6 +771,7 @@ const [overrideDate, setOverrideDate] = useState('');
   const [refUOMs, setRefUOMs] = useState([]);
   const [refChannels, setRefChannels] = useState([]); 
   const [selectedChannel, setSelectedChannel] = useState(''); 
+  const [refDepartments, setRefDepartments] = useState([]);
   const [newRefValue, setNewRefValue] = useState('');
   const [refLocationMappings, setRefLocationMappings] = useState([]);
   const [newMapToLoc, setNewMapToLoc] = useState('');
@@ -1149,6 +1150,9 @@ const [overrideDate, setOverrideDate] = useState('');
 
           const chanResp = await authFetch(`${API_URL}/references/channels`);
           if (chanResp.ok) setRefChannels(await chanResp.json());
+
+          const deptResp = await authFetch(`${API_URL}/references/departments`);
+          if (deptResp.ok) setRefDepartments(await deptResp.json());
 
           // NEW API CALL
           const mapResp = await authFetch(`${API_URL}/references/location-mappings`);
@@ -3870,6 +3874,24 @@ const [overrideDate, setOverrideDate] = useState('');
                                 <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
                                     <span>{c}</span>
                                     {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteReference('channels', c)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h2 className="text-xl font-bold mb-4 text-orange-700">Departments</h2>
+                        {permissions.includes('add_reference') && (
+                            <div className="flex gap-2 mb-4">
+                                <input disabled={isSaving} type="text" placeholder="New Department..." className="border p-2 rounded flex-1" id="new-dept" />
+                                <button disabled={isSaving} onClick={() => { addReference('departments', document.getElementById('new-dept').value); document.getElementById('new-dept').value = ''; }} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-70 disabled:cursor-not-allowed">Add</button>
+                            </div>
+                        )}
+                        <div className="border rounded max-h-96 overflow-y-auto">
+                            {refDepartments.map((d, i) => (
+                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
+                                    <span>{d}</span>
+                                    {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteReference('departments', d)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
                                 </div>
                             ))}
                         </div>

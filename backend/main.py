@@ -297,6 +297,14 @@ async def startup_db():
             )
         """)
 
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Departments' AND xtype='U')
+            CREATE TABLE Departments (
+                id   INT IDENTITY(1,1) PRIMARY KEY,
+                name NVARCHAR(255) UNIQUE
+            )
+        """)
+
         # --- Branch Code Mapping Table ---
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Branch_Code' AND xtype='U')
@@ -2106,6 +2114,52 @@ async def delete_ref_channel(name: str, user: dict = Depends(require_permission(
         await conn.commit()
         await conn.close()
         await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted channel: {name}")
+        return {"message": "Deleted successfully"}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.get("/references/departments")
+async def get_ref_departments():
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT name FROM Departments ORDER BY name")
+        rows = await cursor.fetchall()
+        await conn.close()
+        return [row[0] for row in rows]
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.post("/references/departments")
+async def add_ref_department(item: ReferenceItem, user: dict = Depends(require_permission("add_reference"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        try:
+            await cursor.execute("INSERT INTO Departments (name) VALUES (?)", (item.name,))
+            await conn.commit()
+        except Exception as e:
+            if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
+                await conn.close()
+                raise HTTPException(status_code=400, detail="Department already exists")
+            raise
+        await conn.close()
+        await log_user_activity(user['username'], "ADD_REFERENCE", f"Added department: {item.name}")
+        return {"message": "Added successfully"}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.delete("/references/departments/{name}")
+async def delete_ref_department(name: str, user: dict = Depends(require_permission("delete_reference"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("DELETE FROM Departments WHERE name = ?", (name,))
+        if cursor.rowcount == 0:
+             await conn.close()
+             raise HTTPException(status_code=404, detail="Not found")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted department: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
