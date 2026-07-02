@@ -655,6 +655,107 @@ const PricingApp = () => {
     calc_id: '', date_filter: '', sin_no: '', gate_name: '', route: '', channel: '', bu: '', item_code: '', item_name: '', principal: '', brand: '', ctns: '', unit_cost: '', total_cost: '' 
   });
 
+const [overrideDate, setOverrideDate] = useState('');
+  const [overrideDriver, setOverrideDriver] = useState('');
+  const [overrideAmount, setOverrideAmount] = useState('');
+  const [overrideDriversList, setOverrideDriversList] = useState([]);
+  const [overridesList, setOverridesList] = useState([]); // NEW: State for override list
+  const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
+  const [deletingOverrideId, setDeletingOverrideId] = useState(null);
+
+  // Fetch drivers and existing overrides dynamically when a date is selected
+  useEffect(() => {
+      if (overrideDate) {
+          authFetch(`${API_URL}/account/daily-override/drivers?target_date=${overrideDate}`)
+              .then(res => res.json())
+              .then(data => setOverrideDriversList(data.drivers || []))
+              .catch(err => console.error(err));
+              
+          authFetch(`${API_URL}/account/daily-override/list?target_date=${overrideDate}`)
+              .then(res => res.json())
+              .then(data => setOverridesList(data || []))
+              .catch(err => console.error(err));
+      } else {
+          setOverrideDriversList([]);
+          setOverridesList([]);
+      }
+  }, [overrideDate, token]);
+
+  const handleOverrideSubmit = async (e) => {
+      e.preventDefault();
+      if (!overrideDate || !overrideDriver || !overrideAmount) return;
+      setIsSubmittingOverride(true);
+      try {
+          const res = await authFetch(`${API_URL}/account/daily-override`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  target_date: overrideDate,
+                  driver_name: overrideDriver,
+                  additional_amount: parseFloat(overrideAmount)
+              })
+          });
+          if (res.ok) {
+              showNotification('Override saved and report recalculated', 'success');
+              setOverrideAmount('');
+              setOverrideDriver('');
+              
+              // Refresh override list
+              const listRes = await authFetch(`${API_URL}/account/daily-override/list?target_date=${overrideDate}`);
+              if (listRes.ok) setOverridesList(await listRes.json());
+
+              // Immediately refresh data if we're looking at the same date
+              if (dailyReportDate === overrideDate || isDateRange) {
+                  fetchDailyReport(dailyReportDate, dailyReportStartDate, dailyReportEndDate, isDateRange);
+              }
+          } else {
+              const err = await res.json();
+              showNotification(getErrorMessage(err), 'error');
+          }
+      } catch (error) {
+          showNotification(`Error: ${error.message}`, 'error');
+      } finally {
+          setIsSubmittingOverride(false);
+      }
+  };
+
+  const handleEditOverride = (ov) => {
+      setOverrideDriver(ov.driver_name);
+      setOverrideAmount(ov.additional_amount);
+      // Auto scrolls up to form if far away
+      window.scrollTo({ top: 0, behavior: 'smooth' }); 
+  };
+
+  const handleDeleteOverride = async (id, target_date) => {
+      if (!window.confirm("Delete this override?")) return;
+      
+      setDeletingOverrideId(id); // Set the specific ID to loading state
+      
+      try {
+          const res = await authFetch(`${API_URL}/account/daily-override/${id}?target_date=${target_date}`, {
+              method: 'DELETE'
+          });
+          if (res.ok) {
+              showNotification('Override deleted', 'success');
+              
+              // Refresh override list
+              const listRes = await authFetch(`${API_URL}/account/daily-override/list?target_date=${target_date}`);
+              if (listRes.ok) setOverridesList(await listRes.json());
+              
+              if (dailyReportDate === target_date || isDateRange) {
+                  fetchDailyReport(dailyReportDate, dailyReportStartDate, dailyReportEndDate, isDateRange);
+              }
+          } else {
+              const err = await res.json();
+              showNotification(getErrorMessage(err), 'error');
+          }
+      } catch (error) {
+          showNotification(`Error: ${error.message}`, 'error');
+      } finally {
+          setDeletingOverrideId(null); // Clear loading state when done
+      }
+  };
+
   const [usersList, setUsersList] = useState([]);
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -686,6 +787,9 @@ const PricingApp = () => {
   const [showRateCartLogModal, setShowRateCartLogModal] = useState(false);
   const [rateCartLogsData, setRateCartLogsData] = useState([]);
   const [currentLogRateCartLocation, setCurrentLogRateCartLocation] = useState('');
+  const [showOverrideLogModal, setShowOverrideLogModal] = useState(false);
+  const [overrideLogsData, setOverrideLogsData] = useState([]);
+  const [currentLogOverrideName, setCurrentLogOverrideName] = useState('');
 
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
 
@@ -1749,6 +1853,19 @@ const PricingApp = () => {
               setShowRateCartLogModal(true); 
           } 
           else showNotification('Failed to fetch rate cart logs', 'error');
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+  };
+
+
+  const fetchOverrideLogs = async (ov) => {
+      try {
+          const response = await authFetch(`${API_URL}/account/daily-override/logs?target_date=${encodeURIComponent(ov.target_date)}&driver_name=${encodeURIComponent(ov.driver_name)}`);
+          if (response.ok) { 
+              setOverrideLogsData(await response.json()); 
+              setCurrentLogOverrideName(`${ov.driver_name} (${ov.target_date})`); 
+              setShowOverrideLogModal(true); 
+          } 
+          else showNotification('Failed to fetch override logs', 'error');
       } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
@@ -3190,6 +3307,75 @@ const PricingApp = () => {
                           )}
                       </div>
 
+                      {(activeDailyTab === 'item' || activeDailyTab === 'township') && (
+                          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-6">
+                              <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2"><Edit2 size={18} className="text-blue-600"/> Manage Manual Driver Overrides</h3>
+                              <form onSubmit={handleOverrideSubmit} className="flex flex-wrap items-end gap-4 mb-4">
+                                  <div className="flex-1 min-w-[150px]">
+                                      <label className="block text-sm font-semibold mb-1 text-gray-700">Date <span className="text-red-500">*</span></label>
+                                      <input type="date" value={overrideDate} onChange={e => setOverrideDate(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" required />
+                                  </div>
+                                  <div className="flex-1 min-w-[200px]">
+                                      <label className="block text-sm font-semibold mb-1 text-gray-700">Driver Name <span className="text-red-500">*</span></label>
+                                      <select value={overrideDriver} onChange={e => setOverrideDriver(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" required>
+                                          <option value="">-- Select Driver --</option>
+                                          {overrideDriversList.map(d => <option key={d} value={d}>{d}</option>)}
+                                      </select>
+                                  </div>
+                                  <div className="flex-1 min-w-[150px]">
+                                      <label className="block text-sm font-semibold mb-1 text-gray-700">Additional Amount <span className="text-red-500">*</span></label>
+                                      <input type="number" step="any" value={overrideAmount} onChange={e => setOverrideAmount(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" placeholder="e.g. 5000" required />
+                                  </div>
+                                  <button type="submit" disabled={isSubmittingOverride || !overrideDate || !overrideDriver || !overrideAmount} className="bg-blue-600 text-white px-6 py-2 rounded font-semibold hover:bg-blue-700 disabled:opacity-50 transition">
+                                      {isSubmittingOverride ? 'Saving...' : 'Save Override'}
+                                  </button>
+                              </form>
+
+                              {/* NEW: Overrides Table */}
+                              {overridesList.length > 0 && (
+                                  <div className="mt-4 border-t pt-4">
+                                      <h4 className="text-sm font-bold text-gray-700 mb-2">Existing Overrides for {overrideDate}</h4>
+                                      <div className="overflow-x-auto border rounded">
+                                          <table className="w-full border-collapse text-sm">
+                                              <thead className="bg-gray-100">
+                                                  <tr>
+                                                      <th className="border p-2 text-left">Driver Name</th>
+                                                      <th className="border p-2 text-left">Amount (MMK)</th>
+                                                      <th className="border p-2 text-center w-24">Actions</th>
+                                                  </tr>
+                                              </thead>
+                                              <tbody>
+                                                  {overridesList.map(ov => (
+                                                      <tr key={ov.id} className="hover:bg-gray-50">
+                                                          <td className="border p-2 font-semibold text-gray-700">{ov.driver_name}</td>
+                                                          <td className="border p-2 text-blue-600 font-bold">{formatNumber(ov.additional_amount)}</td>
+                                                          <td className="border p-2 text-center">
+                                                              <div className="flex justify-center gap-2">
+                                                                  <button type="button" onClick={() => fetchOverrideLogs(ov)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs">
+                                                                      <Clock size={14} />
+                                                                  </button>
+                                                                  <button type="button" onClick={() => handleEditOverride(ov)} disabled={deletingOverrideId === ov.id} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 disabled:opacity-50" title="Edit">
+                                                                      <Edit2 size={14} />
+                                                                  </button>
+                                                                  <button type="button" onClick={() => handleDeleteOverride(ov.id, ov.target_date)} disabled={deletingOverrideId === ov.id} className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-50 flex items-center justify-center min-w-[22px]" title="Delete">
+                                                                      {deletingOverrideId === ov.id ? (
+                                                                          <span className="text-[10px] font-bold px-1 animate-pulse">...</span>
+                                                                      ) : (
+                                                                          <Trash2 size={14} />
+                                                                      )}
+                                                                  </button>
+                                                              </div>
+                                                          </td>
+                                                      </tr>
+                                                  ))}
+                                              </tbody>
+                                          </table>
+                                      </div>
+                                  </div>
+                              )}
+                          </div>
+                      )}
+
                       <div className="flex flex-wrap border-b mb-6 border-gray-200">
                           <button
                               className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${
@@ -3532,6 +3718,7 @@ const PricingApp = () => {
                       )}
                   </div>
               </div>
+              {showOverrideLogModal && <LogTableModal logs={overrideLogsData} title={currentLogOverrideName} onClose={() => setShowOverrideLogModal(false)} />}
           </div>
       );
   }

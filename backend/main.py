@@ -174,6 +174,18 @@ async def startup_db():
             )
         """)
 
+        # Daily_Driver_Override table
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Daily_Driver_Override' AND xtype='U')
+            CREATE TABLE Daily_Driver_Override (
+                id                INT IDENTITY(1,1) PRIMARY KEY,
+                target_date       NVARCHAR(10) NOT NULL,
+                driver_name       NVARCHAR(255) NOT NULL,
+                additional_amount DECIMAL(18,6) NOT NULL,
+                UNIQUE (target_date, driver_name)
+            )
+        """)
+
         # Daily_Item_Report table
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Daily_Item_Report' AND xtype='U')
@@ -365,6 +377,21 @@ async def startup_db():
                 id          INT IDENTITY(1,1) PRIMARY KEY,
                 to_location NVARCHAR(255) UNIQUE,
                 branch_code NVARCHAR(100)
+            )
+        """)
+        
+        # --- Driver Override Change Log Table ---
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Driver_Override_Change_Log' AND xtype='U')
+            CREATE TABLE Driver_Override_Change_Log (
+                id          INT IDENTITY(1,1) PRIMARY KEY,
+                target_date NVARCHAR(10),
+                driver_name NVARCHAR(255),
+                changed_by  NVARCHAR(255),
+                change_date NVARCHAR(30),
+                field_name  NVARCHAR(255),
+                old_value   NVARCHAR(MAX),
+                new_value   NVARCHAR(MAX)
             )
         """)
         
@@ -576,6 +603,11 @@ class SDCodeData(BaseModel):
 class LocationMappingItem(BaseModel):
     to_location: str
     branch_code: str
+
+class DriverOverrideData(BaseModel):
+    target_date: str
+    driver_name: str
+    additional_amount: Decimal
 
 class RateCartData(BaseModel):
     location: str
@@ -1429,6 +1461,12 @@ async def get_rate_carts_for_date(target_date: str) -> dict:
 async def _get_daily_report_data(target_date: str):
     rate_carts = await get_rate_carts_for_date(target_date)
 
+    conn_log = await get_logistic_connection()
+    cursor_log = await conn_log.cursor()
+    await cursor_log.execute("SELECT driver_name, additional_amount FROM Daily_Driver_Override WHERE target_date = ?", (target_date,))
+    overrides = {row[0].strip(): Decimal(str(row[1])) for row in await cursor_log.fetchall()}
+    await conn_log.close()
+
     conn_dwbi = await get_dwbi_connection()
     cursor_dwbi = await conn_dwbi.cursor()
     query = """
@@ -1487,11 +1525,14 @@ async def _get_daily_report_data(target_date: str):
         d_total = driver_totals.get((b, d), Decimal("0.0"))
         b_cost = rate_carts.get(b, Decimal("0.0"))
         
-        cost_per_ctn = (b_cost / d_total) if d_total > Decimal("0.0") else Decimal("0.0")
+        driver_extra = overrides.get(d, Decimal("0.0"))
+        effective_branch_cost = b_cost + driver_extra
+        
+        cost_per_ctn = (effective_branch_cost / d_total) if d_total > Decimal("0.0") else Decimal("0.0")
         allocated_cost = g["ctns"] * cost_per_ctn
 
         d_total_customers = Decimal(str(len(driver_customers.get((b, d), set()))))
-        cost_per_drop_point = (b_cost / d_total_customers) if d_total_customers > Decimal("0.0") else Decimal("0.0")
+        cost_per_drop_point = (effective_branch_cost / d_total_customers) if d_total_customers > Decimal("0.0") else Decimal("0.0")
 
         i_key = (b, d, g["item_code"])
         if i_key not in item_report_dict:
@@ -1500,7 +1541,7 @@ async def _get_daily_report_data(target_date: str):
                 "bu": g["bu"], "branch": b, "driver_name": d, "item_code": g["item_code"],
                 "item_name": g["item_name"], "principal": g["principal"], "brand": g["brand"],
                 "ctns": Decimal("0.0"), "allocated_cost": Decimal("0.0"), "cost_per_carton": cost_per_ctn,
-                "driver_total_ctns": d_total, "branch_cost": b_cost, "sales_amount": Decimal("0.0")
+                "driver_total_ctns": d_total, "branch_cost": effective_branch_cost, "sales_amount": Decimal("0.0")
             }
         item_report_dict[i_key]["ctns"] += g["ctns"]
         item_report_dict[i_key]["allocated_cost"] += allocated_cost
@@ -1512,7 +1553,7 @@ async def _get_daily_report_data(target_date: str):
                 "target_date": target_date, 
                 "branch": b, "driver_name": g["driver_name"], "township": g["township"], 
                 "customer_code": g["customer_code"], "contact_person": g["contact_person"], 
-                "ctns": Decimal("0.0"), "driver_total_ctns": d_total, "branch_cost": b_cost,
+                "ctns": Decimal("0.0"), "driver_total_ctns": d_total, "branch_cost": effective_branch_cost,
                 "cost_per_carton": cost_per_ctn, "allocated_cost": Decimal("0.0"),
                 "total_drop_points": d_total_customers, "cost_per_drop_point": cost_per_drop_point,
                 "sales_amount": Decimal("0.0")
@@ -1695,6 +1736,143 @@ def _aggregate_reports(daily_datas: List[dict]):
         "item_report": item_report_list,
         "township_report": township_report_list
     }
+
+@app.post("/account/daily-override")
+async def save_daily_override(data: DriverOverrideData, user: dict = Depends(require_permission("view_daily_report"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        
+        await cursor.execute("SELECT additional_amount FROM Daily_Driver_Override WHERE target_date = ? AND driver_name = ?", (data.target_date, data.driver_name))
+        existing = await cursor.fetchone()
+        
+        username = user['username']
+        change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if existing:
+            old_amount = existing[0]
+            old_cost_str = str(old_amount)
+            new_cost_str = str(data.additional_amount)
+            if old_cost_str != new_cost_str:
+                await cursor.execute("""
+                    INSERT INTO Driver_Override_Change_Log (target_date, driver_name, changed_by, change_date, field_name, old_value, new_value)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (data.target_date, data.driver_name, username, change_date, 'Override Amount', old_cost_str, new_cost_str))
+        else:
+            await cursor.execute("""
+                INSERT INTO Driver_Override_Change_Log (target_date, driver_name, changed_by, change_date, field_name, old_value, new_value)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (data.target_date, data.driver_name, username, change_date, 'Record Created', None, str(data.additional_amount)))
+
+        await cursor.execute("""
+            MERGE Daily_Driver_Override AS target
+            USING (SELECT ? AS target_date, ? AS driver_name, ? AS additional_amount) AS source
+            ON target.target_date = source.target_date AND target.driver_name = source.driver_name
+            WHEN MATCHED THEN UPDATE SET additional_amount = source.additional_amount
+            WHEN NOT MATCHED THEN INSERT (target_date, driver_name, additional_amount) VALUES (source.target_date, source.driver_name, source.additional_amount);
+        """, (data.target_date, data.driver_name, data.additional_amount))
+        
+        await conn.commit()
+        await conn.close()
+        
+        await log_user_activity(username, "ADD_EDIT_DRIVER_OVERRIDE", f"Set override {data.additional_amount} for {data.driver_name} on {data.target_date}")
+        
+        # Trigger an automatic recalculation for this date
+        await generate_and_save_daily_report(data.target_date)
+        
+        return {"message": "Override saved and report recalculated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving override: {str(e)}")
+        
+@app.get("/account/daily-override/drivers")
+async def get_drivers_for_date(target_date: str, user: dict = Depends(get_current_user)):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT DISTINCT driver_name FROM Daily_Item_Report WHERE target_date = ?", (target_date,))
+        drivers = [row[0] for row in await cursor.fetchall() if row[0]]
+        await conn.close()
+        return {"drivers": drivers}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching drivers: {str(e)}")
+
+class OverrideLogItem(BaseModel):
+    id: int
+    target_date: str
+    driver_name: str
+    changed_by: str
+    change_date: str
+    field_name: str
+    old_value: Optional[str]
+    new_value: Optional[str]
+
+@app.get("/account/daily-override/logs", response_model=List[OverrideLogItem])
+async def get_daily_override_logs(
+    target_date: str = Query(...), 
+    driver_name: str = Query(...), 
+    user: dict = Depends(get_current_user)
+):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("""
+            SELECT id, target_date, driver_name, changed_by, change_date, field_name, old_value, new_value 
+            FROM Driver_Override_Change_Log 
+            WHERE target_date = ? AND driver_name = ? 
+            ORDER BY change_date DESC
+        """, (target_date, driver_name))
+        rows = await cursor.fetchall()
+        logs = [{"id": r[0], "target_date": r[1], "driver_name": r[2], "changed_by": r[3], "change_date": r[4], "field_name": r[5], "old_value": r[6], "new_value": r[7]} for r in rows]
+        await conn.close()
+        return logs
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=f"Error fetching override logs: {str(e)}")
+
+@app.get("/account/daily-override/list")
+async def get_daily_overrides(target_date: str, user: dict = Depends(require_permission("view_daily_report"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT id, target_date, driver_name, additional_amount FROM Daily_Driver_Override WHERE target_date = ?", (target_date,))
+        rows = await cursor.fetchall()
+        await conn.close()
+        return [{"id": r[0], "target_date": r[1], "driver_name": r[2], "additional_amount": r[3]} for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching overrides: {str(e)}")
+
+@app.delete("/account/daily-override/{override_id}")
+async def delete_daily_override(override_id: int, target_date: str, user: dict = Depends(require_permission("view_daily_report"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        
+        await cursor.execute("SELECT driver_name, additional_amount FROM Daily_Driver_Override WHERE id = ?", (override_id,))
+        record = await cursor.fetchone()
+        if not record:
+            await conn.close()
+            raise HTTPException(status_code=404, detail="Override not found")
+            
+        driver_name = record[0]
+        amount = record[1]
+        username = user['username']
+        change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        await cursor.execute("""
+            INSERT INTO Driver_Override_Change_Log (target_date, driver_name, changed_by, change_date, field_name, old_value, new_value)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (target_date, driver_name, username, change_date, 'Record Deleted', str(amount), None))
+
+        await cursor.execute("DELETE FROM Daily_Driver_Override WHERE id = ?", (override_id,))
+            
+        await conn.commit()
+        await conn.close()
+        
+        await log_user_activity(username, "DELETE_DRIVER_OVERRIDE", f"Deleted override ID {override_id}")
+        await generate_and_save_daily_report(target_date)
+        
+        return {"message": "Override deleted and report recalculated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting override: {str(e)}")
 
 @app.get("/account/daily-rate-cut-report")
 async def get_daily_rate_cart_report(
