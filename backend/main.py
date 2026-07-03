@@ -107,6 +107,14 @@ async def startup_db():
             END
         """)
 
+        # Add POSM total cost column if it doesn't exist
+        await cursor.execute("""
+            IF COL_LENGTH('Calculation_History', 'posm_total_cost') IS NULL
+            BEGIN
+                ALTER TABLE Calculation_History ADD posm_total_cost DECIMAL(18,6);
+            END
+        """)
+
         # Add total_weight column if it doesn't exist
         await cursor.execute("""
             IF COL_LENGTH('Calculation_History', 'total_weight') IS NULL
@@ -151,6 +159,29 @@ async def startup_db():
                 unit_cost          DECIMAL(18,6),
                 total_cost         DECIMAL(18,6),
                 standard_unit_cost DECIMAL(18,6),
+                FOREIGN KEY (calc_id) REFERENCES Calculation_History(id)
+            )
+        """)
+
+        # Calculation_POSM_Products table (POSM Calculation line items, separate from Calculation_Products)
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Calculation_POSM_Products' AND xtype='U')
+            CREATE TABLE Calculation_POSM_Products (
+                id          INT IDENTITY(1,1) PRIMARY KEY,
+                calc_id     BIGINT NOT NULL,
+                department  NVARCHAR(255),
+                item_name   NVARCHAR(500),
+                uom         NVARCHAR(100),
+                quantity    DECIMAL(18,6),
+                unit_cost   DECIMAL(18,6),
+                total_cost  DECIMAL(18,6),
+                b_code      NVARCHAR(255),
+                b_name      NVARCHAR(500),
+                b_dept      NVARCHAR(255),
+                b_principal NVARCHAR(255),
+                b_desc      NVARCHAR(500),
+                s_dept      NVARCHAR(255),
+                s_principal NVARCHAR(255),
                 FOREIGN KEY (calc_id) REFERENCES Calculation_History(id)
             )
         """)
@@ -669,6 +700,12 @@ class ItemPricingData(BaseModel):
     transportation_cost: str
     original_item_code: Optional[str] = None
 
+class POSMItem(BaseModel):
+    department: Optional[str] = ""
+    item_name: str
+    uom: Optional[str] = ""
+    quantity: Decimal
+
 class CalculationSaveRequest(BaseModel):
     id: Optional[int] = None
     gate_name: str
@@ -686,6 +723,10 @@ class CalculationSaveRequest(BaseModel):
     gate_cost: Optional[Decimal] = None
     gate_uom: Optional[str] = None
     gate_unit: Optional[int] = None
+    # --- POSM CALCULATION (optional) ---
+    posm_items: List[Any] = []
+    posm_total_cost: Optional[Decimal] = None
+    posm_products: List[Any] = []
 
 class ReferenceItem(BaseModel):
     name: str
@@ -1108,7 +1149,7 @@ def get_rounded_ctns(val):
         return Decimal("0")
     
     
-async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, manual_total_cost=None, additional_charges=Decimal("0.0")):
+async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, manual_total_cost=None, additional_charges=Decimal("0.0"), posm_items=None, posm_total_cost=None):
     add_charges = Decimal(str(additional_charges)) if additional_charges is not None else Decimal("0.0")
 
     pg_nums = [str(d).replace("PG - ", "").replace("PG-", "") for d in doc_nums if not str(d).startswith("PDG")]
@@ -1343,12 +1384,48 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
     calculated_products.sort(key=lambda x: (x.get('sin_no', ''), x['code']))
     total_cost += add_charges
     estimated_total_cost += add_charges
-    
+
+    # --- POSM Calculation (optional add-on) ---
+    # POSM items don't have a Principal like normal transfer products, so they are matched
+    # against a dedicated "POSM" entry (log_pric = 'POSM') in Branch_Code / SD_Code mapping.
+    posm_products = []
+    posm_cost_dec = Decimal("0.0")
+    if posm_items:
+        posm_cost_dec = Decimal(str(posm_total_cost)) if posm_total_cost is not None else Decimal("0.0")
+        total_qty = sum(Decimal(str(pi.get('quantity', 0) or 0)) for pi in posm_items)
+        posm_bc_info = branch_code_map.get("posm", {})
+        posm_sd_info = sd_code_map.get("posm", {})
+
+        for pi in posm_items:
+            qty = Decimal(str(pi.get('quantity', 0) or 0))
+            unit_cost = (posm_cost_dec / total_qty) if total_qty > Decimal("0") else Decimal("0.0")
+            item_total_cost = qty * unit_cost
+            posm_products.append({
+                "department": pi.get('department', ''),
+                "item_name": pi.get('item_name', ''),
+                "uom": pi.get('uom', ''),
+                "quantity": qty,
+                "unit_cost": unit_cost,
+                "total_cost": item_total_cost,
+                "principal": "POSM",
+                "b_code": posm_bc_info.get("Code", ""),
+                "b_name": posm_bc_info.get("Name", ""),
+                "b_dept": posm_bc_info.get("Dept", ""),
+                "b_principal": posm_bc_info.get("Principal", ""),
+                "b_desc": posm_bc_info.get("Description", ""),
+                "s_dept": posm_sd_info.get("Dept", ""),
+                "s_principal": posm_sd_info.get("Principal", ""),
+            })
+
+        total_cost += posm_cost_dec
+        estimated_total_cost += posm_cost_dec
+
     return {
         "calculation_type": calc_type, "gate_name": gate_name, "from_loc": matched_from_loc,
         "to_loc": matched_to_loc, "cost": cost, "additional_charges": add_charges,
         "calculated_products": calculated_products, "total_cost": total_cost,
-        "estimated_total_cost": estimated_total_cost
+        "estimated_total_cost": estimated_total_cost,
+        "posm_products": posm_products, "posm_total_cost": posm_cost_dec
     }
 
 # --- Rate Cart Endpoints ---
@@ -2370,6 +2447,24 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
                     p.get("FromWhsCode", ""), p.get("ToWhsCode", "")
                 ))
 
+        async def _upsert_posm_products(calc_id, posm_products):
+            await cursor.execute("DELETE FROM Calculation_POSM_Products WHERE calc_id = ?", (calc_id,))
+            for p in posm_products:
+                await cursor.execute("""
+                    INSERT INTO Calculation_POSM_Products
+                    (calc_id, department, item_name, uom, quantity, unit_cost, total_cost,
+                     b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """, (
+                    calc_id,
+                    p.get("department", ""), p.get("item_name", ""), p.get("uom", ""),
+                    Decimal(str(p.get("quantity", 0))), Decimal(str(p.get("unit_cost", 0))),
+                    Decimal(str(p.get("total_cost", 0))),
+                    p.get("b_code", ""), p.get("b_name", ""), p.get("b_dept", ""),
+                    p.get("b_principal", ""), p.get("b_desc", ""),
+                    p.get("s_dept", ""), p.get("s_principal", "")
+                ))
+
         if data.id:
             await cursor.execute("SELECT id FROM Calculation_History WHERE id = ?", (data.id,))
             if not await cursor.fetchone():
@@ -2377,12 +2472,13 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
                 raise HTTPException(status_code=404, detail="Record to update not found")
             await cursor.execute("""
                     UPDATE Calculation_History 
-                    SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, doc_nums = ?, total_weight = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?, channel = ?, status = ?, gate_cost = ?, gate_uom = ?, gate_unit = ?
+                    SET created_at = ?, gate_name = ?, from_loc = ?, to_loc = ?, doc_nums = ?, total_weight = ?, manual_total_cost = ?, additional_charges = ?, final_total_cost = ?, channel = ?, status = ?, gate_cost = ?, gate_uom = ?, gate_unit = ?, posm_total_cost = ?
                     WHERE id = ?
                 """, (
-                    created_at, data.gate_name, data.from_loc, data.to_loc, doc_nums_json, data.total_weight, data.manual_total_cost, data.additional_charges, data.final_total_cost, data.channel, data.status, data.gate_cost, data.gate_uom, data.gate_unit, data.id
+                    created_at, data.gate_name, data.from_loc, data.to_loc, doc_nums_json, data.total_weight, data.manual_total_cost, data.additional_charges, data.final_total_cost, data.channel, data.status, data.gate_cost, data.gate_uom, data.gate_unit, data.posm_total_cost, data.id
                 ))
             await _upsert_products(data.id, data.calculated_products)
+            await _upsert_posm_products(data.id, data.posm_products)
             message = "Calculation updated successfully"
             await log_user_activity(user['username'], "UPDATE_CALCULATION", f"Updated saved calculation ID: {data.id}")
         else:
@@ -2393,12 +2489,13 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
                 await asyncio.sleep(1)
 
             await cursor.execute("""
-                    INSERT INTO Calculation_History ([id], [created_at], [gate_name], [from_loc], [to_loc], [doc_nums], [total_weight], [manual_total_cost], [additional_charges], [final_total_cost], [channel], [status], [created_by], [gate_cost], [gate_uom], [gate_unit])
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO Calculation_History ([id], [created_at], [gate_name], [from_loc], [to_loc], [doc_nums], [total_weight], [manual_total_cost], [additional_charges], [final_total_cost], [channel], [status], [created_by], [gate_cost], [gate_uom], [gate_unit], [posm_total_cost])
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    new_id, created_at, data.gate_name, data.from_loc, data.to_loc, doc_nums_json, data.total_weight, data.manual_total_cost, data.additional_charges, data.final_total_cost, data.channel, data.status, user["username"], data.gate_cost, data.gate_uom, data.gate_unit
+                    new_id, created_at, data.gate_name, data.from_loc, data.to_loc, doc_nums_json, data.total_weight, data.manual_total_cost, data.additional_charges, data.final_total_cost, data.channel, data.status, user["username"], data.gate_cost, data.gate_uom, data.gate_unit, data.posm_total_cost
                 ))
             await _upsert_products(new_id, data.calculated_products)
+            await _upsert_posm_products(new_id, data.posm_products)
             message = "Calculation saved successfully"
             await log_user_activity(user['username'], "SAVE_CALCULATION", f"Saved new calculation ID: {new_id}")
 
@@ -2468,6 +2565,17 @@ async def get_history_record(record_id: int, user: dict = Depends(require_permis
                      "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost",
                      "FromWhsCode", "ToWhsCode"]
         record['calculated_products'] = [dict(zip(prod_cols, r)) for r in prod_rows]
+
+        await cursor.execute("""
+            SELECT department, item_name, uom, quantity, unit_cost, total_cost,
+                   b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal
+            FROM Calculation_POSM_Products WHERE calc_id = ?
+        """, (record_id,))
+        posm_rows = await cursor.fetchall()
+        posm_cols = ["department", "item_name", "uom", "quantity", "unit_cost", "total_cost",
+                     "b_code", "b_name", "b_dept", "b_principal", "b_desc", "s_dept", "s_principal"]
+        record['posm_products'] = [dict(zip(posm_cols, r)) for r in posm_rows]
+
         await conn.close()
         return record
     except HTTPException: raise
@@ -2507,21 +2615,23 @@ async def get_history(user: dict = Depends(require_permission("view_history"))):
 
 @app.delete("/history/{record_id}")
 async def delete_history_item(record_id: int, user: dict = Depends(require_permission("delete_history"))):
+    conn = None
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         await cursor.execute("SELECT id FROM Calculation_History WHERE id = ?", (record_id,))
         if not await cursor.fetchone():
-            await conn.close()
             raise HTTPException(status_code=404, detail="Record not found")
         await cursor.execute("DELETE FROM Calculation_Products WHERE calc_id = ?", (record_id,))
+        await cursor.execute("DELETE FROM Calculation_POSM_Products WHERE calc_id = ?", (record_id,))
         await cursor.execute("DELETE FROM Calculation_History WHERE id = ?", (record_id,))
         await conn.commit()
-        await conn.close()
         await log_user_activity(user['username'], "DELETE_CALCULATION", f"Deleted calculation ID: {record_id}")
         return {"message": "Record deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting record: {str(e)}")
+    finally:
+        if conn: await conn.close()
 
 @app.get("/history/{record_id}/download")
 async def download_history_excel(record_id: int, user: dict = Depends(require_permission("view_history"))):
@@ -2589,6 +2699,9 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
         claim_month = now.strftime("%B") 
         claim_year = now.year
         
+        cost_details_delivery_date = ""
+        cost_details_sin_no = ""
+
         for idx, item in enumerate(products, 1):
             row_num = idx + 1
             doc_date_val = item.get('doc_date')
@@ -2609,6 +2722,11 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
 
             raw_sin_no = str(item.get('sin_no', ''))
             clean_sin_no = raw_sin_no.replace('PDG - ', '').replace('PDG-', '').replace('PG - ', '').replace('PG-', '').strip()
+
+            # Capture the first row's Delivery Date / SIN No so the POSM Details sheet can reuse them
+            if idx == 1:
+                cost_details_delivery_date = doc_date_str
+                cost_details_sin_no = clean_sin_no
 
             ws.cell(row=row_num, column=1, value=idx).border = border
             ws.cell(row=row_num, column=2, value=claim_date_str).border = border
@@ -2658,6 +2776,82 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
                     if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
                 except: pass
             ws.column_dimensions[col_letter].width = max_length + 2
+
+        # --- POSM Calculation sheet (optional) ---
+        conn2 = await get_logistic_connection()
+        cursor2 = await conn2.cursor()
+        await cursor2.execute("""
+            SELECT department, item_name, uom, quantity, unit_cost, total_cost
+            FROM Calculation_POSM_Products WHERE calc_id = ?
+        """, (record_id,))
+        posm_rows = await cursor2.fetchall()
+
+        # Location -> Branch code mapping (e.g. "Yangon" -> "YGN"), used for the description fields below
+        await cursor2.execute("SELECT to_location, branch_code FROM Location_Mapping")
+        loc_mapping_rows = await cursor2.fetchall()
+        await conn2.close()
+
+        LOCATION_CODE_MAP = {}
+        for loc_row in loc_mapping_rows:
+            if loc_row[0] and loc_row[1]:
+                LOCATION_CODE_MAP[str(loc_row[0]).strip().upper()] = str(loc_row[1]).strip()
+
+        def _to_loc_code(loc_name):
+            if not loc_name:
+                return ""
+            return LOCATION_CODE_MAP.get(str(loc_name).strip().upper(), loc_name)
+
+        if posm_rows:
+            ws2 = wb.create_sheet("POSM Details")
+            posm_headers = [
+                "No", "Claim Date", "Delivery Date", "SIN No", "Area", "Name", "Department", "Principal", "Brand",
+                "Item", "Quantity", "Unit Cost", "Total cost", "Uom", "Gate", "Channel", "Month", "Year",
+                "Description for Account", "Description with pcs and price", "Branch", "B-Dept", "B-Principal",
+                "S-Dept", "S-Principal", "Calculation ID"
+            ]
+            for col_num, header in enumerate(posm_headers, 1):
+                cell = ws2.cell(row=1, column=col_num, value=header)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center')
+                cell.border = border
+
+            from_loc_code = _to_loc_code(record['from_loc'])
+            to_loc_code = _to_loc_code(record['to_loc'])
+            posm_desc_account = f"POSM-Transport Charges-{from_loc_code} to {to_loc_code}"
+
+            for idx, r in enumerate(posm_rows, 1):
+                row_num = idx + 1
+                department, item_name, uom, quantity, unit_cost, total_cost = r
+
+                qty_val = Decimal(str(quantity or 0))
+                qty_formatted = int(qty_val) if float(qty_val).is_integer() else qty_val
+                unit_cost_val = Decimal(str(unit_cost or 0))
+                unit_cost_formatted = int(unit_cost_val) if float(unit_cost_val).is_integer() else round(unit_cost_val, 2)
+
+                posm_desc_with_price = f"{posm_desc_account}- {qty_formatted} pcs @{unit_cost_formatted} kyats"
+
+                row_vals = [
+                    idx, claim_date_str, cost_details_delivery_date, cost_details_sin_no, record['to_loc'],
+                    "Transport Charges-POSM", department or "", "POSM", "POSM", item_name or "", float(qty_val),
+                    float(unit_cost_val), float(total_cost or 0), uom or "", record['gate_name'],
+                    record.get('channel', ''), claim_month, claim_year, posm_desc_account, posm_desc_with_price,
+                    record['to_loc'], "Logistics", "POSM", "Logistics", "POSM", record_id
+                ]
+                for col_num, val in enumerate(row_vals, 1):
+                    cell = ws2.cell(row=row_num, column=col_num, value=val)
+                    cell.border = border
+                    if isinstance(val, (int, float, Decimal)) and col_num in (11, 12, 13):
+                        cell.number_format = '#,##0.00'
+
+            for col in ws2.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    try:
+                        if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
+                    except: pass
+                ws2.column_dimensions[col_letter].width = max_length + 2
 
         output = io.BytesIO()
         wb.save(output)
@@ -3198,17 +3392,29 @@ async def calculate_with_gate(
     doc_nums: List[str] = Query(...),
     manual_total_cost: Optional[Decimal] = None, 
     additional_charges: Optional[Decimal] = Decimal("0.0"),
+    posm_items_json: Optional[str] = Query(None),
+    posm_total_cost: Optional[Decimal] = None,
     user: dict = Depends(require_permission("view_calculator"))
 ):
     try:
         if not doc_nums: raise HTTPException(status_code=400, detail="No Doc Nums provided")
+
+        posm_items = None
+        if posm_items_json:
+            try:
+                posm_items = json.loads(posm_items_json)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid POSM items payload")
+
         return await _perform_calculation_logic(
             gate_name=gate_name, 
             doc_nums=doc_nums, 
             from_loc=from_loc,
             to_loc=to_loc,
             manual_total_cost=manual_total_cost, 
-            additional_charges=additional_charges
+            additional_charges=additional_charges,
+            posm_items=posm_items,
+            posm_total_cost=posm_total_cost
         )
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")

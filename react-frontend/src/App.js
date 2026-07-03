@@ -614,6 +614,12 @@ const PricingApp = () => {
   const [estimatedTotalCost, setEstimatedTotalCost] = useState(null);
   const [historicalGate, setHistoricalGate] = useState(null);
 
+  // --- POSM Calculation state ---
+  const [posmItems, setPosmItems] = useState([]); // {department, item_name, uom, quantity}
+  const [posmTotalCost, setPosmTotalCost] = useState('');
+  const [posmDraft, setPosmDraft] = useState({ department: '', item_name: '', uom: '', quantity: '' });
+  const [calculatedPosmProducts, setCalculatedPosmProducts] = useState([]);
+
   const [historyData, setHistoryData] = useState([]);
   const [currentHistoryId, setCurrentHistoryId] = useState(null);
   const [historyFilters, setHistoryFilters] = useState({ id_status: '', date: '', route: '', doc_nums: '', total_cost: '', author: '' });
@@ -1398,11 +1404,10 @@ const [overrideDate, setOverrideDate] = useState('');
   const handleSaveCalculation = async (isUpdate = false) => {
     if (!selectedChannel) { showNotification('Channel is required to save.', 'error'); return; }
     setIsSaving(true);
-    
-    // Find the currently active gate details before saving
-    const currentGate = gates.find(g => g.gate_name === selectedGate && g.from_loc === selectedFrom && g.to_loc === selectedTo);
+      // Find the currently active gate details before saving
+      const currentGate = gates.find(g => g.gate_name === selectedGate && g.from_loc === selectedFrom && g.to_loc === selectedTo);
 
-    try {
+      try {
       const payload = {
         id: isUpdate ? currentHistoryId : null, 
         gate_name: selectedGate, from_loc: selectedFrom, to_loc: selectedTo,
@@ -1415,6 +1420,8 @@ const [overrideDate, setOverrideDate] = useState('');
         gate_cost: currentGate ? currentGate.cost : null,
         gate_uom: currentGate ? currentGate.uom : null,
         gate_unit: currentGate ? currentGate.unit : null,
+        posm_total_cost: posmItems.length > 0 ? parseFloat(posmTotalCost || 0) : null,
+        posm_products: calculatedPosmProducts,
       };
       const response = await authFetch(`${API_URL}/history/save`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (response.ok) { showNotification('Calculation saved successfully', 'success'); loadHistory(); } 
@@ -1666,17 +1673,23 @@ const [overrideDate, setOverrideDate] = useState('');
 
   const calculateCosts = async () => {
     if (selectedDocNums.length === 0 || !selectedFrom || !selectedTo || !selectedGate || !selectedChannel) { showNotification('Please select Doc Num(s), From, To, Gate, and Channel', 'error'); return; }
+    if (posmItems.length > 0 && (!posmTotalCost || parseFloat(posmTotalCost) <= 0)) { showNotification('Enter a valid Total Cost for the POSM Calculation.', 'error'); return; }
     setIsLoading(true);
     try {
       let url = `${API_URL}/calculate-with-gate?gate_name=${encodeURIComponent(selectedGate)}&from_loc=${encodeURIComponent(selectedFrom)}&to_loc=${encodeURIComponent(selectedTo)}`;
       selectedDocNums.forEach(id => url += `&doc_nums=${encodeURIComponent(id)}`);
       if (manualTotalCost && isManualTotalCostEnabled) url += `&manual_total_cost=${manualTotalCost}`;
       if (additionalCharges) url += `&additional_charges=${additionalCharges}`;
+      if (posmItems.length > 0) {
+        url += `&posm_items_json=${encodeURIComponent(JSON.stringify(posmItems))}`;
+        url += `&posm_total_cost=${encodeURIComponent(posmTotalCost)}`;
+      }
       
       const response = await authFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
       if (response.ok) {
         const data = await response.json();
         setCalculatedProducts(data.calculated_products); setCalculatedTotalCost(data.total_cost); setEstimatedTotalCost(data.estimated_total_cost);
+        setCalculatedPosmProducts(data.posm_products || []);
         showNotification('Calculation completed successfully', 'success');
       } else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); } 
@@ -1699,7 +1712,7 @@ const [overrideDate, setOverrideDate] = useState('');
     if (!docNum) return;
     if (selectedDocNums.includes(docNum)) { showNotification('Doc Num already selected', 'info'); return; }
     const newSelection = [...selectedDocNums, docNum];
-    setSelectedDocNums(newSelection); setSelectedFrom(''); setSelectedTo(''); setSelectedGate(''); setSelectedChannel(''); setCalculationType(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setAdditionalCharges(''); setCurrentHistoryId(null); setHistoricalGate(null);
+    setSelectedDocNums(newSelection); setSelectedFrom(''); setSelectedTo(''); setSelectedGate(''); setSelectedChannel(''); setCalculationType(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setAdditionalCharges(''); setCurrentHistoryId(null); setHistoricalGate(null); setCalculatedPosmProducts([]);
     fetchAggregatedProducts(newSelection);
   };
   const handleRemoveDocNum = (docNum) => {
@@ -1716,6 +1729,21 @@ const [overrideDate, setOverrideDate] = useState('');
     setSelectedGate(gateName); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null); setHistoricalGate(null);
     const gateInfo = gates.find(g => g.gate_name === gateName && g.from_loc === selectedFrom && g.to_loc === selectedTo);
     if (gateInfo) setCalculationType(gateInfo.calculation_type);
+  };
+
+  const handleAddPosmItem = () => {
+    if (!posmDraft.item_name.trim() || !posmDraft.department || !posmDraft.uom || !posmDraft.quantity || parseFloat(posmDraft.quantity) <= 0) {
+      showNotification('Fill in Department, Item Name, Unit, and a valid Quantity for the POSM item.', 'error');
+      return;
+    }
+    setPosmItems([...posmItems, { ...posmDraft, quantity: parseFloat(posmDraft.quantity) }]);
+    setPosmDraft({ department: '', item_name: '', uom: '', quantity: '' });
+    setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setCalculatedPosmProducts([]);
+  };
+
+  const handleRemovePosmItem = (index) => {
+    setPosmItems(posmItems.filter((_, i) => i !== index));
+    setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setCalculatedPosmProducts([]);
   };
   
   const loadSavedCalculation = async (record) => {
@@ -1737,6 +1765,11 @@ const [overrideDate, setOverrideDate] = useState('');
         setSelectedChannel(fullRecord.channel || ''); 
         setManualTotalCost(fullRecord.manual_total_cost || ''); 
         setAdditionalCharges(fullRecord.additional_charges || '');
+        setPosmTotalCost(fullRecord.posm_total_cost || '');
+        setCalculatedPosmProducts(fullRecord.posm_products || []);
+        setPosmItems((fullRecord.posm_products || []).map(p => ({
+          department: p.b_dept ? p.department : p.department, item_name: p.item_name, uom: p.uom, quantity: p.quantity
+        })));
 
         setHistoricalGate({
             cost: fullRecord.gate_cost,
@@ -4590,16 +4623,91 @@ const [overrideDate, setOverrideDate] = useState('');
                 </div>
                 
                 <div className="bg-white rounded-lg border p-6 mb-6">
+                  <h2 className="text-xl font-bold mb-2">POSM Calculation <span className="text-sm font-normal text-gray-500">(Optional)</span></h2>
+                  <p className="text-sm text-gray-500 mb-4">Add POSM items below. Their combined cost is allocated across items and added to the Total Cost.</p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
+                    <select disabled={currentHistoryId !== null} value={posmDraft.department} onChange={(e) => setPosmDraft({ ...posmDraft, department: e.target.value })} className="p-2 border rounded-lg">
+                      <option value="">-- Department --</option>
+                      {refDepartments.map((d, i) => (<option key={i} value={d}>{d}</option>))}
+                    </select>
+                    <input disabled={currentHistoryId !== null} type="text" placeholder="Item Name" value={posmDraft.item_name} onChange={(e) => setPosmDraft({ ...posmDraft, item_name: e.target.value })} className="p-2 border rounded-lg md:col-span-2" />
+                    <select disabled={currentHistoryId !== null} value={posmDraft.uom} onChange={(e) => setPosmDraft({ ...posmDraft, uom: e.target.value })} className="p-2 border rounded-lg">
+                      <option value="">-- Unit --</option>
+                      {refUOMs.map((u, i) => (<option key={i} value={u}>{u}</option>))}
+                    </select>
+                    <div className="flex gap-2">
+                      <input disabled={currentHistoryId !== null} type="number" min="0" placeholder="Qty" value={posmDraft.quantity} onChange={(e) => setPosmDraft({ ...posmDraft, quantity: e.target.value })} className="p-2 border rounded-lg w-full" />
+                      {currentHistoryId === null && (
+                        <button onClick={handleAddPosmItem} className="px-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700"><Plus size={18} /></button>
+                      )}
+                    </div>
+                  </div>
+
+                  {posmItems.length > 0 && (
+                    <div className="overflow-x-auto mb-4">
+                      <table className="w-full text-sm border">
+                        <thead className="bg-gray-100">
+                          <tr>
+                            <th className="border p-2 text-left">Department</th>
+                            <th className="border p-2 text-left">Item Name</th>
+                            <th className="border p-2 text-left">Unit</th>
+                            <th className="border p-2 text-right">Quantity</th>
+                            {calculatedPosmProducts.length > 0 && <th className="border p-2 text-right">Unit Cost</th>}
+                            {calculatedPosmProducts.length > 0 && <th className="border p-2 text-right">Total Cost</th>}
+                            {currentHistoryId === null && <th className="border p-2"></th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {posmItems.map((item, i) => {
+                            const calc = calculatedPosmProducts[i];
+                            return (
+                              <tr key={i}>
+                                <td className="border p-2">{item.department}</td>
+                                <td className="border p-2">{item.item_name}</td>
+                                <td className="border p-2">{item.uom}</td>
+                                <td className="border p-2 text-right">{formatNumber(item.quantity)}</td>
+                                {calculatedPosmProducts.length > 0 && <td className="border p-2 text-right">{calc ? formatNumber(calc.unit_cost) : '-'}</td>}
+                                {calculatedPosmProducts.length > 0 && <td className="border p-2 text-right">{calc ? formatNumber(calc.total_cost) : '-'}</td>}
+                                {currentHistoryId === null && (
+                                  <td className="border p-2 text-center">
+                                    <button onClick={() => handleRemovePosmItem(i)} className="text-red-500 hover:text-red-700"><Trash2 size={16} /></button>
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div className="max-w-xs">
+                    <label className="block text-sm font-semibold mb-2 text-gray-700">Total Cost of POSM Calculation</label>
+                    <input
+                      type="number"
+                      disabled={currentHistoryId !== null}
+                      value={posmTotalCost}
+                      onChange={(e) => { setPosmTotalCost(e.target.value); setCalculatedProducts([]); setCalculatedTotalCost(null); setCalculatedPosmProducts([]); }}
+                      placeholder="Enter total POSM cost..."
+                      className={`w-full p-3 border rounded-lg ${currentHistoryId !== null ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Allocated across all POSM items above, and added to the final Total Cost.</p>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border p-6 mb-6">
                   <h2 className="text-xl font-bold mb-4">Total Summary</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200 p-6 flex flex-col justify-center"><div className="flex justify-between items-center mb-2"><span className="text-lg font-semibold text-gray-700 mb-2">Total Weight</span><span className="text-3xl font-bold text-purple-600">{formatNumber(totalWeight)} Kg</span></div></div>
                     {calculatedTotalCost !== null && (
                       <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200 p-6 flex flex-col justify-center">
                         <div className="flex justify-between items-center mb-2"><span className="text-lg font-semibold text-gray-700">Total Cost</span><span className="text-3xl font-bold text-blue-600">{formatNumber(calculatedTotalCost)} MMK</span></div>
-                        {additionalCharges && (
+                        {(additionalCharges || posmTotalCost) && (
                           <div className="mt-2 pt-2 border-t border-blue-200 text-sm text-gray-600 space-y-1">
-                            <div className="flex justify-between"><span>Subtotal (Transport):</span><span>{formatNumber(calculatedTotalCost - (parseFloat(additionalCharges) || 0))} MMK</span></div>
-                            <div className="flex justify-between"><span>Additional Charges:</span><span>{formatNumber(additionalCharges)} MMK</span></div>
+                            <div className="flex justify-between"><span>Subtotal (Transport):</span><span>{formatNumber(calculatedTotalCost - (parseFloat(additionalCharges) || 0) - (posmItems.length > 0 ? (parseFloat(posmTotalCost) || 0) : 0))} MMK</span></div>
+                            {additionalCharges && (<div className="flex justify-between"><span>Additional Charges:</span><span>{formatNumber(additionalCharges)} MMK</span></div>)}
+                            {posmItems.length > 0 && (<div className="flex justify-between"><span>POSM Calculation:</span><span>{formatNumber(posmTotalCost)} MMK</span></div>)}
                           </div>
                         )}
                       </div>
