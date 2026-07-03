@@ -3,6 +3,11 @@ import { Trash2, Calculator, Database, FileText, Plus, Edit2, Download, Upload, 
 
 const API_URL = 'http://localhost:8000';
 
+// --- Maintenance Mode ---
+// Flip to true to show the maintenance screen to everyone except admins.
+const MAINTENANCE_MODE = false;
+const MAINTENANCE_MESSAGE = 'We are performing maintenance. Please check back shortly.';
+
 const AVAILABLE_PERMISSIONS = [
   { id: 'view_calculator', label: 'View Calculator' },
   { id: 'view_history', label: 'View History' },
@@ -102,6 +107,21 @@ const LoginScreen = ({ onLogin }) => {
     </div>
   );
 };
+
+
+// Add this new component:
+const MaintenanceScreen = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="bg-white p-8 rounded-lg shadow-md w-96 text-center">
+      <Activity size={48} className="text-yellow-500 mx-auto mb-4" />
+      <h1 className="text-2xl font-bold mb-2 text-gray-800">Under Maintenance</h1>
+      <p className="text-gray-500 mb-6">{MAINTENANCE_MESSAGE}</p>
+      <button onClick={() => window.location.reload()} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition font-semibold">
+        Try Again
+      </button>
+    </div>
+  </div>
+);
 
 // --- Main Application Component ---
 const PricingApp = () => {
@@ -2249,6 +2269,8 @@ const [overrideDate, setOverrideDate] = useState('');
   };
 
   // --- Views ---
+  if (MAINTENANCE_MODE && userRole !== 'admin') return <MaintenanceScreen />;
+
   if (!token) return <LoginScreen onLogin={handleLogin} />;
 
   if (currentPage === 'activity_logs' && permissions.includes('view_activity_logs')) {
