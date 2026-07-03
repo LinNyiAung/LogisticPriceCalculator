@@ -1650,7 +1650,7 @@ const [overrideDate, setOverrideDate] = useState('');
   useEffect(() => {
     const checkManualCostStatus = async () => {
       if (currentPage !== 'calculator' || !token) return;
-      if (calculationType !== 'gate_pricing' || !selectedGate) { setIsManualTotalCostEnabled(false); return; }
+      if ((calculationType !== 'gate_pricing' && calculationType !== 'per_trip_pricing') || !selectedGate) { setIsManualTotalCostEnabled(false); return; }
       const gateInfo = gates.find(g => g.gate_name === selectedGate);
       if (!gateInfo) { setIsManualTotalCostEnabled(false); return; }
 
@@ -4519,7 +4519,7 @@ const [overrideDate, setOverrideDate] = useState('');
                 </div>
                 {(selectedFrom && selectedTo) && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Gate <span className="text-red-500">*</span></h2><select value={selectedGate} onChange={(e) => handleGateChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"><option value="">-- Select a Gate --</option>{gates.filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo).map((gate) => (<option key={gate.gate_name} value={gate.gate_name}>{gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}</option>))}</select></div>
+                    <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Gate <span className="text-red-500">*</span></h2><select value={selectedGate} onChange={(e) => handleGateChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"><option value="">-- Select a Gate --</option>{gates.filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo).map((gate) => (<option key={gate.gate_name} value={gate.gate_name}>{gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'per_trip_pricing' ? ' Per Trip' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}</option>))}</select></div>
                     <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Channel <span className="text-red-500">*</span></h2><select value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"><option value="">-- Select a Channel --</option>{refChannels.map((chan, i) => (<option key={i} value={chan}>{chan}</option>))}</select></div>
                   </div>
                 )}
@@ -4561,7 +4561,7 @@ const [overrideDate, setOverrideDate] = useState('');
                   <div className="flex items-center justify-between flex-wrap gap-4">
                     <div>
                       <h3 className="text-lg font-semibold text-gray-800">Calculation Type</h3>
-                      <p className="text-gray-600 mt-1">{calculationType === 'gate_pricing' ? 'Gate Pricing Calculation' : calculationType === 'direct_pricing' ? 'Direct Pricing Calculation' : 'Unknown Type'}</p>
+                      <p className="text-gray-600 mt-1">{calculationType === 'gate_pricing' ? 'Gate Pricing Calculation' : calculationType === 'per_trip_pricing' ? 'Per Trip Calculation' : calculationType === 'direct_pricing' ? 'Direct Pricing Calculation' : 'Unknown Type'}</p>
                     </div>
                     
                     {displayCost !== null && (

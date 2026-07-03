@@ -1122,13 +1122,16 @@ async def determine_calculation_type_sql(gate_id):
         cursor = await conn.cursor()
         await cursor.execute("SELECT cost FROM Gate WHERE id = ?", (gate_id,))
         row = await cursor.fetchone()
+
+        await cursor.execute("SELECT COUNT(*) FROM Item_Pricing WHERE gate_id = ?", (gate_id,))
+        item_pricing_count = (await cursor.fetchone())[0]
         await conn.close()
 
         if row and row[0] is not None:
             try:
                 price = Decimal(str(row[0]))
                 if price > 0:
-                    return "gate_pricing"
+                    return "gate_pricing" if item_pricing_count > 0 else "per_trip_pricing"
             except (ValueError, TypeError):
                 pass
         return "direct_pricing"
@@ -1243,7 +1246,10 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
             except:
                 item_pricing[i_code] = {'type': 'unknown', 'value': None}
 
-    if cost > Decimal("0"): calc_type = "gate_pricing"
+    has_item_pricing = len(pricing_rows) > 0
+
+    if cost > Decimal("0") and not has_item_pricing: calc_type = "per_trip_pricing"
+    elif cost > Decimal("0"): calc_type = "gate_pricing"
     else: calc_type = "direct_pricing"
 
     calculated_products = []
@@ -1331,6 +1337,67 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
                 **item, "calculation_type": "direct_split" if manual_total_cost else "direct",
                 "system_rate": item['standard_unit_cost'], "unit_cost": final_unit_cost, "total_cost": final_item_cost
             })
+
+    elif calc_type == "per_trip_pricing":
+        # Per Trip gates have a single flat cost for the whole trip (no per-item pricing
+        # configured). Allocate that flat cost across items proportionally by ctn quantity.
+        trip_total = Decimal(str(manual_total_cost)) if manual_total_cost is not None else cost
+
+        trip_items = []
+        total_ctns_all = Decimal("0.0")
+        for row in pick_rows:
+            doc_date_val = row[4]
+            if isinstance(doc_date_val, datetime.datetime):
+                doc_date_str = doc_date_val.strftime("%Y-%m-%d")
+            elif isinstance(doc_date_val, str) and len(doc_date_val) >= 10:
+                doc_date_str = doc_date_val[:10]
+            else:
+                doc_date_str = str(doc_date_val) if doc_date_val else ""
+
+            principal_val = row[6] or ""
+            brand_val = row[8] or ""
+            bc_info = branch_code_map.get(principal_val.strip().lower(), {})
+            sd_info = sd_code_map.get(principal_val.strip().lower(), {})
+
+            item_data = {
+                "code": row[0] if row[0] else "",
+                "name": row[1] if row[1] else "",
+                "uom": row[2] if row[2] else "",
+                "weight": Decimal(str(row[3])) if row[3] else Decimal("0.0"),
+                "doc_date": doc_date_str,
+                "sin_no": f"{row[9]} - {str(row[5])}" if row[5] else "",
+                "principal": principal_val,
+                "brand": brand_val,
+                "ctns": get_rounded_ctns(row[7]),
+                "bu": row[9],
+                "b_code": bc_info.get("Code", ""),
+                "b_name": bc_info.get("Name", ""),
+                "b_dept": bc_info.get("Dept", ""),
+                "b_principal": bc_info.get("Principal", ""),
+                "b_desc": bc_info.get("Description", ""),
+                "s_dept": sd_info.get("Dept", ""),
+                "s_principal": sd_info.get("Principal", ""),
+                "FromWhsCode": row[10] if len(row) > 10 and row[10] else "",
+                "ToWhsCode": row[11] if len(row) > 11 and row[11] else ""
+            }
+            total_ctns_all += item_data['ctns']
+            trip_items.append(item_data)
+
+        item_count = len(trip_items)
+        for item in trip_items:
+            if total_ctns_all > Decimal("0"):
+                proportion = item['ctns'] / total_ctns_all
+            else:
+                proportion = (Decimal("1") / item_count) if item_count > 0 else Decimal("0")
+            item_total_cost = trip_total * proportion
+            estimated_total_cost += item_total_cost
+            unit_cost = item_total_cost / item['ctns'] if item['ctns'] > Decimal("0") else Decimal("0.0")
+            calculated_products.append({
+                **item, "calculation_type": "per_trip", "system_rate": None,
+                "unit_cost": unit_cost, "total_cost": item_total_cost
+            })
+
+        total_cost = trip_total
 
     elif calc_type == "direct_pricing":
         for row in pick_rows:
