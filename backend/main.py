@@ -2669,7 +2669,21 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
                      "FromWhsCode", "ToWhsCode"]
         products = [dict(zip(prod_cols, r)) for r in prod_rows]
         
+        # Location -> Branch code mapping (e.g. "Yangon" -> "YGN"), used for description fields below
+        await cursor.execute("SELECT to_location, branch_code FROM Location_Mapping")
+        loc_mapping_rows = await cursor.fetchall()
+
         await conn.close()
+
+        LOCATION_CODE_MAP = {}
+        for loc_row in loc_mapping_rows:
+            if loc_row[0] and loc_row[1]:
+                LOCATION_CODE_MAP[str(loc_row[0]).strip().upper()] = str(loc_row[1]).strip()
+
+        def _to_loc_code(loc_name):
+            if not loc_name:
+                return ""
+            return LOCATION_CODE_MAP.get(str(loc_name).strip().upper(), loc_name)
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -2712,13 +2726,17 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
             else: doc_date_str = str(doc_date_val) if doc_date_val else ""
 
             b_desc = item.get('b_desc', '')
+            from_loc_code = _to_loc_code(record['from_loc'])
+            to_loc_code = _to_loc_code(record['to_loc'])
+            desc_for_account = f"{b_desc.strip()}-{from_loc_code} to {to_loc_code}"
+
             ctns_val = Decimal(str(item.get('ctns', 0)))
             total_cost_val = Decimal(str(item.get('total_cost', 0)))
             ctns_formatted = int(ctns_val) if float(ctns_val).is_integer() else ctns_val
             price_per_ctn = total_cost_val / ctns_val if ctns_val > Decimal("0") else Decimal("0.0")
             price_formatted = int(price_per_ctn) if float(price_per_ctn).is_integer() else round(price_per_ctn, 2)
 
-            concat_desc = f"{b_desc.strip()} - {ctns_formatted} ctns @{price_formatted} kyats"
+            concat_desc = f"{desc_for_account} - {ctns_formatted} ctns @{price_formatted} kyats"
 
             raw_sin_no = str(item.get('sin_no', ''))
             clean_sin_no = raw_sin_no.replace('PDG - ', '').replace('PDG-', '').replace('PG - ', '').replace('PG-', '').strip()
@@ -2758,7 +2776,7 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
             ws.cell(row=row_num, column=18, value=record.get('channel', '')).border = border
             ws.cell(row=row_num, column=19, value=claim_month).border = border
             ws.cell(row=row_num, column=20, value=claim_year).border = border
-            ws.cell(row=row_num, column=21, value=b_desc).border = border
+            ws.cell(row=row_num, column=21, value=desc_for_account).border = border
             ws.cell(row=row_num, column=22, value=concat_desc).border = border
             ws.cell(row=row_num, column=23, value=record['to_loc']).border = border
             ws.cell(row=row_num, column=24, value=item.get('b_dept', '')).border = border
@@ -2785,21 +2803,7 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
             FROM Calculation_POSM_Products WHERE calc_id = ?
         """, (record_id,))
         posm_rows = await cursor2.fetchall()
-
-        # Location -> Branch code mapping (e.g. "Yangon" -> "YGN"), used for the description fields below
-        await cursor2.execute("SELECT to_location, branch_code FROM Location_Mapping")
-        loc_mapping_rows = await cursor2.fetchall()
         await conn2.close()
-
-        LOCATION_CODE_MAP = {}
-        for loc_row in loc_mapping_rows:
-            if loc_row[0] and loc_row[1]:
-                LOCATION_CODE_MAP[str(loc_row[0]).strip().upper()] = str(loc_row[1]).strip()
-
-        def _to_loc_code(loc_name):
-            if not loc_name:
-                return ""
-            return LOCATION_CODE_MAP.get(str(loc_name).strip().upper(), loc_name)
 
         if posm_rows:
             ws2 = wb.create_sheet("POSM Details")
