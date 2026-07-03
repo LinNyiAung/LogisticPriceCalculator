@@ -2709,9 +2709,18 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
             cell.border = border
 
         now = datetime.datetime.now()
-        claim_date_str = now.strftime("%d/%m/%Y") 
         claim_month = now.strftime("%B") 
         claim_year = now.year
+
+        claimed_at_val = record.get('claimed_at')
+        if record.get('status') == 'claimed' and claimed_at_val:
+            if isinstance(claimed_at_val, datetime.datetime):
+                claim_date_str = claimed_at_val.strftime("%d/%m/%Y")
+            else:
+                try: claim_date_str = datetime.datetime.strptime(str(claimed_at_val)[:19], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y")
+                except ValueError: claim_date_str = str(claimed_at_val)
+        else:
+            claim_date_str = ""
         
         cost_details_delivery_date = ""
         cost_details_sin_no = ""
