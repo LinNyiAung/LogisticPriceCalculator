@@ -2875,7 +2875,8 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
         conn2 = await get_logistic_connection()
         cursor2 = await conn2.cursor()
         await cursor2.execute("""
-            SELECT department, item_name, uom, quantity, unit_cost, total_cost
+            SELECT department, item_name, uom, quantity, unit_cost, total_cost,
+                   b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal
             FROM Calculation_POSM_Products WHERE calc_id = ?
         """, (record_id,))
         posm_rows = await cursor2.fetchall()
@@ -2898,25 +2899,28 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
 
             from_loc_code = _to_loc_code(record['from_loc'])
             to_loc_code = _to_loc_code(record['to_loc'])
-            posm_desc_account = f"POSM-Transport Charges-{from_loc_code} to {to_loc_code}"
 
             for idx, r in enumerate(posm_rows, 1):
                 row_num = idx + 1
-                department, item_name, uom, quantity, unit_cost, total_cost = r
+                # Unpack the new mapped columns
+                department, item_name, uom, quantity, unit_cost, total_cost, b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal = r
 
                 qty_val = Decimal(str(quantity or 0))
                 qty_formatted = int(qty_val) if float(qty_val).is_integer() else qty_val
                 unit_cost_val = Decimal(str(unit_cost or 0))
                 unit_cost_formatted = int(unit_cost_val) if float(unit_cost_val).is_integer() else round(unit_cost_val, 2)
 
-                posm_desc_with_price = f"{posm_desc_account}- {qty_formatted} pcs @{unit_cost_formatted} kyats"
+                # Dynamic POSM Description from Branch Code mapping (falls back if mapping is missing)
+                b_desc_clean = b_desc.strip() if b_desc else "POSM-Transport Charges"
+                posm_desc_account = f"{b_desc_clean}-{from_loc_code} to {to_loc_code}"
+                posm_desc_with_price = f"{posm_desc_account} - {qty_formatted} pcs @{unit_cost_formatted} kyats"
 
                 row_vals = [
                     idx, claim_date_str, cost_details_delivery_date, cost_details_sin_no, record['to_loc'],
-                    "Transport Charges-POSM", department or "", "POSM", "POSM", item_name or "", float(qty_val),
+                    b_name or "Transport Charges-POSM", department or "", b_principal or "POSM", b_principal or "POSM", item_name or "", float(qty_val),
                     float(unit_cost_val), float(total_cost or 0), uom or "", record['gate_name'],
                     record.get('channel', ''), claim_month, claim_year, posm_desc_account, posm_desc_with_price,
-                    record['to_loc'], "Logistics", "POSM", "Logistics", "POSM", record_id
+                    record['to_loc'], b_dept or "Logistics", b_principal or "POSM", s_dept or "Logistics", s_principal or "POSM", record_id
                 ]
                 for col_num, val in enumerate(row_vals, 1):
                     cell = ws2.cell(row=row_num, column=col_num, value=val)
