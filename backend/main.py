@@ -4535,13 +4535,13 @@ async def export_daily_rate_cut_report(
         if report_type == 'item':
             headers = [
                 "BU", "Date", "Branch", "Driver Name", "Principal", "Brand", "Item Code", "Item Name", 
-                "Cartons", "Driver Total (Ctns)", "Branch Rate Cost", "Manual Driver Override Amount", "Cost per Carton",
+                "Cartons", "Driver Total (Ctns)", "Branch Rate Cost", "Additional Amount", "Cost per Carton",
                 "Allocated Cost", "Sales Amount"
             ]
         else:
             headers = [
                 "Branch", "Date", "Driver Name", "Township", "Customer Code", "Contact Person", 
-                "Customer Total (Ctns)", "Driver Total (Ctns)", "Branch Rate Cost", "Manual Driver Override Amount", "Total Drop Points",
+                "Customer Total (Ctns)", "Driver Total (Ctns)", "Branch Rate Cost", "Additional Amount", "Total Drop Points",
                 "Cost per Drop Point", "Cost per Carton", "Allocated Cost", "Sales Amount"
             ]
 
