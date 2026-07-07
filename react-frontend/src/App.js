@@ -659,11 +659,11 @@ const PricingApp = () => {
   
   const [dailyReportFilters, setDailyReportFilters] = useState({ 
     date_filter: '', bu: '', branch: '', item_code: '', item_name: '', principal: '', brand: '', driver_name: '',
-    ctns: '', driver_total_ctns: '', branch_cost: '', cost_per_carton: '', allocated_cost: '', sales_amount: '' 
+    ctns: '', driver_total_ctns: '', branch_cost: '', additional_amount: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
   });
   
   const [townshipFilters, setTownshipFilters] = useState({ 
-    date_filter: '', branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', driver_total_ctns: '', branch_cost: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: '' 
+    date_filter: '', branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', driver_total_ctns: '', branch_cost: '', additional_amount: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
   });
 
   const [submittedAllocationData, setSubmittedAllocationData] = useState([]);
@@ -3215,11 +3215,12 @@ const [overrideDate, setOverrideDate] = useState('');
         const matchCtns = String(row.ctns || '').toLowerCase().includes(dailyReportFilters.ctns.toLowerCase());
         const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(dailyReportFilters.driver_total_ctns.toLowerCase());
         const matchBranchCost = String(row.branch_cost || '').toLowerCase().includes(dailyReportFilters.branch_cost.toLowerCase());
+        const matchAdditionalAmount = String(row.additional_amount || '').toLowerCase().includes(dailyReportFilters.additional_amount.toLowerCase());
         const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(dailyReportFilters.cost_per_carton.toLowerCase());
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(dailyReportFilters.allocated_cost.toLowerCase());
         const matchSalesAmount = String(row.sales_amount || '').toLowerCase().includes(dailyReportFilters.sales_amount.toLowerCase());
 
-        return matchDate && matchBu && matchBranch && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchDriverName && matchCtns && matchDriverTotal && matchBranchCost && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
+        return matchDate && matchBu && matchBranch && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchDriverName && matchCtns && matchDriverTotal && matchBranchCost && matchAdditionalAmount && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
       });
 
       const filteredTownshipReportData = dailyTownshipReportData.filter(row => {
@@ -3232,13 +3233,14 @@ const [overrideDate, setOverrideDate] = useState('');
         const matchCtns = String(row.ctns || '').toLowerCase().includes(townshipFilters.ctns.toLowerCase());
         const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(townshipFilters.driver_total_ctns.toLowerCase());
         const matchBranchCost = String(row.branch_cost || '').toLowerCase().includes(townshipFilters.branch_cost.toLowerCase());
+        const matchAdditionalAmount = String(row.additional_amount || '').toLowerCase().includes(townshipFilters.additional_amount.toLowerCase());
         const matchTotalDropPoints = String(row.total_drop_points || '').toLowerCase().includes(townshipFilters.total_drop_points.toLowerCase());
         const matchCostPerDropPoint = String(row.cost_per_drop_point || '').toLowerCase().includes(townshipFilters.cost_per_drop_point.toLowerCase());
         const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(townshipFilters.cost_per_carton.toLowerCase());
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(townshipFilters.allocated_cost.toLowerCase());
         const matchSalesAmount = String(row.sales_amount || '').toLowerCase().includes(townshipFilters.sales_amount.toLowerCase());
         
-        return matchDate && matchBranch && matchDriver && matchTownship && matchCustomer && matchContactPerson && matchCtns && matchDriverTotal && matchBranchCost && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
+        return matchDate && matchBranch && matchDriver && matchTownship && matchCustomer && matchContactPerson && matchCtns && matchDriverTotal && matchBranchCost && matchAdditionalAmount && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
       });
 
       const filteredAllocation = submittedAllocationData.filter(row => {
@@ -3521,6 +3523,10 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <div>Branch Rate Cost</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.branch_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, branch_cost: e.target.value})} />
                                             </th>
+                                            <th className="border p-2 text-right text-indigo-700">
+                                                <div>Additional Amount</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.additional_amount} onChange={(e) => setDailyReportFilters({...dailyReportFilters, additional_amount: e.target.value})} />
+                                            </th>
                                             <th className="border p-2 text-right text-purple-700">
                                                 <div>Cost per Carton</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.cost_per_carton} onChange={(e) => setDailyReportFilters({...dailyReportFilters, cost_per_carton: e.target.value})} />
@@ -3537,7 +3543,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                     </thead>
                                     <tbody>
                                         {displayedDailyItem.length === 0 ? (
-                                            <tr><td colSpan="14" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date/range or matching filters.</td></tr>
+                                            <tr><td colSpan="15" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date/range or matching filters.</td></tr>
                                         ) : (
                                             displayedDailyItem.map((row, idx) => (
                                                 <tr key={idx} className="hover:bg-gray-50 text-sm">
@@ -3552,6 +3558,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>
+                                                    <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.additional_amount)}</td>
                                                     <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
                                                     <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
                                                     <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.sales_amount)}</td>
@@ -3616,6 +3623,10 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <div>Branch Rate Cost</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.branch_cost} onChange={(e) => setTownshipFilters({...townshipFilters, branch_cost: e.target.value})} />
                                             </th>
+                                            <th className="border p-2 text-right text-indigo-700">
+                                                <div>Additional Amount</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.additional_amount} onChange={(e) => setTownshipFilters({...townshipFilters, additional_amount: e.target.value})} />
+                                            </th>
                                             <th className="border p-2 text-right">
                                                 <div>Total Drop Points</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.total_drop_points} onChange={(e) => setTownshipFilters({...townshipFilters, total_drop_points: e.target.value})} />
@@ -3640,7 +3651,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                     </thead>
                                     <tbody>
                                         {displayedDailyTownship.length === 0 ? (
-                                            <tr><td colSpan="14" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
+                                            <tr><td colSpan="15" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
                                         ) : (
                                             displayedDailyTownship.map((row, idx) => (
                                                 <tr key={idx} className="hover:bg-gray-50 text-sm">
@@ -3653,6 +3664,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>
+                                                    <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.additional_amount)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.total_drop_points)}</td>
                                                     <td className="border p-2 text-right font-bold text-orange-600">{formatNumber(row.cost_per_drop_point)}</td>
                                                     <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
