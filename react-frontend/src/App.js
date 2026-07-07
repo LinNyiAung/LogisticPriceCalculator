@@ -2567,9 +2567,9 @@ const [overrideDate, setOverrideDate] = useState('');
                   
                   {/* Date Range Filter */}
                   <div className="flex items-center gap-2 bg-white px-2 py-1.5 border border-gray-300 rounded-lg shadow-sm shrink-0">
-                      <input type="date" value={overviewStartDate} onChange={(e) => setOverviewStartDate(e.target.value)} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer" />
+                      <input type="date" value={overviewStartDate} onChange={(e) => setOverviewStartDate(e.target.value)} disabled={isPrincipalAllocationLoading} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" />
                       <span className="text-gray-400">to</span>
-                      <input type="date" value={overviewEndDate} onChange={(e) => setOverviewEndDate(e.target.value)} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer" />
+                      <input type="date" value={overviewEndDate} onChange={(e) => setOverviewEndDate(e.target.value)} disabled={isPrincipalAllocationLoading} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" />
                   </div>
 
                   {/* Column Filters as Dropdowns */}
@@ -3109,9 +3109,9 @@ const [overrideDate, setOverrideDate] = useState('');
                             
                             {/* Date Range Selector */}
                             <div className="flex items-center gap-2 bg-white px-2 py-1.5 border border-gray-300 rounded-lg shadow-sm shrink-0">
-                                <input type="date" value={comparisonStartDate} onChange={(e) => setComparisonStartDate(e.target.value)} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer" />
+                                <input type="date" value={comparisonStartDate} onChange={(e) => setComparisonStartDate(e.target.value)} disabled={isComparisonLoading} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" />
                                 <span className="text-gray-400">to</span>
-                                <input type="date" value={comparisonEndDate} onChange={(e) => setComparisonEndDate(e.target.value)} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer" />
+                                <input type="date" value={comparisonEndDate} onChange={(e) => setComparisonEndDate(e.target.value)} disabled={isComparisonLoading} className="border-none bg-transparent text-sm font-bold text-gray-700 focus:ring-0 outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" />
                             </div>
 
                             {/* Excel-Style Dropdown Filters */}
