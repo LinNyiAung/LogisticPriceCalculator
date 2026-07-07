@@ -4469,7 +4469,252 @@ async def get_cost_comparison(
     except Exception as e:
         logger.error(f"Error generating cost comparison report: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error generating comparison data: {str(e)}")
-    
+
+
+# --- Shared Excel Builder Helper for Dashboard Exports ---
+
+def _build_dashboard_excel(sheet_title: str, headers: list, rows: list, currency_cols: set):
+    """Builds a styled .xlsx workbook (same style as the daily report export)."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = sheet_title
+
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+    border_style = Side(border_style="thin", color="000000")
+    border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
+
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = border
+
+    for row_idx, row_values in enumerate(rows, 2):
+        for col_idx, val in enumerate(row_values, 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            cell.border = border
+            if (col_idx - 1) in currency_cols and isinstance(val, (int, float, Decimal)):
+                cell.number_format = '#,##0.00'
+
+    for col in ws.columns:
+        max_length = 0
+        col_letter = col[0].column_letter
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+
+def _flatten_allocation_hierarchy(hierarchy_result: list, branch_label_key: str = "branch"):
+    """Flattens bu -> branch -> principal -> brand -> item -> dates into flat leaf rows,
+    mirroring the frontend's flattenHierarchy()."""
+    flat_rows = []
+    for bu_data in hierarchy_result:
+        bu = bu_data.get("bu")
+        for branch_data in bu_data.get("branches", []):
+            branch = branch_data.get("branch")
+            for princ_data in branch_data.get("principals", []):
+                principal = princ_data.get("principal")
+                for brand_data in princ_data.get("brands", []):
+                    brand = brand_data.get("brand")
+                    for item_data in brand_data.get("items", []):
+                        item_name = item_data.get("item_name")
+                        dates = item_data.get("dates", [])
+                        if not dates:
+                            flat_rows.append({
+                                "bu": bu, branch_label_key: branch, "principal": principal, "brand": brand,
+                                "item_name": item_name, "date": None,
+                                "avg_cost": item_data.get("avg_cost", 0),
+                                "total_ctns": item_data.get("total_ctns", 0),
+                                "total_cost": item_data.get("total_cost", 0),
+                            })
+                        else:
+                            for d in dates:
+                                flat_rows.append({
+                                    "bu": bu, branch_label_key: branch, "principal": principal, "brand": brand,
+                                    "item_name": item_name, "date": d.get("date"),
+                                    "avg_cost": d.get("avg_cost", 0),
+                                    "total_ctns": d.get("total_ctns", 0),
+                                    "total_cost": d.get("total_cost", 0),
+                                })
+    flat_rows.sort(key=lambda r: (str(r["bu"]), str(r[branch_label_key]), str(r["principal"]),
+                                   str(r["brand"]), str(r["item_name"]), str(r["date"] or "")))
+    return flat_rows
+
+
+ALLOWED_DASHBOARD_COLUMNS = ['bu', 'branch', 'principal', 'brand', 'item', 'date']
+
+
+def _parse_columns_param(columns: Optional[str]) -> list:
+    """Parses the `columns` query param (comma-separated, in the exact order the
+    frontend has them) and falls back to the full default set if missing/invalid."""
+    if not columns:
+        return list(ALLOWED_DASHBOARD_COLUMNS)
+    requested = [c.strip() for c in columns.split(',') if c.strip()]
+    valid = [c for c in requested if c in ALLOWED_DASHBOARD_COLUMNS]
+    return valid if valid else list(ALLOWED_DASHBOARD_COLUMNS)
+
+
+def _aggregate_flat_rows_by_columns(flat_rows: list, columns: list, branch_label_key: str):
+    """
+    Re-aggregates the finest-grain flattened rows down to only the requested column
+    dimensions (in the given order), summing cartons/cost and recomputing avg cost.
+    This mirrors exactly what the frontend's dynamic tree table does when a column
+    is removed from columnOrder - its dimension gets folded into the totals instead
+    of being broken out as its own row/column.
+    """
+    key_field_map = {
+        'bu': 'bu',
+        'branch': branch_label_key,
+        'principal': 'principal',
+        'brand': 'brand',
+        'item': 'item_name',
+        'date': 'date',
+    }
+    fields = [key_field_map[c] for c in columns if c in key_field_map]
+
+    groups = {}
+    for row in flat_rows:
+        key = tuple(row.get(f) for f in fields)
+        if key not in groups:
+            groups[key] = {"ctns": Decimal("0"), "cost": Decimal("0")}
+        groups[key]["ctns"] += Decimal(str(row.get("total_ctns") or 0))
+        groups[key]["cost"] += Decimal(str(row.get("total_cost") or 0))
+
+    result = []
+    for key, vals in groups.items():
+        avg = vals["cost"] / vals["ctns"] if vals["ctns"] > Decimal("0") else Decimal("0")
+        entry = {f: (v if v is not None else "-") for f, v in zip(fields, key)}
+        entry["avg_cost"] = float(avg)
+        entry["total_ctns"] = float(vals["ctns"])
+        entry["total_cost"] = float(vals["cost"])
+        result.append(entry)
+
+    result.sort(key=lambda r: tuple(str(r[f]) for f in fields))
+    return result, fields
+
+
+@app.get("/dashboard/principal-brand-allocation/export")
+async def export_principal_brand_allocation(
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    columns: Optional[str] = Query(None, description="Comma-separated column order, e.g. 'bu,principal'"),
+    user: dict = Depends(require_permission("view_dashboard"))
+):
+    try:
+        payload = await get_principal_brand_allocation(start_date=start_date, end_date=end_date, user=user)
+        flat_rows = _flatten_allocation_hierarchy(payload["data"], branch_label_key="branch")
+
+        selected_columns = _parse_columns_param(columns)
+        agg_rows, fields = _aggregate_flat_rows_by_columns(flat_rows, selected_columns, branch_label_key="branch")
+
+        label_map = {'bu': 'BU', 'branch': 'Branch', 'principal': 'Principal', 'brand': 'Brand', 'item': 'Item Name', 'date': 'Date'}
+        headers = [label_map[c] for c in selected_columns] + ["Avg Cost", "Total Cartons", "Total Allocated Cost"]
+
+        rows = [
+            [r[f] for f in fields] + [r["avg_cost"], r["total_ctns"], r["total_cost"]]
+            for r in agg_rows
+        ]
+
+        currency_start = len(fields)
+        output = _build_dashboard_excel(
+            "Rate Cart Allocation", headers, rows,
+            currency_cols={currency_start, currency_start + 1, currency_start + 2}
+        )
+        date_str = f"{start_date or 'all'}_to_{end_date or 'all'}"
+        filename = f"rate_cart_branch_allocation_{date_str}.xlsx"
+
+        return StreamingResponse(
+            output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        logger.error(f"Error exporting rate cart allocation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error exporting rate cart allocation: {str(e)}")
+
+
+@app.get("/dashboard/third-party-allocation/export")
+async def export_third_party_allocation(
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    columns: Optional[str] = Query(None, description="Comma-separated column order, e.g. 'bu,principal'"),
+    user: dict = Depends(require_permission("view_dashboard"))
+):
+    try:
+        payload = await get_third_party_allocation(start_date=start_date, end_date=end_date, user=user)
+        flat_rows = _flatten_allocation_hierarchy(payload["data"], branch_label_key="to_loc")
+
+        selected_columns = _parse_columns_param(columns)
+        agg_rows, fields = _aggregate_flat_rows_by_columns(flat_rows, selected_columns, branch_label_key="to_loc")
+
+        label_map = {'bu': 'BU', 'branch': 'To Location', 'principal': 'Principal', 'brand': 'Brand', 'item': 'Item Name', 'date': 'Date'}
+        headers = [label_map[c] for c in selected_columns] + ["Avg Cost", "Total Cartons", "Total Calculated Cost"]
+
+        rows = [
+            [r[f] for f in fields] + [r["avg_cost"], r["total_ctns"], r["total_cost"]]
+            for r in agg_rows
+        ]
+
+        currency_start = len(fields)
+        output = _build_dashboard_excel(
+            "Third Party Allocation", headers, rows,
+            currency_cols={currency_start, currency_start + 1, currency_start + 2}
+        )
+        date_str = f"{start_date or 'all'}_to_{end_date or 'all'}"
+        filename = f"third_party_calculated_cost_{date_str}.xlsx"
+
+        return StreamingResponse(
+            output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        logger.error(f"Error exporting third party allocation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error exporting third party allocation: {str(e)}")
+
+
+@app.get("/dashboard/cost-comparison/export")
+async def export_cost_comparison(
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    user: dict = Depends(require_permission("view_dashboard"))
+):
+    try:
+        payload = await get_cost_comparison(start_date=start_date, end_date=end_date, user=user)
+        data = payload["data"]
+
+        headers = ["Date", "BU", "Branch/To Loc", "Principal", "Brand", "Item Code", "Item Name",
+                   "Avg Cost (Rate Cart)", "Avg Cost (Calculated)", "Total Avg Cost"]
+        rows = [
+            [r["date"], r["bu"], r["branch"], r["principal"], r["brand"], r["item_code"], r["item_name"],
+             float(r["avg_cost_rate_cart"]) if r["avg_cost_rate_cart"] is not None else "-",
+             float(r["avg_cost_calculated"]) if r["avg_cost_calculated"] is not None else "-",
+             float(r["total_avg_cost"] or 0)]
+            for r in data
+        ]
+
+        output = _build_dashboard_excel("Cost Comparison", headers, rows, currency_cols={7, 8, 9})
+        date_str = f"{start_date or 'all'}_to_{end_date or 'all'}"
+        filename = f"cost_comparison_{date_str}.xlsx"
+
+        return StreamingResponse(
+            output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        logger.error(f"Error exporting cost comparison: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error exporting cost comparison: {str(e)}")
+
+
 # --- Daily Report Excel Export Endpoints ---
 
 @app.get("/account/daily-rate-cut-report/export")

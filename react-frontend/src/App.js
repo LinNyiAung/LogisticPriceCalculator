@@ -1149,6 +1149,82 @@ const [overrideDate, setOverrideDate] = useState('');
     }
   };
 
+  // Downloads the "Allocation Overview" tree table — works for both
+  // Rate Cart (Branch Allocation) and Third Party (Calculated Cost) tabs
+  const handleDownloadAllocationOverviewExcel = async () => {
+    try {
+        showNotification('Generating Excel file...', 'info');
+
+        const endpoint = activeDashboardTab === 'third_party' ? 'third-party-allocation' : 'principal-brand-allocation';
+        let url = `${API_URL}/dashboard/${endpoint}/export`;
+        const params = new URLSearchParams();
+
+        if (overviewStartDate) params.append('start_date', overviewStartDate);
+        if (overviewEndDate) params.append('end_date', overviewEndDate);
+        // Send only the currently open columns, in the exact order shown on screen
+        params.append('columns', columnOrder.join(','));
+
+        const queryString = params.toString();
+        if (queryString) url += `?${queryString}`;
+
+        const response = await authFetch(url);
+        if (response.ok) {
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = activeDashboardTab === 'third_party'
+                ? 'third_party_calculated_cost.xlsx'
+                : 'rate_cart_branch_allocation.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(downloadUrl);
+            document.body.removeChild(a);
+            showNotification('Excel file downloaded successfully', 'success');
+        } else {
+            const error = await response.json();
+            showNotification(getErrorMessage(error), 'error');
+        }
+    } catch (error) {
+        showNotification(`Error downloading file: ${error.message}`, 'error');
+    }
+  };
+
+  // Downloads the Cost Comparison table
+  const handleDownloadCostComparisonExcel = async () => {
+    try {
+        showNotification('Generating Excel file...', 'info');
+
+        let url = `${API_URL}/dashboard/cost-comparison/export`;
+        const params = new URLSearchParams();
+
+        if (comparisonStartDate) params.append('start_date', comparisonStartDate);
+        if (comparisonEndDate) params.append('end_date', comparisonEndDate);
+
+        const queryString = params.toString();
+        if (queryString) url += `?${queryString}`;
+
+        const response = await authFetch(url);
+        if (response.ok) {
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = 'cost_comparison.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(downloadUrl);
+            document.body.removeChild(a);
+            showNotification('Excel file downloaded successfully', 'success');
+        } else {
+            const error = await response.json();
+            showNotification(getErrorMessage(error), 'error');
+        }
+    } catch (error) {
+        showNotification(`Error downloading file: ${error.message}`, 'error');
+    }
+  };
+
   const loadUsers = async () => {
     try {
         const response = await authFetch(`${API_URL}/users`);
@@ -2459,6 +2535,22 @@ const [overrideDate, setOverrideDate] = useState('');
     };
     const handleDragEnd = () => { setDraggedCol(null); setDragOverCol(null); };
 
+    // Close (remove) a column from the active hierarchy - its data folds into
+    // the remaining columns' totals, both on-screen and in the Excel export.
+    const handleCloseColumn = (col) => {
+        if (columnOrder.length <= 1) return; // keep at least one column open
+        setColumnOrder(prev => prev.filter(c => c !== col));
+        setExpandedNodes({});
+    };
+
+    // Re-open a previously closed column, appended at the end of the order.
+    const handleOpenColumn = (col) => {
+        setColumnOrder(prev => prev.includes(col) ? prev : [...prev, col]);
+        setExpandedNodes({});
+    };
+
+    const closedColumns = DEFAULT_COLUMN_ORDER.filter(col => !columnOrder.includes(col));
+
     // Helper function to format the display text of selected filters
   const renderFilterValue = (selectedArr) => {
       if (!selectedArr || selectedArr.length === 0) return 'All';
@@ -2525,41 +2617,75 @@ const [overrideDate, setOverrideDate] = useState('');
                       Reorder Columns
                   </button>
               </div>
-              <button 
-                  onClick={() => fetchPrincipalAllocation(overviewStartDate, overviewEndDate, activeDashboardTab)} 
-                  disabled={isPrincipalAllocationLoading}
-                  className="text-sm px-4 py-2 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg font-semibold transition disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
-              >
-                  {isPrincipalAllocationLoading ? 'Loading...' : 'Refresh Data'}
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                  <button 
+                      onClick={handleDownloadAllocationOverviewExcel}
+                      className="text-sm px-4 py-2 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap"
+                  >
+                      <Download size={16} /> Download Excel
+                  </button>
+                  <button 
+                      onClick={() => fetchPrincipalAllocation(overviewStartDate, overviewEndDate, activeDashboardTab)} 
+                      disabled={isPrincipalAllocationLoading}
+                      className="text-sm px-4 py-2 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg font-semibold transition disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                      {isPrincipalAllocationLoading ? 'Loading...' : 'Refresh Data'}
+                  </button>
+              </div>
           </div>
 
           {/* Column Reorder Panel */}
           {showColumnReorder && (
-              <div className="border-b bg-indigo-50 px-4 py-3 flex flex-wrap items-center gap-3">
-                  <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide shrink-0">Drag to reorder:</span>
-                  {columnOrder.map(col => (
-                      <div
-                          key={col}
-                          draggable
-                          onDragStart={() => handleDragStart(col)}
-                          onDragOver={(e) => handleDragOver(e, col)}
-                          onDrop={() => handleDrop(col)}
-                          onDragEnd={handleDragEnd}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 cursor-grab active:cursor-grabbing text-sm font-semibold select-none transition
-                              ${dragOverCol === col && draggedCol !== col ? 'border-indigo-500 bg-indigo-200 scale-105' : ''}
-                              ${draggedCol === col ? 'opacity-50 border-dashed border-gray-400 bg-gray-100' : 'border-white bg-white shadow-sm hover:shadow-md hover:border-indigo-300'}
-                              ${COL_META[col]?.thClass || 'text-gray-700'}
-                          `}
-                      >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-50"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
-                          {COL_META[col]?.label || col}
+              <div className="border-b bg-indigo-50 px-4 py-3 flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide shrink-0">Drag to reorder (open columns):</span>
+                      {columnOrder.map(col => (
+                          <div
+                              key={col}
+                              draggable
+                              onDragStart={() => handleDragStart(col)}
+                              onDragOver={(e) => handleDragOver(e, col)}
+                              onDrop={() => handleDrop(col)}
+                              onDragEnd={handleDragEnd}
+                              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 cursor-grab active:cursor-grabbing text-sm font-semibold select-none transition
+                                  ${dragOverCol === col && draggedCol !== col ? 'border-indigo-500 bg-indigo-200 scale-105' : ''}
+                                  ${draggedCol === col ? 'opacity-50 border-dashed border-gray-400 bg-gray-100' : 'border-white bg-white shadow-sm hover:shadow-md hover:border-indigo-300'}
+                                  ${COL_META[col]?.thClass || 'text-gray-700'}
+                              `}
+                          >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-50"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+                              {col === 'branch' && activeDashboardTab === 'third_party' ? 'To Location' : (COL_META[col]?.label || col)}
+                              <button
+                                  onClick={() => handleCloseColumn(col)}
+                                  disabled={columnOrder.length <= 1}
+                                  title="Close column"
+                                  className="text-gray-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed ml-1"
+                              >
+                                  <X size={12} />
+                              </button>
+                          </div>
+                      ))}
+                      <button 
+                          onClick={() => { setColumnOrder(DEFAULT_COLUMN_ORDER); setExpandedNodes({}); }}
+                          className="text-xs text-red-500 hover:text-red-700 font-semibold underline ml-2"
+                      >Reset</button>
+                  </div>
+
+                  {closedColumns.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 border-t border-indigo-200 pt-3">
+                          <span className="text-xs font-bold text-gray-500 uppercase tracking-wide shrink-0">Closed (click to open):</span>
+                          {closedColumns.map(col => (
+                              <button
+                                  key={col}
+                                  onClick={() => handleOpenColumn(col)}
+                                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg border-2 border-dashed border-gray-300 bg-white text-gray-400 hover:text-gray-700 hover:border-gray-400 text-sm font-semibold transition"
+                              >
+                                  <Plus size={12} />
+                                  {col === 'branch' && activeDashboardTab === 'third_party' ? 'To Location' : (COL_META[col]?.label || col)}
+                              </button>
+                          ))}
                       </div>
-                  ))}
-                  <button 
-                      onClick={() => { setColumnOrder(DEFAULT_COLUMN_ORDER); setExpandedNodes({}); }}
-                      className="text-xs text-red-500 hover:text-red-700 font-semibold underline ml-2"
-                  >Reset</button>
+                  )}
               </div>
           )}
           
@@ -3035,13 +3161,21 @@ const [overrideDate, setOverrideDate] = useState('');
                             </div>
                         </div>
                         
-                        <button 
-                            onClick={() => fetchCostComparison(comparisonStartDate, comparisonEndDate)} 
-                            disabled={isComparisonLoading} 
-                            className="text-sm px-4 py-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg font-semibold transition disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
-                        >
-                            {isComparisonLoading ? 'Loading...' : 'Refresh Data'}
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <button 
+                                onClick={handleDownloadCostComparisonExcel}
+                                className="text-sm px-4 py-2 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap"
+                            >
+                                <Download size={16} /> Download Excel
+                            </button>
+                            <button 
+                                onClick={() => fetchCostComparison(comparisonStartDate, comparisonEndDate)} 
+                                disabled={isComparisonLoading} 
+                                className="text-sm px-4 py-2 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg font-semibold transition disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap"
+                            >
+                                {isComparisonLoading ? 'Loading...' : 'Refresh Data'}
+                            </button>
+                        </div>
                     </div>
 
                     {/* Invisible overlay to close filter dropdowns when clicking outside */}
