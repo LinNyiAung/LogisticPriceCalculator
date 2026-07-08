@@ -2590,6 +2590,34 @@ async def submit_history_item(record_id: int, user: dict = Depends(require_permi
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
+        
+        # --- NEW VALIDATION: Check for overlapping Doc Nums ---
+        await cursor.execute("SELECT doc_nums FROM Calculation_History WHERE id = ?", (record_id,))
+        row = await cursor.fetchone()
+        if not row:
+            await conn.close()
+            raise HTTPException(status_code=404, detail="Record not found")
+            
+        current_doc_nums = json.loads(row[0]) if row[0] else []
+        
+        for doc_num in current_doc_nums:
+            # Check if this doc_num exists in any other submitted or claimed calculation
+            await cursor.execute("""
+                SELECT id FROM Calculation_History 
+                WHERE status IN ('submitted', 'claimed') 
+                AND id != ? 
+                AND doc_nums LIKE ?
+            """, (record_id, f'%"{doc_num}"%'))
+            
+            conflict = await cursor.fetchone()
+            if conflict:
+                await conn.close()
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Cannot submit: Doc Num '{doc_num}' is already included in previously submitted calculation #{conflict[0]}."
+                )
+        # ------------------------------------------------------
+
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         await cursor.execute("UPDATE Calculation_History SET status = 'submitted', submitted_by = ?, submitted_at = ? WHERE id = ?", (user["username"], now_str, record_id))
         if cursor.rowcount == 0:
@@ -2599,7 +2627,10 @@ async def submit_history_item(record_id: int, user: dict = Depends(require_permi
         await conn.close()
         await log_user_activity(user['username'], "SUBMIT_CALCULATION", f"Submitted calculation ID: {record_id}")
         return {"message": "Calculation submitted successfully"}
-    except Exception as e: raise HTTPException(status_code=500, detail=f"Error submitting record: {str(e)}")
+    except HTTPException: 
+        raise # Ensures the 400 error passes cleanly to the frontend
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=f"Error submitting record: {str(e)}")
 
 @app.put("/history/{record_id}/claim")
 async def claim_history_item(record_id: int, user: dict = Depends(require_permission("claim_calculation"))):
