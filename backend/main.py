@@ -1120,18 +1120,17 @@ async def determine_calculation_type_sql(gate_id):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT cost FROM Gate WHERE id = ?", (gate_id,))
+        await cursor.execute("SELECT cost, uom FROM Gate WHERE id = ?", (gate_id,))
         row = await cursor.fetchone()
 
-        await cursor.execute("SELECT COUNT(*) FROM Item_Pricing WHERE gate_id = ?", (gate_id,))
-        item_pricing_count = (await cursor.fetchone())[0]
         await conn.close()
 
         if row and row[0] is not None:
             try:
                 price = Decimal(str(row[0]))
+                uom = str(row[1]).strip().lower() if row[1] else ""
                 if price > 0:
-                    return "gate_pricing" if item_pricing_count > 0 else "per_trip_pricing"
+                    return "per_trip_pricing" if uom == "trip" else "gate_pricing"
             except (ValueError, TypeError):
                 pass
         return "direct_pricing"
@@ -1200,9 +1199,9 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
         cursor_log = await conn_log.cursor()
         
         if from_loc and to_loc:
-            await cursor_log.execute("SELECT id, from_loc, to_loc, cost, unit FROM Gate WHERE gate_name = ? AND from_loc = ? AND to_loc = ?", (gate_name, from_loc, to_loc))
+            await cursor_log.execute("SELECT id, from_loc, to_loc, cost, unit, uom FROM Gate WHERE gate_name = ? AND from_loc = ? AND to_loc = ?", (gate_name, from_loc, to_loc))
         else:
-            await cursor_log.execute("SELECT id, from_loc, to_loc, cost, unit FROM Gate WHERE gate_name = ?", (gate_name,))
+            await cursor_log.execute("SELECT id, from_loc, to_loc, cost, unit, uom FROM Gate WHERE gate_name = ?", (gate_name,))
             
         gate_row = await cursor_log.fetchone()
         
@@ -1228,6 +1227,7 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
     matched_to_loc = gate_row[2]
     cost = Decimal(str(gate_row[3] or 0))
     gate_unit = Decimal(str(gate_row[4] or 1.0))
+    gate_uom = str(gate_row[5]).strip().lower() if gate_row[5] else ""
     
     await cursor_log.execute("SELECT item_id, transportation_cost FROM Item_Pricing WHERE gate_id = ?", (gate_id,))
     pricing_rows = await cursor_log.fetchall()
@@ -1246,9 +1246,7 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
             except:
                 item_pricing[i_code] = {'type': 'unknown', 'value': None}
 
-    has_item_pricing = len(pricing_rows) > 0
-
-    if cost > Decimal("0") and not has_item_pricing: calc_type = "per_trip_pricing"
+    if cost > Decimal("0") and gate_uom == "trip": calc_type = "per_trip_pricing"
     elif cost > Decimal("0"): calc_type = "gate_pricing"
     else: calc_type = "direct_pricing"
 
