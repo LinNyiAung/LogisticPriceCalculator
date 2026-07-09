@@ -46,13 +46,17 @@ async def startup_db():
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Gate' AND xtype='U')
             CREATE TABLE Gate (
-                id        INT IDENTITY(1,1) PRIMARY KEY,
-                gate_name NVARCHAR(255),
-                from_loc  NVARCHAR(255),
-                to_loc    NVARCHAR(255),
-                uom       NVARCHAR(100),
-                unit      INT,
-                cost      DECIMAL(18,6)
+                id         INT IDENTITY(1,1) PRIMARY KEY,
+                gate_name  NVARCHAR(255),
+                from_loc   NVARCHAR(255),
+                to_loc     NVARCHAR(255),
+                uom        NVARCHAR(100),
+                unit       INT,
+                cost       DECIMAL(18,6),
+                created_at NVARCHAR(30),
+                created_by NVARCHAR(255),
+                edited_at  NVARCHAR(30),
+                edited_by  NVARCHAR(255)
             )
         """)
 
@@ -68,6 +72,10 @@ async def startup_db():
                 principal           NVARCHAR(255),
                 brand               NVARCHAR(255),
                 transportation_cost NVARCHAR(255),
+                created_at          NVARCHAR(30),
+                created_by          NVARCHAR(255),
+                edited_at           NVARCHAR(30),
+                edited_by           NVARCHAR(255),
                 FOREIGN KEY (gate_id) REFERENCES Gate(id)
             )
         """)
@@ -190,9 +198,13 @@ async def startup_db():
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Rate_Cart' AND xtype='U')
             CREATE TABLE Rate_Cart (
-                id       INT IDENTITY(1,1) PRIMARY KEY,
-                location NVARCHAR(255) UNIQUE,
-                cost     DECIMAL(18,6)
+                id         INT IDENTITY(1,1) PRIMARY KEY,
+                location   NVARCHAR(255) UNIQUE,
+                cost       DECIMAL(18,6),
+                created_at NVARCHAR(30),
+                created_by NVARCHAR(255),
+                edited_at  NVARCHAR(30),
+                edited_by  NVARCHAR(255)
             )
         """)
 
@@ -213,6 +225,10 @@ async def startup_db():
                 target_date       NVARCHAR(10) NOT NULL,
                 driver_name       NVARCHAR(255) NOT NULL,
                 additional_amount DECIMAL(18,6) NOT NULL,
+                created_at        NVARCHAR(30),
+                created_by        NVARCHAR(255),
+                edited_at         NVARCHAR(30),
+                edited_by         NVARCHAR(255),
                 UNIQUE (target_date, driver_name)
             )
         """)
@@ -346,7 +362,11 @@ async def startup_db():
                 name        NVARCHAR(500),
                 dept        NVARCHAR(255),
                 principal   NVARCHAR(255),
-                description NVARCHAR(500)
+                description NVARCHAR(500),
+                created_at  NVARCHAR(30),
+                created_by  NVARCHAR(255),
+                edited_at   NVARCHAR(30),
+                edited_by   NVARCHAR(255)
             )
         """)
 
@@ -360,7 +380,11 @@ async def startup_db():
                 name      NVARCHAR(500),
                 dept      NVARCHAR(255),
                 principal NVARCHAR(255),
-                log_pric  NVARCHAR(255) UNIQUE
+                log_pric  NVARCHAR(255) UNIQUE,
+                created_at NVARCHAR(30),
+                created_by NVARCHAR(255),
+                edited_at  NVARCHAR(30),
+                edited_by  NVARCHAR(255)
             )
         """)
 
@@ -418,6 +442,16 @@ async def startup_db():
                 branch_code NVARCHAR(100)
             )
         """)
+        
+        # --- Add tracking columns to existing tables if they don't exist ---
+        tables_to_update = ['Gate', 'Item_Pricing', 'Rate_Cart', 'Daily_Driver_Override', 'Branch_Code', 'SD_Code']
+        for table in tables_to_update:
+            await cursor.execute(f"""
+                IF COL_LENGTH('{table}', 'created_at') IS NULL
+                BEGIN
+                    ALTER TABLE {table} ADD created_at NVARCHAR(30), created_by NVARCHAR(255), edited_at NVARCHAR(30), edited_by NVARCHAR(255);
+                END
+            """)
         
         # --- Driver Override Change Log Table ---
         await cursor.execute("""
@@ -1532,13 +1566,13 @@ async def save_rate_cart(data: RateCartData, user: dict = Depends(get_current_us
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (data.location, username, change_date, 'Cost', str(old_cost), str(data.cost)))
 
-            await cursor.execute("UPDATE Rate_Cart SET cost = ? WHERE location = ?", (data.cost, data.location))
+            await cursor.execute("UPDATE Rate_Cart SET cost = ?, edited_at = ?, edited_by = ? WHERE location = ?", (data.cost, change_date, username, data.location))
             await log_user_activity(username, "UPDATE_RATE_CART", f"Updated rate cart for {data.location}")
         else:
             if "add_rate_cart" not in perms:
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_rate_cart' permission")
-            await cursor.execute("INSERT INTO Rate_Cart (location, cost) VALUES (?, ?)", (data.location, data.cost))
+            await cursor.execute("INSERT INTO Rate_Cart (location, cost, created_at, created_by) VALUES (?, ?, ?, ?)", (data.location, data.cost, change_date, username))
             await log_user_activity(username, "ADD_RATE_CART", f"Added rate cart for {data.location}")
             
         await conn.commit()
@@ -1929,11 +1963,11 @@ async def save_daily_override(data: DriverOverrideData, user: dict = Depends(req
 
         await cursor.execute("""
             MERGE Daily_Driver_Override AS target
-            USING (SELECT ? AS target_date, ? AS driver_name, ? AS additional_amount) AS source
+            USING (SELECT ? AS target_date, ? AS driver_name, ? AS additional_amount, ? AS edited_at, ? AS edited_by, ? AS created_at, ? AS created_by) AS source
             ON target.target_date = source.target_date AND target.driver_name = source.driver_name
-            WHEN MATCHED THEN UPDATE SET additional_amount = source.additional_amount
-            WHEN NOT MATCHED THEN INSERT (target_date, driver_name, additional_amount) VALUES (source.target_date, source.driver_name, source.additional_amount);
-        """, (data.target_date, data.driver_name, data.additional_amount))
+            WHEN MATCHED THEN UPDATE SET additional_amount = source.additional_amount, edited_at = source.edited_at, edited_by = source.edited_by
+            WHEN NOT MATCHED THEN INSERT (target_date, driver_name, additional_amount, created_at, created_by) VALUES (source.target_date, source.driver_name, source.additional_amount, source.created_at, source.created_by);
+        """, (data.target_date, data.driver_name, data.additional_amount, change_date, username, change_date, username))
         
         await conn.commit()
         await conn.close()
@@ -2387,21 +2421,27 @@ async def save_branch_code(data: BranchCodeData, user: dict = Depends(get_curren
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'edit_branch_code' permission")
             
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            username = user['username']
+            
             await cursor.execute("""
                 UPDATE Branch_Code 
-                SET log_pric = ?, code = ?, name = ?, dept = ?, principal = ?, description = ? 
+                SET log_pric = ?, code = ?, name = ?, dept = ?, principal = ?, description = ?, edited_at = ?, edited_by = ?
                 WHERE log_pric = ?
-            """, (data.log_pric, data.code, data.name, data.dept, data.principal, data.description, data.original_log_pric))
+            """, (data.log_pric, data.code, data.name, data.dept, data.principal, data.description, now_str, username, data.original_log_pric))
             await log_user_activity(user['username'], "UPDATE_BRANCH_CODE", f"Updated Branch Code: {data.log_pric}")
         else:
             if "add_branch_code" not in perms:
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_branch_code' permission")
             
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            username = user['username']
+
             await cursor.execute("""
-                INSERT INTO Branch_Code (log_pric, code, name, dept, principal, description) 
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (data.log_pric, data.code, data.name, data.dept, data.principal, data.description))
+                INSERT INTO Branch_Code (log_pric, code, name, dept, principal, description, created_at, created_by) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (data.log_pric, data.code, data.name, data.dept, data.principal, data.description, now_str, username))
             await log_user_activity(user['username'], "ADD_BRANCH_CODE", f"Added Branch Code: {data.log_pric}")
 
         await conn.commit()
@@ -2452,21 +2492,27 @@ async def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user))
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'edit_sd_code' permission")
             
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            username = user['username']
+
             await cursor.execute("""
                 UPDATE SD_Code 
-                SET channel = ?, code = ?, name = ?, dept = ?, principal = ?, log_pric = ? 
+                SET channel = ?, code = ?, name = ?, dept = ?, principal = ?, log_pric = ?, edited_at = ?, edited_by = ?
                 WHERE log_pric = ?
-            """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric, data.original_log_pric))
+            """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric, now_str, username, data.original_log_pric))
             await log_user_activity(user['username'], "UPDATE_SD_CODE", f"Updated SD Code: {data.log_pric}")
         else:
             if "add_sd_code" not in perms:
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_sd_code' permission")
             
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            username = user['username']
+
             await cursor.execute("""
-                INSERT INTO SD_Code (channel, code, name, dept, principal, log_pric) 
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric))
+                INSERT INTO SD_Code (channel, code, name, dept, principal, log_pric, created_at, created_by) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric, now_str, username))
             await log_user_activity(user['username'], "ADD_SD_CODE", f"Added SD Code: {data.log_pric}")
 
         await conn.commit()
@@ -3287,16 +3333,19 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
                     await cursor.executemany("INSERT INTO Gate_Change_Log (gate_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
 
             await cursor.execute("""
-                UPDATE Gate SET gate_name = ?, from_loc = ?, to_loc = ?, uom = ?, unit = ?, cost = ? WHERE id = ?
-            """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, gate_data.gate_id))
+                UPDATE Gate SET gate_name = ?, from_loc = ?, to_loc = ?, uom = ?, unit = ?, cost = ?, edited_at = ?, edited_by = ? WHERE id = ?
+            """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, change_date, username, gate_data.gate_id))
             await log_user_activity(user['username'], "UPDATE_GATE", f"Updated gate ID {gate_data.gate_id}: {gate_data.gate_name}")
         else:
             if "add_gate" not in perms:
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_gate' permission")
                 
-            await cursor.execute("INSERT INTO Gate (gate_name, from_loc, to_loc, uom, unit, cost) VALUES (?, ?, ?, ?, ?, ?)", 
-                  (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost))
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            username = user['username']
+
+            await cursor.execute("INSERT INTO Gate (gate_name, from_loc, to_loc, uom, unit, cost, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+                  (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, now_str, username))
             await log_user_activity(user['username'], "CREATE_GATE", f"Created gate: {gate_data.gate_name}")
         
         await conn.commit()
@@ -3376,20 +3425,23 @@ async def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get
             if changes:
                  await cursor.executemany("INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
 
-            await cursor.execute("UPDATE Item_Pricing SET item_id = ?, bu = ?, item_name = ?, principal = ?, brand = ?, transportation_cost = ? WHERE id = ?", 
-                (item_data.item_code, item_data.bu, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost, pricing_id))
+            await cursor.execute("UPDATE Item_Pricing SET item_id = ?, bu = ?, item_name = ?, principal = ?, brand = ?, transportation_cost = ?, edited_at = ?, edited_by = ? WHERE id = ?", 
+                (item_data.item_code, item_data.bu, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost, change_date, username, pricing_id))
             await log_user_activity(user['username'], "UPDATE_ITEM_PRICING", f"Updated pricing for item {item_data.item_code} on gate ID {item_data.gate_id}")
         else:
             if "add_item" not in perms:
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_item' permission")
                 
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            username = user['username']
+
             while True:
                 new_id = random.randint(10000000, 99999999)
                 await cursor.execute("SELECT 1 FROM Item_Pricing WHERE id = ?", (new_id,))
                 if not await cursor.fetchone(): break
-            await cursor.execute("INSERT INTO Item_Pricing (id, gate_id, bu, item_id, item_name, principal, brand, transportation_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
-                (new_id, item_data.gate_id, item_data.bu, item_data.item_code, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost))
+            await cursor.execute("INSERT INTO Item_Pricing (id, gate_id, bu, item_id, item_name, principal, brand, transportation_cost, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                (new_id, item_data.gate_id, item_data.bu, item_data.item_code, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost, now_str, username))
             await log_user_activity(user['username'], "CREATE_ITEM_PRICING", f"Added pricing for item {item_data.item_code} to gate ID {item_data.gate_id}")
 
         await conn.commit()
