@@ -298,7 +298,11 @@ async def startup_db():
                 id              INT IDENTITY(1,1) PRIMARY KEY,
                 username        NVARCHAR(255) UNIQUE,
                 hashed_password NVARCHAR(500),
-                role            NVARCHAR(100)
+                role            NVARCHAR(100),
+                created_at      NVARCHAR(30),
+                created_by      NVARCHAR(255),
+                edited_at       NVARCHAR(30),
+                edited_by       NVARCHAR(255)
             )
         """)
 
@@ -307,7 +311,11 @@ async def startup_db():
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Roles' AND xtype='U')
             CREATE TABLE Roles (
                 name        NVARCHAR(100) PRIMARY KEY,
-                permissions NVARCHAR(MAX)
+                permissions NVARCHAR(MAX),
+                created_at  NVARCHAR(30),
+                created_by  NVARCHAR(255),
+                edited_at   NVARCHAR(30),
+                edited_by   NVARCHAR(255)
             )
         """)
 
@@ -315,8 +323,10 @@ async def startup_db():
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Locations' AND xtype='U')
             CREATE TABLE Locations (
-                id   INT IDENTITY(1,1) PRIMARY KEY,
-                name NVARCHAR(255) UNIQUE
+                id         INT IDENTITY(1,1) PRIMARY KEY,
+                name       NVARCHAR(255) UNIQUE,
+                created_at NVARCHAR(30),
+                created_by NVARCHAR(255)
             )
         """)
 
@@ -331,24 +341,30 @@ async def startup_db():
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='UOMs' AND xtype='U')
             CREATE TABLE UOMs (
-                id   INT IDENTITY(1,1) PRIMARY KEY,
-                name NVARCHAR(100) UNIQUE
+                id         INT IDENTITY(1,1) PRIMARY KEY,
+                name       NVARCHAR(100) UNIQUE,
+                created_at NVARCHAR(30),
+                created_by NVARCHAR(255)
             )
         """)
 
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Channels' AND xtype='U')
             CREATE TABLE Channels (
-                id   INT IDENTITY(1,1) PRIMARY KEY,
-                name NVARCHAR(255) UNIQUE
+                id         INT IDENTITY(1,1) PRIMARY KEY,
+                name       NVARCHAR(255) UNIQUE,
+                created_at NVARCHAR(30),
+                created_by NVARCHAR(255)
             )
         """)
 
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Departments' AND xtype='U')
             CREATE TABLE Departments (
-                id   INT IDENTITY(1,1) PRIMARY KEY,
-                name NVARCHAR(255) UNIQUE
+                id         INT IDENTITY(1,1) PRIMARY KEY,
+                name       NVARCHAR(255) UNIQUE,
+                created_at NVARCHAR(30),
+                created_by NVARCHAR(255)
             )
         """)
 
@@ -439,17 +455,28 @@ async def startup_db():
             CREATE TABLE Location_Mapping (
                 id          INT IDENTITY(1,1) PRIMARY KEY,
                 to_location NVARCHAR(255) UNIQUE,
-                branch_code NVARCHAR(100)
+                branch_code NVARCHAR(100),
+                created_at  NVARCHAR(30),
+                created_by  NVARCHAR(255)
             )
         """)
         
         # --- Add tracking columns to existing tables if they don't exist ---
-        tables_to_update = ['Gate', 'Item_Pricing', 'Rate_Cart', 'Daily_Driver_Override', 'Branch_Code', 'SD_Code']
+        tables_to_update = ['Gate', 'Item_Pricing', 'Rate_Cart', 'Daily_Driver_Override', 'Branch_Code', 'SD_Code', 'Users', 'Roles']
         for table in tables_to_update:
             await cursor.execute(f"""
                 IF COL_LENGTH('{table}', 'created_at') IS NULL
                 BEGIN
                     ALTER TABLE {table} ADD created_at NVARCHAR(30), created_by NVARCHAR(255), edited_at NVARCHAR(30), edited_by NVARCHAR(255);
+                END
+            """)
+            
+        tables_to_update_created_only = ['Locations', 'UOMs', 'Channels', 'Departments', 'Location_Mapping']
+        for table in tables_to_update_created_only:
+            await cursor.execute(f"""
+                IF COL_LENGTH('{table}', 'created_at') IS NULL
+                BEGIN
+                    ALTER TABLE {table} ADD created_at NVARCHAR(30), created_by NVARCHAR(255);
                 END
             """)
         
@@ -980,8 +1007,9 @@ async def create_role(role_data: RoleCreate, user: dict = Depends(require_permis
         if await cursor.fetchone():
             await conn.close()
             raise HTTPException(status_code=400, detail="Role already exists")
-        await cursor.execute("INSERT INTO Roles (name, permissions) VALUES (?, ?)", 
-                      (role_data.name, json.dumps(role_data.permissions)))
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await cursor.execute("INSERT INTO Roles (name, permissions, created_at, created_by) VALUES (?, ?, ?, ?)", 
+                      (role_data.name, json.dumps(role_data.permissions), now_str, user['username']))
         await conn.commit()
         await conn.close()
         
@@ -995,7 +1023,9 @@ async def update_role(role_name: str, role_data: RoleUpdate, user: dict = Depend
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("UPDATE Roles SET permissions = ? WHERE name = ?", (json.dumps(role_data.permissions), role_name))
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await cursor.execute("UPDATE Roles SET permissions = ?, edited_at = ?, edited_by = ? WHERE name = ?", 
+                      (json.dumps(role_data.permissions), now_str, user['username'], role_name))
         await conn.commit()
         await conn.close()
         
@@ -1047,8 +1077,9 @@ async def create_user(user_data: UserCreate, user: dict = Depends(require_permis
             await conn.close()
             raise HTTPException(status_code=400, detail="Username already exists")
         hashed_pw = pwd_context.hash(user_data.password)
-        await cursor.execute("INSERT INTO Users (username, hashed_password, role) VALUES (?, ?, ?)", 
-                      (user_data.username, hashed_pw, user_data.role))
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await cursor.execute("INSERT INTO Users (username, hashed_password, role, created_at, created_by) VALUES (?, ?, ?, ?, ?)", 
+                      (user_data.username, hashed_pw, user_data.role, now_str, user['username']))
         await conn.commit()
         await conn.close()
         
@@ -1071,12 +1102,13 @@ async def update_user(user_id: int, user_data: UserUpdate, user: dict = Depends(
             raise HTTPException(status_code=404, detail="User not found")
             
         changes = []
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if user_data.password:
             hashed_pw = pwd_context.hash(user_data.password)
-            await cursor.execute("UPDATE Users SET hashed_password = ? WHERE id = ?", (hashed_pw, user_id))
+            await cursor.execute("UPDATE Users SET hashed_password = ?, edited_at = ?, edited_by = ? WHERE id = ?", (hashed_pw, now_str, user['username'], user_id))
             changes.append("password")
         if user_data.role:
-            await cursor.execute("UPDATE Users SET role = ? WHERE id = ?", (user_data.role, user_id))
+            await cursor.execute("UPDATE Users SET role = ?, edited_at = ?, edited_by = ? WHERE id = ?", (user_data.role, now_str, user['username'], user_id))
             changes.append(f"role to {user_data.role}")
             
         await conn.commit()
@@ -1136,7 +1168,8 @@ async def change_password(data: ChangePasswordRequest, current_user: dict = Depe
             raise HTTPException(status_code=400, detail="Incorrect old password")
             
         new_hashed_password = pwd_context.hash(data.new_password)
-        await cursor.execute("UPDATE Users SET hashed_password = ? WHERE username = ?", (new_hashed_password, username))
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await cursor.execute("UPDATE Users SET hashed_password = ?, edited_at = ?, edited_by = ? WHERE username = ?", (new_hashed_password, now_str, username, username))
         
         await conn.commit()
         await conn.close()
@@ -2139,7 +2172,8 @@ async def add_ref_location(item: ReferenceItem, user: dict = Depends(require_per
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         try:
-            await cursor.execute("INSERT INTO Locations (name) VALUES (?)", (item.name,))
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            await cursor.execute("INSERT INTO Locations (name, created_at, created_by) VALUES (?, ?, ?)", (item.name, now_str, user['username']))
             await conn.commit()
         except Exception as e:
             if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
@@ -2232,7 +2266,8 @@ async def add_ref_uom(item: ReferenceItem, user: dict = Depends(require_permissi
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         try:
-            await cursor.execute("INSERT INTO UOMs (name) VALUES (?)", (item.name,))
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            await cursor.execute("INSERT INTO UOMs (name, created_at, created_by) VALUES (?, ?, ?)", (item.name, now_str, user['username']))
             await conn.commit()
         except Exception as e:
             if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
@@ -2278,7 +2313,8 @@ async def add_ref_channel(item: ReferenceItem, user: dict = Depends(require_perm
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         try:
-            await cursor.execute("INSERT INTO Channels (name) VALUES (?)", (item.name,))
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            await cursor.execute("INSERT INTO Channels (name, created_at, created_by) VALUES (?, ?, ?)", (item.name, now_str, user['username']))
             await conn.commit()
         except Exception as e:
             if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
@@ -2324,7 +2360,8 @@ async def add_ref_department(item: ReferenceItem, user: dict = Depends(require_p
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         try:
-            await cursor.execute("INSERT INTO Departments (name) VALUES (?)", (item.name,))
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            await cursor.execute("INSERT INTO Departments (name, created_at, created_by) VALUES (?, ?, ?)", (item.name, now_str, user['username']))
             await conn.commit()
         except Exception as e:
             if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
@@ -2370,13 +2407,14 @@ async def add_ref_location_mapping(item: LocationMappingItem, user: dict = Depen
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         await cursor.execute("""
             MERGE Location_Mapping AS target
-            USING (SELECT ? AS to_location, ? AS branch_code) AS source
+            USING (SELECT ? AS to_location, ? AS branch_code, ? AS created_at, ? AS created_by) AS source
             ON target.to_location = source.to_location
             WHEN MATCHED THEN UPDATE SET branch_code = source.branch_code
-            WHEN NOT MATCHED THEN INSERT (to_location, branch_code) VALUES (source.to_location, source.branch_code);
-        """, (item.to_location, item.branch_code))
+            WHEN NOT MATCHED THEN INSERT (to_location, branch_code, created_at, created_by) VALUES (source.to_location, source.branch_code, source.created_at, source.created_by);
+        """, (item.to_location, item.branch_code, now_str, user['username']))
         await conn.commit()
         await conn.close()
         await log_user_activity(user['username'], "ADD_REFERENCE", f"Mapped {item.to_location} to {item.branch_code}")
