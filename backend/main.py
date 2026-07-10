@@ -1689,7 +1689,10 @@ async def _get_daily_report_data(target_date: str):
     query = """
         SELECT Branch, ItemCode, MAX(ItemName), MAX(Principal), MAX(Brand), [Driver Name], SUM(ctnQty), CustomerCode, MAX(ContactPerson), Township, SUM(SalesAmount), MAX(BU)
         FROM VersaFleetDetail_TC
-        WHERE CONVERT(DATE, [Task Date]) = ? AND [Task Status] = 'successful'
+        WHERE CONVERT(DATE, [Task Date]) = ? 
+          AND [Task Status] = 'successful'
+          AND ItemCode IS NOT NULL 
+          AND LTRIM(RTRIM(ItemCode)) <> ''
         GROUP BY Branch, [Driver Name], ItemCode, CustomerCode, Township
     """
     await cursor_dwbi.execute(query, (target_date,))
