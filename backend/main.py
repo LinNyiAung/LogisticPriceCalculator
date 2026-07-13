@@ -3232,11 +3232,13 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                 if old_cost_str != new_cost_str:
                     change_logs.append((pricing_id, username, change_date, 'Transportation Cost', old_cost_str, new_cost_str))
 
+                # ADDED: edited_at and edited_by
                 await cursor.execute("""
                     UPDATE Item_Pricing
-                    SET bu = ?, item_name = ?, principal = ?, brand = ?, transportation_cost = ?
+                    SET bu = ?, item_name = ?, principal = ?, brand = ?, transportation_cost = ?,
+                        edited_at = ?, edited_by = ?
                     WHERE gate_id = ? AND item_id = ?
-                """, (row["bu"], row["name"], row["principal"], row["brand"], row["cost"], gate_id, item_code))
+                """, (row["bu"], row["name"], row["principal"], row["brand"], row["cost"], change_date, username, gate_id, item_code))
                 updates_made += 1
             else:
                 while True:
@@ -3244,10 +3246,11 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                     if new_id not in used_ids:
                         used_ids.add(new_id)
                         break
+                # ADDED: created_at and created_by
                 await cursor.execute("""
-                    INSERT INTO Item_Pricing (id, gate_id, bu, item_id, item_name, principal, brand, transportation_cost)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (new_id, gate_id, row["bu"], item_code, row["name"], row["principal"], row["brand"], row["cost"]))
+                    INSERT INTO Item_Pricing (id, gate_id, bu, item_id, item_name, principal, brand, transportation_cost, created_at, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (new_id, gate_id, row["bu"], item_code, row["name"], row["principal"], row["brand"], row["cost"], change_date, username))
                 inserts_made += 1
                 
         if change_logs:
