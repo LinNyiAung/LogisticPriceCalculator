@@ -3411,12 +3411,13 @@ const [overrideDate, setOverrideDate] = useState('');
                           
                           {activeDailyTab !== 'submitted' ? (
                               <div className="flex flex-col items-end gap-2">
-                                  <label className="flex items-center gap-2 cursor-pointer mr-auto md:mr-0 text-sm font-semibold text-gray-700">
+                                  <label className={`flex items-center gap-2 mr-auto md:mr-0 text-sm font-semibold text-gray-700 ${isDailyReportLoading ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
                                       <input 
                                           type="checkbox" 
                                           checked={isDateRange} 
-                                          onChange={(e) => setIsDateRange(e.target.checked)} 
-                                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                          onChange={(e) => setIsDateRange(e.target.checked)}
+                                          disabled={isDailyReportLoading}
+                                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 disabled:cursor-not-allowed"
                                       />
                                       Use Date Range
                                   </label>
@@ -3427,7 +3428,8 @@ const [overrideDate, setOverrideDate] = useState('');
                                               type="date" 
                                               value={dailyReportDate} 
                                               onChange={(e) => setDailyReportDate(e.target.value)}
-                                              className="border p-2 rounded"
+                                              disabled={isDailyReportLoading}
+                                              className="border p-2 rounded disabled:bg-gray-100 disabled:cursor-not-allowed"
                                           />
                                       ) : (
                                           <div className="flex items-center gap-2">
@@ -3435,14 +3437,16 @@ const [overrideDate, setOverrideDate] = useState('');
                                                   type="date" 
                                                   value={dailyReportStartDate} 
                                                   onChange={(e) => setDailyReportStartDate(e.target.value)}
-                                                  className="border p-2 rounded"
+                                                  disabled={isDailyReportLoading}
+                                                  className="border p-2 rounded disabled:bg-gray-100 disabled:cursor-not-allowed"
                                               />
                                               <span className="text-gray-500 font-semibold text-sm">to</span>
                                               <input 
                                                   type="date" 
                                                   value={dailyReportEndDate} 
                                                   onChange={(e) => setDailyReportEndDate(e.target.value)}
-                                                  className="border p-2 rounded"
+                                                  disabled={isDailyReportLoading}
+                                                  className="border p-2 rounded disabled:bg-gray-100 disabled:cursor-not-allowed"
                                               />
                                           </div>
                                       )}
@@ -3472,14 +3476,16 @@ const [overrideDate, setOverrideDate] = useState('');
                                               type="date" 
                                               value={allocationStartDate} 
                                               onChange={(e) => setAllocationStartDate(e.target.value)}
-                                              className="border p-2 rounded"
+                                              disabled={isAllocationLoading}
+                                              className="border p-2 rounded disabled:bg-gray-100 disabled:cursor-not-allowed"
                                           />
                                           <span className="text-gray-500 font-semibold text-sm">to</span>
                                           <input 
                                               type="date" 
                                               value={allocationEndDate} 
                                               onChange={(e) => setAllocationEndDate(e.target.value)}
-                                              className="border p-2 rounded"
+                                              disabled={isAllocationLoading}
+                                              className="border p-2 rounded disabled:bg-gray-100 disabled:cursor-not-allowed"
                                           />
                                       </div>
                                       <button 
@@ -4408,7 +4414,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                     {selectedGateForPricing && (
                                     <>
                                         <button onClick={handleExportExcel} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"><Download size={20} /> Download Excel</button>
-                                        {(permissions.includes('add_item') && permissions.includes('edit_item')) && <label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer"><Upload size={20} /> Upload Excel <input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" /></label>}
+                                        {(permissions.includes('add_item') && permissions.includes('edit_item')) && <label className={`flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition ${isSaving ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}><Upload size={20} /> Upload Excel <input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} disabled={isSaving} className="hidden" /></label>}
                                         {permissions.includes('add_item') && <button onClick={() => setShowAddItemModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Item</button>}
                                     </>
                                     )}
@@ -4416,7 +4422,7 @@ const [overrideDate, setOverrideDate] = useState('');
                             </div>
                             <div className="mb-6">
                                 <label className="block text-sm font-semibold mb-2">Select Gate</label>
-                                <select value={selectedGateForPricing} onChange={(e) => setSelectedGateForPricing(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                                <select value={selectedGateForPricing} onChange={(e) => setSelectedGateForPricing(e.target.value)} disabled={isSaving || isDeleting} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed">
                                     <option value="">-- Select a Gate --</option>
                                     {gates.map((gate) => (<option key={gate.gate_id} value={gate.gate_id}>{gate.gate_name} ({gate.from_loc} &rarr; {gate.to_loc})</option>))}
                                 </select>
@@ -4636,7 +4642,7 @@ const [overrideDate, setOverrideDate] = useState('');
               <h2 className="text-xl font-bold mb-4">Select Doc Nums (Transfer IDs) <span className="text-red-500">*</span></h2>
               <div className="relative mb-4">
                 <div className="relative">
-                  <input type="text" placeholder="Search and add a Doc Num (e.g. PG - 22##### or PDG - 12####)..." value={docNumSearchTerm} onChange={(e) => { setDocNumSearchTerm(e.target.value); setShowDocNumDropdown(true); }} onFocus={() => setShowDocNumDropdown(true)} onBlur={() => setTimeout(() => setShowDocNumDropdown(false), 200)} className="w-full p-3 pl-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                  <input type="text" disabled={isLoading || isSaving} placeholder="Search and add a Doc Num (e.g. PG - 22##### or PDG - 12####)..." value={docNumSearchTerm} onChange={(e) => { setDocNumSearchTerm(e.target.value); setShowDocNumDropdown(true); }} onFocus={() => setShowDocNumDropdown(true)} onBlur={() => setTimeout(() => setShowDocNumDropdown(false), 200)} className="w-full p-3 pl-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed" />
                   <div className="absolute left-3 top-3 text-gray-400"><Search size={20} /></div>
                 </div>
                 {showDocNumDropdown && (
@@ -4682,13 +4688,13 @@ const [overrideDate, setOverrideDate] = useState('');
             {products.length > 0 && (
               <div className="flex flex-col gap-6 mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select From <span className="text-red-500">*</span></h2><select value={selectedFrom} onChange={(e) => handleFromChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"><option value="">-- Select Origin --</option>{fromLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}</select></div>
-                  <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select To <span className="text-red-500">*</span></h2><select value={selectedTo} onChange={(e) => handleToChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed" disabled={!selectedFrom}><option value="">-- Select Destination --</option>{toLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}</select></div>
+                  <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select From <span className="text-red-500">*</span></h2><select disabled={isLoading || isSaving} value={selectedFrom} onChange={(e) => handleFromChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"><option value="">-- Select Origin --</option>{fromLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}</select></div>
+                  <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select To <span className="text-red-500">*</span></h2><select disabled={!selectedFrom || isLoading || isSaving} value={selectedTo} onChange={(e) => handleToChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"><option value="">-- Select Destination --</option>{toLocations.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}</select></div>
                 </div>
                 {(selectedFrom && selectedTo) && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Gate <span className="text-red-500">*</span></h2><select value={selectedGate} onChange={(e) => handleGateChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"><option value="">-- Select a Gate --</option>{gates.filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo).map((gate) => (<option key={gate.gate_name} value={gate.gate_name}>{gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'per_trip_pricing' ? ' Per Trip' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}</option>))}</select></div>
-                    <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Channel <span className="text-red-500">*</span></h2><select value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"><option value="">-- Select a Channel --</option>{refChannels.map((chan, i) => (<option key={i} value={chan}>{chan}</option>))}</select></div>
+                    <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Gate <span className="text-red-500">*</span></h2><select disabled={isLoading || isSaving} value={selectedGate} onChange={(e) => handleGateChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"><option value="">-- Select a Gate --</option>{gates.filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo).map((gate) => (<option key={gate.gate_name} value={gate.gate_name}>{gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'per_trip_pricing' ? ' Per Trip' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}</option>))}</select></div>
+                    <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Channel <span className="text-red-500">*</span></h2><select disabled={isLoading || isSaving} value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"><option value="">-- Select a Channel --</option>{refChannels.map((chan, i) => (<option key={i} value={chan}>{chan}</option>))}</select></div>
                   </div>
                 )}
               </div>
@@ -4795,19 +4801,19 @@ const [overrideDate, setOverrideDate] = useState('');
                   <p className="text-sm text-gray-500 mb-4">Add POSM items below. Their combined cost is allocated across items and added to the Total Cost.</p>
 
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
-                    <select disabled={currentHistoryId !== null} value={posmDraft.department} onChange={(e) => setPosmDraft({ ...posmDraft, department: e.target.value })} className="p-2 border rounded-lg">
+                    <select disabled={currentHistoryId !== null || isLoading || isSaving} value={posmDraft.department} onChange={(e) => setPosmDraft({ ...posmDraft, department: e.target.value })} className="p-2 border rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed">
                       <option value="">-- Department --</option>
                       {refDepartments.map((d, i) => (<option key={i} value={d}>{d}</option>))}
                     </select>
-                    <input disabled={currentHistoryId !== null} type="text" placeholder="Item Name" value={posmDraft.item_name} onChange={(e) => setPosmDraft({ ...posmDraft, item_name: e.target.value })} className="p-2 border rounded-lg md:col-span-2" />
-                    <select disabled={currentHistoryId !== null} value={posmDraft.uom} onChange={(e) => setPosmDraft({ ...posmDraft, uom: e.target.value })} className="p-2 border rounded-lg">
+                    <input disabled={currentHistoryId !== null || isLoading || isSaving} type="text" placeholder="Item Name" value={posmDraft.item_name} onChange={(e) => setPosmDraft({ ...posmDraft, item_name: e.target.value })} className="p-2 border rounded-lg md:col-span-2 disabled:bg-gray-100 disabled:cursor-not-allowed" />
+                    <select disabled={currentHistoryId !== null || isLoading || isSaving} value={posmDraft.uom} onChange={(e) => setPosmDraft({ ...posmDraft, uom: e.target.value })} className="p-2 border rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed">
                       <option value="">-- Unit --</option>
                       {refUOMs.map((u, i) => (<option key={i} value={u}>{u}</option>))}
                     </select>
                     <div className="flex gap-2">
-                      <input disabled={currentHistoryId !== null} type="number" min="0" placeholder="Qty" value={posmDraft.quantity} onChange={(e) => setPosmDraft({ ...posmDraft, quantity: e.target.value })} className="p-2 border rounded-lg w-full" />
+                      <input disabled={currentHistoryId !== null || isLoading || isSaving} type="number" min="0" placeholder="Qty" value={posmDraft.quantity} onChange={(e) => setPosmDraft({ ...posmDraft, quantity: e.target.value })} className="p-2 border rounded-lg w-full disabled:bg-gray-100 disabled:cursor-not-allowed" />
                       {currentHistoryId === null && (
-                        <button onClick={handleAddPosmItem} className="px-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700"><Plus size={18} /></button>
+                        <button disabled={isLoading || isSaving} onClick={handleAddPosmItem} className="px-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-70 disabled:cursor-not-allowed"><Plus size={18} /></button>
                       )}
                     </div>
                   </div>
@@ -4854,11 +4860,11 @@ const [overrideDate, setOverrideDate] = useState('');
                     <label className="block text-sm font-semibold mb-2 text-gray-700">Total Cost of POSM Calculation</label>
                     <input
                       type="number"
-                      disabled={currentHistoryId !== null}
+                      disabled={currentHistoryId !== null || isLoading || isSaving}
                       value={posmTotalCost}
                       onChange={(e) => { setPosmTotalCost(e.target.value); setCalculatedProducts([]); setCalculatedTotalCost(null); setCalculatedPosmProducts([]); }}
                       placeholder="Enter total POSM cost..."
-                      className={`w-full p-3 border rounded-lg ${currentHistoryId !== null ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`}
+                      className={`w-full p-3 border rounded-lg ${(currentHistoryId !== null || isLoading || isSaving) ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`}
                     />
                     <p className="text-xs text-gray-500 mt-1">Allocated across all POSM items above, and added to the final Total Cost.</p>
                   </div>
@@ -4892,8 +4898,8 @@ const [overrideDate, setOverrideDate] = useState('');
                         value={manualTotalCost} 
                         onChange={(e) => setManualTotalCost(e.target.value)} 
                         placeholder={isManualTotalCostEnabled ? "Enter base transport amount..." : "Not applicable for selected items"} 
-                        className={`w-full p-3 border rounded-lg ${(!isManualTotalCostEnabled || currentHistoryId !== null) ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`} 
-                        disabled={!isManualTotalCostEnabled || currentHistoryId !== null} 
+                        className={`w-full p-3 border rounded-lg ${(!isManualTotalCostEnabled || currentHistoryId !== null || isLoading || isSaving) ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`} 
+                        disabled={!isManualTotalCostEnabled || currentHistoryId !== null || isLoading || isSaving} 
                       />
                       <p className={`text-xs mt-1 ${(!isManualTotalCostEnabled || currentHistoryId !== null) ? 'text-gray-400' : 'text-gray-500'}`}>
                         {isManualTotalCostEnabled ? "Overrides calculated item costs." : "Only enabled if selected items have specific transport costs."}
@@ -4906,8 +4912,8 @@ const [overrideDate, setOverrideDate] = useState('');
                         value={additionalCharges} 
                         onChange={(e) => setAdditionalCharges(e.target.value)} 
                         placeholder="e.g. Labor, Toll fees..." 
-                        className={`w-full p-3 border rounded-lg ${currentHistoryId !== null ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`} 
-                        disabled={currentHistoryId !== null} 
+                        className={`w-full p-3 border rounded-lg ${(currentHistoryId !== null || isLoading || isSaving) ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`} 
+                        disabled={currentHistoryId !== null || isLoading || isSaving} 
                       />
                       <p className={`text-xs mt-1 ${currentHistoryId !== null ? 'text-gray-400' : 'text-gray-500'}`}>Added to the final total.</p>
                     </div>
