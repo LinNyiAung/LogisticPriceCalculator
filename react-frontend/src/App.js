@@ -2113,7 +2113,7 @@ const [overrideDate, setOverrideDate] = useState('');
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
                 <h2 className="text-2xl font-bold mb-4">{user ? 'Edit User' : 'Add New User'}</h2>
                 <div className="space-y-4">
-                    <div><label className="block text-sm font-semibold mb-1">Username <span className="text-red-500">*</span></label><input disabled={!!user || isSaving} type="text" value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} className="w-full p-2 border rounded" /></div>
+                    <div><label className="block text-sm font-semibold mb-1">Username <span className="text-red-500">*</span></label><input disabled={isSaving} type="text" value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} className="w-full p-2 border rounded" /></div>
                     <div><label className="block text-sm font-semibold mb-1">Password {!user && <span className="text-red-500">*</span>}</label><input disabled={isSaving} type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full p-2 border rounded" placeholder={user ? "Leave blank to keep" : "Required"} /></div>
                     <div>
                         <label className="block text-sm font-semibold mb-1">Role <span className="text-red-500">*</span></label>
