@@ -838,7 +838,7 @@ class ChangePasswordRequest(BaseModel):
 
 class ActivityLogResponse(BaseModel):
     id: int
-    username: str
+    username: Optional[str] = None
     action: str
     details: str
     timestamp: str
@@ -954,7 +954,7 @@ async def get_activity_logs(
         cursor = await conn.cursor()
         
         query = """
-            SELECT l.id, u.username, l.action, l.details, l.timestamp 
+            SELECT l.id, COALESCE(u.username, '(deleted user)') AS username, l.action, l.details, l.timestamp 
             FROM User_Activity_Log l
             LEFT JOIN Users u ON l.username = u.id
             WHERE 1=1
