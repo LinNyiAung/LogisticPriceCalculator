@@ -54,9 +54,9 @@ async def startup_db():
                 unit       INT,
                 cost       DECIMAL(18,6),
                 created_at NVARCHAR(30),
-                created_by NVARCHAR(255),
+                created_by INT,
                 edited_at  NVARCHAR(30),
-                edited_by  NVARCHAR(255)
+                edited_by  INT
             )
         """)
 
@@ -73,9 +73,9 @@ async def startup_db():
                 brand               NVARCHAR(255),
                 transportation_cost NVARCHAR(255),
                 created_at          NVARCHAR(30),
-                created_by          NVARCHAR(255),
+                created_by          INT,
                 edited_at           NVARCHAR(30),
-                edited_by           NVARCHAR(255),
+                edited_by           INT,
                 FOREIGN KEY (gate_id) REFERENCES Gate(id)
             )
         """)
@@ -202,9 +202,9 @@ async def startup_db():
                 location   NVARCHAR(255) UNIQUE,
                 cost       DECIMAL(18,6),
                 created_at NVARCHAR(30),
-                created_by NVARCHAR(255),
+                created_by INT,
                 edited_at  NVARCHAR(30),
-                edited_by  NVARCHAR(255)
+                edited_by  INT
             )
         """)
 
@@ -226,9 +226,9 @@ async def startup_db():
                 driver_name       NVARCHAR(255) NOT NULL,
                 additional_amount DECIMAL(18,6) NOT NULL,
                 created_at        NVARCHAR(30),
-                created_by        NVARCHAR(255),
+                created_by        INT,
                 edited_at         NVARCHAR(30),
-                edited_by         NVARCHAR(255),
+                edited_by         INT,
                 UNIQUE (target_date, driver_name)
             )
         """)
@@ -300,9 +300,9 @@ async def startup_db():
                 hashed_password NVARCHAR(500),
                 role            NVARCHAR(100),
                 created_at      NVARCHAR(30),
-                created_by      NVARCHAR(255),
+                created_by      INT,
                 edited_at       NVARCHAR(30),
-                edited_by       NVARCHAR(255)
+                edited_by       INT
             )
         """)
 
@@ -313,9 +313,9 @@ async def startup_db():
                 name        NVARCHAR(100) PRIMARY KEY,
                 permissions NVARCHAR(MAX),
                 created_at  NVARCHAR(30),
-                created_by  NVARCHAR(255),
+                created_by  INT,
                 edited_at   NVARCHAR(30),
-                edited_by   NVARCHAR(255)
+                edited_by   INT
             )
         """)
 
@@ -326,7 +326,7 @@ async def startup_db():
                 id         INT IDENTITY(1,1) PRIMARY KEY,
                 name       NVARCHAR(255) UNIQUE,
                 created_at NVARCHAR(30),
-                created_by NVARCHAR(255)
+                created_by INT
             )
         """)
 
@@ -344,7 +344,7 @@ async def startup_db():
                 id         INT IDENTITY(1,1) PRIMARY KEY,
                 name       NVARCHAR(100) UNIQUE,
                 created_at NVARCHAR(30),
-                created_by NVARCHAR(255)
+                created_by INT
             )
         """)
 
@@ -354,7 +354,7 @@ async def startup_db():
                 id         INT IDENTITY(1,1) PRIMARY KEY,
                 name       NVARCHAR(255) UNIQUE,
                 created_at NVARCHAR(30),
-                created_by NVARCHAR(255)
+                created_by INT
             )
         """)
 
@@ -364,7 +364,7 @@ async def startup_db():
                 id         INT IDENTITY(1,1) PRIMARY KEY,
                 name       NVARCHAR(255) UNIQUE,
                 created_at NVARCHAR(30),
-                created_by NVARCHAR(255)
+                created_by INT
             )
         """)
 
@@ -380,9 +380,9 @@ async def startup_db():
                 principal   NVARCHAR(255),
                 description NVARCHAR(500),
                 created_at  NVARCHAR(30),
-                created_by  NVARCHAR(255),
+                created_by  INT,
                 edited_at   NVARCHAR(30),
-                edited_by   NVARCHAR(255)
+                edited_by   INT
             )
         """)
 
@@ -398,9 +398,9 @@ async def startup_db():
                 principal NVARCHAR(255),
                 log_pric  NVARCHAR(255) UNIQUE,
                 created_at NVARCHAR(30),
-                created_by NVARCHAR(255),
+                created_by INT,
                 edited_at  NVARCHAR(30),
-                edited_by  NVARCHAR(255)
+                edited_by  INT
             )
         """)
 
@@ -457,7 +457,7 @@ async def startup_db():
                 to_location NVARCHAR(255) UNIQUE,
                 branch_code NVARCHAR(100),
                 created_at  NVARCHAR(30),
-                created_by  NVARCHAR(255)
+                created_by  INT
             )
         """)
         
@@ -467,7 +467,7 @@ async def startup_db():
             await cursor.execute(f"""
                 IF COL_LENGTH('{table}', 'created_at') IS NULL
                 BEGIN
-                    ALTER TABLE {table} ADD created_at NVARCHAR(30), created_by NVARCHAR(255), edited_at NVARCHAR(30), edited_by NVARCHAR(255);
+                    ALTER TABLE {table} ADD created_at NVARCHAR(30), created_by INT, edited_at NVARCHAR(30), edited_by INT;
                 END
             """)
             
@@ -476,7 +476,7 @@ async def startup_db():
             await cursor.execute(f"""
                 IF COL_LENGTH('{table}', 'created_at') IS NULL
                 BEGIN
-                    ALTER TABLE {table} ADD created_at NVARCHAR(30), created_by NVARCHAR(255);
+                    ALTER TABLE {table} ADD created_at NVARCHAR(30), created_by INT;
                 END
             """)
         
@@ -1026,7 +1026,7 @@ async def create_role(role_data: RoleCreate, user: dict = Depends(require_permis
             raise HTTPException(status_code=400, detail="Role already exists")
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         await cursor.execute("INSERT INTO Roles (name, permissions, created_at, created_by) VALUES (?, ?, ?, ?)", 
-                      (role_data.name, json.dumps(role_data.permissions), now_str, user['username']))
+                      (role_data.name, json.dumps(role_data.permissions), now_str, user['id']))
         await conn.commit()
         await conn.close()
         
@@ -1042,7 +1042,7 @@ async def update_role(role_name: str, role_data: RoleUpdate, user: dict = Depend
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         await cursor.execute("UPDATE Roles SET permissions = ?, edited_at = ?, edited_by = ? WHERE name = ?", 
-                      (json.dumps(role_data.permissions), now_str, user['username'], role_name))
+                      (json.dumps(role_data.permissions), now_str, user['id'], role_name))
         await conn.commit()
         await conn.close()
         
@@ -1096,7 +1096,7 @@ async def create_user(user_data: UserCreate, user: dict = Depends(require_permis
         hashed_pw = pwd_context.hash(user_data.password)
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         await cursor.execute("INSERT INTO Users (username, hashed_password, role, created_at, created_by) VALUES (?, ?, ?, ?, ?)", 
-                      (user_data.username, hashed_pw, user_data.role, now_str, user['username']))
+                      (user_data.username, hashed_pw, user_data.role, now_str, user['id']))
         await conn.commit()
         await conn.close()
         
@@ -1126,15 +1126,15 @@ async def update_user(user_id: int, user_data: UserUpdate, user: dict = Depends(
             if await cursor.fetchone():
                 await conn.close()
                 raise HTTPException(status_code=400, detail="Username already exists")
-            await cursor.execute("UPDATE Users SET username = ?, edited_at = ?, edited_by = ? WHERE id = ?", (user_data.username, now_str, user['username'], user_id))
+            await cursor.execute("UPDATE Users SET username = ?, edited_at = ?, edited_by = ? WHERE id = ?", (user_data.username, now_str, user['id'], user_id))
             changes.append(f"username to {user_data.username}")
 
         if user_data.password:
             hashed_pw = pwd_context.hash(user_data.password)
-            await cursor.execute("UPDATE Users SET hashed_password = ?, edited_at = ?, edited_by = ? WHERE id = ?", (hashed_pw, now_str, user['username'], user_id))
+            await cursor.execute("UPDATE Users SET hashed_password = ?, edited_at = ?, edited_by = ? WHERE id = ?", (hashed_pw, now_str, user['id'], user_id))
             changes.append("password")
         if user_data.role:
-            await cursor.execute("UPDATE Users SET role = ?, edited_at = ?, edited_by = ? WHERE id = ?", (user_data.role, now_str, user['username'], user_id))
+            await cursor.execute("UPDATE Users SET role = ?, edited_at = ?, edited_by = ? WHERE id = ?", (user_data.role, now_str, user['id'], user_id))
             changes.append(f"role to {user_data.role}")
             
         await conn.commit()
@@ -1196,7 +1196,7 @@ async def change_password(data: ChangePasswordRequest, current_user: dict = Depe
             
         new_hashed_password = pwd_context.hash(data.new_password)
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        await cursor.execute("UPDATE Users SET hashed_password = ?, edited_at = ?, edited_by = ? WHERE username = ?", (new_hashed_password, now_str, username, username))
+        await cursor.execute("UPDATE Users SET hashed_password = ?, edited_at = ?, edited_by = ? WHERE username = ?", (new_hashed_password, now_str, current_user['id'], username))
         
         await conn.commit()
         await conn.close()
@@ -1626,13 +1626,13 @@ async def save_rate_cart(data: RateCartData, user: dict = Depends(get_current_us
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (data.location, user['id'], change_date, 'Cost', str(old_cost), str(data.cost)))
 
-            await cursor.execute("UPDATE Rate_Cart SET cost = ?, edited_at = ?, edited_by = ? WHERE location = ?", (data.cost, change_date, username, data.location))
+            await cursor.execute("UPDATE Rate_Cart SET cost = ?, edited_at = ?, edited_by = ? WHERE location = ?", (data.cost, change_date, user['id'], data.location))
             await log_user_activity(username, "UPDATE_RATE_CART", f"Updated rate cart for {data.location}")
         else:
             if "add_rate_cart" not in perms:
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_rate_cart' permission")
-            await cursor.execute("INSERT INTO Rate_Cart (location, cost, created_at, created_by) VALUES (?, ?, ?, ?)", (data.location, data.cost, change_date, username))
+            await cursor.execute("INSERT INTO Rate_Cart (location, cost, created_at, created_by) VALUES (?, ?, ?, ?)", (data.location, data.cost, change_date, user['id']))
             await log_user_activity(username, "ADD_RATE_CART", f"Added rate cart for {data.location}")
             
         await conn.commit()
@@ -2211,7 +2211,7 @@ async def add_ref_location(item: ReferenceItem, user: dict = Depends(require_per
         cursor = await conn.cursor()
         try:
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            await cursor.execute("INSERT INTO Locations (name, created_at, created_by) VALUES (?, ?, ?)", (item.name, now_str, user['username']))
+            await cursor.execute("INSERT INTO Locations (name, created_at, created_by) VALUES (?, ?, ?)", (item.name, now_str, user['id']))
             await conn.commit()
         except Exception as e:
             if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
@@ -2305,7 +2305,7 @@ async def add_ref_uom(item: ReferenceItem, user: dict = Depends(require_permissi
         cursor = await conn.cursor()
         try:
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            await cursor.execute("INSERT INTO UOMs (name, created_at, created_by) VALUES (?, ?, ?)", (item.name, now_str, user['username']))
+            await cursor.execute("INSERT INTO UOMs (name, created_at, created_by) VALUES (?, ?, ?)", (item.name, now_str, user['id']))
             await conn.commit()
         except Exception as e:
             if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
@@ -2352,7 +2352,7 @@ async def add_ref_channel(item: ReferenceItem, user: dict = Depends(require_perm
         cursor = await conn.cursor()
         try:
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            await cursor.execute("INSERT INTO Channels (name, created_at, created_by) VALUES (?, ?, ?)", (item.name, now_str, user['username']))
+            await cursor.execute("INSERT INTO Channels (name, created_at, created_by) VALUES (?, ?, ?)", (item.name, now_str, user['id']))
             await conn.commit()
         except Exception as e:
             if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
@@ -2399,7 +2399,7 @@ async def add_ref_department(item: ReferenceItem, user: dict = Depends(require_p
         cursor = await conn.cursor()
         try:
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            await cursor.execute("INSERT INTO Departments (name, created_at, created_by) VALUES (?, ?, ?)", (item.name, now_str, user['username']))
+            await cursor.execute("INSERT INTO Departments (name, created_at, created_by) VALUES (?, ?, ?)", (item.name, now_str, user['id']))
             await conn.commit()
         except Exception as e:
             if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
@@ -2452,7 +2452,7 @@ async def add_ref_location_mapping(item: LocationMappingItem, user: dict = Depen
             ON target.to_location = source.to_location
             WHEN MATCHED THEN UPDATE SET branch_code = source.branch_code
             WHEN NOT MATCHED THEN INSERT (to_location, branch_code, created_at, created_by) VALUES (source.to_location, source.branch_code, source.created_at, source.created_by);
-        """, (item.to_location, item.branch_code, now_str, user['username']))
+        """, (item.to_location, item.branch_code, now_str, user['id']))
         await conn.commit()
         await conn.close()
         await log_user_activity(user['username'], "ADD_REFERENCE", f"Mapped {item.to_location} to {item.branch_code}")
@@ -2498,7 +2498,7 @@ async def save_branch_code(data: BranchCodeData, user: dict = Depends(get_curren
                 raise HTTPException(status_code=403, detail="Requires 'edit_branch_code' permission")
             
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            username = user['username']
+            username = user['id']
             
             await cursor.execute("""
                 UPDATE Branch_Code 
@@ -2512,7 +2512,7 @@ async def save_branch_code(data: BranchCodeData, user: dict = Depends(get_curren
                 raise HTTPException(status_code=403, detail="Requires 'add_branch_code' permission")
             
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            username = user['username']
+            username = user['id']
 
             await cursor.execute("""
                 INSERT INTO Branch_Code (log_pric, code, name, dept, principal, description, created_at, created_by) 
@@ -2569,7 +2569,7 @@ async def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user))
                 raise HTTPException(status_code=403, detail="Requires 'edit_sd_code' permission")
             
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            username = user['username']
+            username = user['id']
 
             await cursor.execute("""
                 UPDATE SD_Code 
@@ -2583,7 +2583,7 @@ async def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user))
                 raise HTTPException(status_code=403, detail="Requires 'add_sd_code' permission")
             
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            username = user['username']
+            username = user['id']
 
             await cursor.execute("""
                 INSERT INTO SD_Code (channel, code, name, dept, principal, log_pric, created_at, created_by) 
@@ -3304,7 +3304,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                     SET bu = ?, item_name = ?, principal = ?, brand = ?, transportation_cost = ?,
                         edited_at = ?, edited_by = ?
                     WHERE gate_id = ? AND item_id = ?
-                """, (row["bu"], row["name"], row["principal"], row["brand"], row["cost"], change_date, username, gate_id, item_code))
+                """, (row["bu"], row["name"], row["principal"], row["brand"], row["cost"], change_date, user['id'], gate_id, item_code))
                 updates_made += 1
             else:
                 while True:
@@ -3316,7 +3316,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                 await cursor.execute("""
                     INSERT INTO Item_Pricing (id, gate_id, bu, item_id, item_name, principal, brand, transportation_cost, created_at, created_by)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (new_id, gate_id, row["bu"], item_code, row["name"], row["principal"], row["brand"], row["cost"], change_date, username))
+                """, (new_id, gate_id, row["bu"], item_code, row["name"], row["principal"], row["brand"], row["cost"], change_date, user['id']))
                 inserts_made += 1
                 
         if change_logs:
@@ -3432,7 +3432,7 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
                 new_cost = gate_data.cost if gate_data.cost is not None else None
 
                 change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                username = user['username']
+                username = user['id']
                 changes = []
 
                 if old_uom != new_uom: changes.append((gate_id, user['id'], change_date, 'UOM', str(old_uom or ''), str(new_uom or '')))
@@ -3452,7 +3452,7 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
                 raise HTTPException(status_code=403, detail="Requires 'add_gate' permission")
                 
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            username = user['username']
+            username = user['id']
 
             await cursor.execute("INSERT INTO Gate (gate_name, from_loc, to_loc, uom, unit, cost, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
                   (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, now_str, username))
@@ -3531,11 +3531,11 @@ async def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get
             new_cost_str = str(item_data.transportation_cost).strip() if item_data.transportation_cost else ""
             
             change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            username = user['username']
+            username = user['id']
             changes = []
             
             if old_cost_str != new_cost_str:
-                 changes.append((pricing_id, username, change_date, 'Transportation Cost', old_cost_str, new_cost_str))
+                 changes.append((pricing_id, user['id'], change_date, 'Transportation Cost', old_cost_str, new_cost_str))
 
             if changes:
                  await cursor.executemany("INSERT INTO Item_Change_Log (pricing_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
@@ -3549,7 +3549,7 @@ async def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get
                 raise HTTPException(status_code=403, detail="Requires 'add_item' permission")
                 
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            username = user['username']
+            username = user['id']
 
             while True:
                 new_id = random.randint(10000000, 99999999)
@@ -3557,6 +3557,7 @@ async def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get
                 if not await cursor.fetchone(): break
             await cursor.execute("INSERT INTO Item_Pricing (id, gate_id, bu, item_id, item_name, principal, brand, transportation_cost, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
                 (new_id, item_data.gate_id, item_data.bu, item_data.item_code, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost, now_str, username))
+
             await log_user_activity(user['username'], "CREATE_ITEM_PRICING", f"Added pricing for item {item_data.item_code} to gate ID {item_data.gate_id}")
 
         await conn.commit()
