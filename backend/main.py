@@ -284,7 +284,7 @@ async def startup_db():
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='User_Activity_Log' AND xtype='U')
             CREATE TABLE User_Activity_Log (
                 id        INT IDENTITY(1,1) PRIMARY KEY,
-                username  NVARCHAR(255),
+                username  INT,   # <--- Change to INT
                 action    NVARCHAR(255),
                 details   NVARCHAR(MAX),
                 timestamp NVARCHAR(30)
@@ -404,13 +404,13 @@ async def startup_db():
             )
         """)
 
-        # --- Gate Change Log Table ---
+        # Gate Change Log Table
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Gate_Change_Log' AND xtype='U')
             CREATE TABLE Gate_Change_Log (
                 id          INT IDENTITY(1,1) PRIMARY KEY,
                 gate_id     INT,
-                changed_by  NVARCHAR(255),
+                changed_by  INT,  # <--- Change to INT
                 change_date NVARCHAR(30),
                 field_name  NVARCHAR(255),
                 old_value   NVARCHAR(MAX),
@@ -419,13 +419,13 @@ async def startup_db():
             )
         """)
 
-        # --- Item Change Log Table ---
+        # Item Change Log Table
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Item_Change_Log' AND xtype='U')
             CREATE TABLE Item_Change_Log (
                 id          INT IDENTITY(1,1) PRIMARY KEY,
                 pricing_id  INT,
-                changed_by  NVARCHAR(255),
+                changed_by  INT,  # <--- Change to INT
                 change_date NVARCHAR(30),
                 field_name  NVARCHAR(255),
                 old_value   NVARCHAR(MAX),
@@ -434,13 +434,13 @@ async def startup_db():
             )
         """)
 
-        # --- Rate Cart Change Log Table ---
+        # Rate Cart Change Log Table
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Rate_Cart_Change_Log' AND xtype='U')
             CREATE TABLE Rate_Cart_Change_Log (
                 id          INT IDENTITY(1,1) PRIMARY KEY,
                 location    NVARCHAR(255),
-                changed_by  NVARCHAR(255),
+                changed_by  INT,  # <--- Change to INT
                 change_date NVARCHAR(30),
                 field_name  NVARCHAR(255),
                 old_value   NVARCHAR(MAX),
@@ -480,14 +480,14 @@ async def startup_db():
                 END
             """)
         
-        # --- Driver Override Change Log Table ---
+        # Driver Override Change Log Table
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Driver_Override_Change_Log' AND xtype='U')
             CREATE TABLE Driver_Override_Change_Log (
                 id          INT IDENTITY(1,1) PRIMARY KEY,
                 target_date NVARCHAR(10),
                 driver_name NVARCHAR(255),
-                changed_by  NVARCHAR(255),
+                changed_by  INT,  # <--- Change to INT
                 change_date NVARCHAR(30),
                 field_name  NVARCHAR(255),
                 old_value   NVARCHAR(MAX),
@@ -651,9 +651,15 @@ async def log_user_activity(username: str, action: str, details: str = ""):
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Lookup the user ID from the string
+        await cursor.execute("SELECT id FROM Users WHERE username = ?", (username,))
+        user_row = await cursor.fetchone()
+        user_id = user_row[0] if user_row else None
+        
         await cursor.execute(
             "INSERT INTO User_Activity_Log (username, action, details, timestamp) VALUES (?, ?, ?, ?)",
-            (username, action, details, now_str)
+            (user_id, action, details, now_str)
         )
         await conn.commit()
         await conn.close()
@@ -947,28 +953,38 @@ async def get_activity_logs(
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         
-        query = "SELECT id, username, action, details, timestamp FROM User_Activity_Log WHERE 1=1"
-        count_query = "SELECT COUNT(*) FROM User_Activity_Log WHERE 1=1"
+        query = """
+            SELECT l.id, u.username, l.action, l.details, l.timestamp 
+            FROM User_Activity_Log l
+            LEFT JOIN Users u ON l.username = u.id
+            WHERE 1=1
+        """
+        count_query = """
+            SELECT COUNT(*) 
+            FROM User_Activity_Log l
+            LEFT JOIN Users u ON l.username = u.id
+            WHERE 1=1
+        """
         params = []
         
         if timestamp:
-            query += " AND timestamp LIKE ?"
-            count_query += " AND timestamp LIKE ?"
+            query += " AND l.timestamp LIKE ?"
+            count_query += " AND l.timestamp LIKE ?"
             params.append(f"%{timestamp}%")
         if username:
-            query += " AND username LIKE ?"
-            count_query += " AND username LIKE ?"
+            query += " AND u.username LIKE ?"
+            count_query += " AND u.username LIKE ?"
             params.append(f"%{username}%")
         if action:
-            query += " AND action LIKE ?"
-            count_query += " AND action LIKE ?"
+            query += " AND l.action LIKE ?"
+            count_query += " AND l.action LIKE ?"
             params.append(f"%{action}%")
         if details:
-            query += " AND details LIKE ?"
-            count_query += " AND details LIKE ?"
+            query += " AND l.details LIKE ?"
+            count_query += " AND l.details LIKE ?"
             params.append(f"%{details}%")
             
-        query += " ORDER BY timestamp DESC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
+        query += " ORDER BY l.timestamp DESC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
         
         await cursor.execute(count_query, params)
         total_count = (await cursor.fetchone())[0]
@@ -1608,7 +1624,7 @@ async def save_rate_cart(data: RateCartData, user: dict = Depends(get_current_us
                 await cursor.execute("""
                     INSERT INTO Rate_Cart_Change_Log (location, changed_by, change_date, field_name, old_value, new_value)
                     VALUES (?, ?, ?, ?, ?, ?)
-                """, (data.location, username, change_date, 'Cost', str(old_cost), str(data.cost)))
+                """, (data.location, user['id'], change_date, 'Cost', str(old_cost), str(data.cost)))
 
             await cursor.execute("UPDATE Rate_Cart SET cost = ?, edited_at = ?, edited_by = ? WHERE location = ?", (data.cost, change_date, username, data.location))
             await log_user_activity(username, "UPDATE_RATE_CART", f"Updated rate cart for {data.location}")
@@ -1650,7 +1666,12 @@ async def get_rate_cart_logs(location: str, user: dict = Depends(get_current_use
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT id, location, changed_by, change_date, field_name, old_value, new_value FROM Rate_Cart_Change_Log WHERE location = ? ORDER BY change_date DESC", (location,))
+        await cursor.execute("""
+            SELECT l.id, l.location, u.username, l.change_date, l.field_name, l.old_value, l.new_value 
+            FROM Rate_Cart_Change_Log l
+            LEFT JOIN Users u ON l.changed_by = u.id
+            WHERE l.location = ? ORDER BY l.change_date DESC
+        """, (location,))
         rows = await cursor.fetchall()
         logs = [{"id": r[0], "location": r[1], "changed_by": r[2], "change_date": r[3], "field_name": r[4], "old_value": r[5], "new_value": r[6]} for r in rows]
         await conn.close()
@@ -1991,6 +2012,7 @@ async def save_daily_override(data: DriverOverrideData, user: dict = Depends(req
         existing = await cursor.fetchone()
         
         username = user['username']
+        user_id = user['id'] # Grab the numeric ID from the session token
         change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         if existing:
@@ -2001,12 +2023,12 @@ async def save_daily_override(data: DriverOverrideData, user: dict = Depends(req
                 await cursor.execute("""
                     INSERT INTO Driver_Override_Change_Log (target_date, driver_name, changed_by, change_date, field_name, old_value, new_value)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (data.target_date, data.driver_name, username, change_date, 'Override Amount', old_cost_str, new_cost_str))
+                """, (data.target_date, data.driver_name, user_id, change_date, 'Override Amount', old_cost_str, new_cost_str)) # Changed to user_id
         else:
             await cursor.execute("""
                 INSERT INTO Driver_Override_Change_Log (target_date, driver_name, changed_by, change_date, field_name, old_value, new_value)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (data.target_date, data.driver_name, username, change_date, 'Record Created', None, str(data.additional_amount)))
+            """, (data.target_date, data.driver_name, user_id, change_date, 'Record Created', None, str(data.additional_amount))) # Changed to user_id
 
         await cursor.execute("""
             MERGE Daily_Driver_Override AS target
@@ -2014,11 +2036,12 @@ async def save_daily_override(data: DriverOverrideData, user: dict = Depends(req
             ON target.target_date = source.target_date AND target.driver_name = source.driver_name
             WHEN MATCHED THEN UPDATE SET additional_amount = source.additional_amount, edited_at = source.edited_at, edited_by = source.edited_by
             WHEN NOT MATCHED THEN INSERT (target_date, driver_name, additional_amount, created_at, created_by) VALUES (source.target_date, source.driver_name, source.additional_amount, source.created_at, source.created_by);
-        """, (data.target_date, data.driver_name, data.additional_amount, change_date, username, change_date, username))
+        """, (data.target_date, data.driver_name, data.additional_amount, change_date, user_id, change_date, user_id)) # Changed both to user_id
         
         await conn.commit()
         await conn.close()
         
+        # We can still pass the string username here, because we updated log_user_activity to handle the ID lookup automatically
         await log_user_activity(username, "ADD_EDIT_DRIVER_OVERRIDE", f"Set override {data.additional_amount} for {data.driver_name} on {data.target_date}")
         
         # Trigger an automatic recalculation for this date
@@ -2060,10 +2083,11 @@ async def get_daily_override_logs(
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         await cursor.execute("""
-            SELECT id, target_date, driver_name, changed_by, change_date, field_name, old_value, new_value 
-            FROM Driver_Override_Change_Log 
-            WHERE target_date = ? AND driver_name = ? 
-            ORDER BY change_date DESC
+            SELECT l.id, l.target_date, l.driver_name, u.username, l.change_date, l.field_name, l.old_value, l.new_value 
+            FROM Driver_Override_Change_Log l
+            LEFT JOIN Users u ON l.changed_by = u.id
+            WHERE l.target_date = ? AND l.driver_name = ? 
+            ORDER BY l.change_date DESC
         """, (target_date, driver_name))
         rows = await cursor.fetchall()
         logs = [{"id": r[0], "target_date": r[1], "driver_name": r[2], "changed_by": r[3], "change_date": r[4], "field_name": r[5], "old_value": r[6], "new_value": r[7]} for r in rows]
@@ -2104,7 +2128,7 @@ async def delete_daily_override(override_id: int, target_date: str, user: dict =
         await cursor.execute("""
             INSERT INTO Driver_Override_Change_Log (target_date, driver_name, changed_by, change_date, field_name, old_value, new_value)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (target_date, driver_name, username, change_date, 'Record Deleted', str(amount), None))
+        """, (target_date, driver_name, user['id'], change_date, 'Record Deleted', str(amount), None))
 
         await cursor.execute("DELETE FROM Daily_Driver_Override WHERE id = ?", (override_id,))
             
@@ -3272,7 +3296,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                 new_cost_str = str(row["cost"]).strip() if row["cost"] else ""
                 
                 if old_cost_str != new_cost_str:
-                    change_logs.append((pricing_id, username, change_date, 'Transportation Cost', old_cost_str, new_cost_str))
+                    change_logs.append((pricing_id, user['id'], change_date, 'Transportation Cost', old_cost_str, new_cost_str))
 
                 # ADDED: edited_at and edited_by
                 await cursor.execute("""
@@ -3411,9 +3435,9 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
                 username = user['username']
                 changes = []
 
-                if old_uom != new_uom: changes.append((gate_id, username, change_date, 'UOM', str(old_uom or ''), str(new_uom or '')))
-                if old_unit != new_unit: changes.append((gate_id, username, change_date, 'Unit', str(old_unit) if old_unit is not None else '', str(new_unit) if new_unit is not None else ''))
-                if old_cost != new_cost: changes.append((gate_id, username, change_date, 'Cost', str(old_cost) if old_cost is not None else '', str(new_cost) if new_cost is not None else ''))
+                if old_uom != new_uom: changes.append((gate_id, user['id'], change_date, 'UOM', str(old_uom or ''), str(new_uom or '')))
+                if old_unit != new_unit: changes.append((gate_id, user['id'], change_date, 'Unit', str(old_unit) if old_unit is not None else '', str(new_unit) if new_unit is not None else ''))
+                if old_cost != new_cost: changes.append((gate_id, user['id'], change_date, 'Cost', str(old_cost) if old_cost is not None else '', str(new_cost) if new_cost is not None else ''))
                 
                 if changes:
                     await cursor.executemany("INSERT INTO Gate_Change_Log (gate_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
@@ -3445,7 +3469,12 @@ async def get_gate_logs(gate_id: int, user: dict = Depends(get_current_user)):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT id, gate_id, changed_by, change_date, field_name, old_value, new_value FROM Gate_Change_Log WHERE gate_id = ? ORDER BY change_date DESC", (gate_id,))
+        await cursor.execute("""
+            SELECT l.id, l.gate_id, u.username, l.change_date, l.field_name, l.old_value, l.new_value 
+            FROM Gate_Change_Log l
+            LEFT JOIN Users u ON l.changed_by = u.id
+            WHERE l.gate_id = ? ORDER BY l.change_date DESC
+        """, (gate_id,))
         rows = await cursor.fetchall()
         logs = [{"id": r[0], "gate_id": r[1], "changed_by": r[2], "change_date": r[3], "field_name": r[4], "old_value": r[5], "new_value": r[6]} for r in rows]
         await conn.close()
@@ -3541,7 +3570,12 @@ async def get_item_logs(pricing_id: int, user: dict = Depends(get_current_user))
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT id, pricing_id, changed_by, change_date, field_name, old_value, new_value FROM Item_Change_Log WHERE pricing_id = ? ORDER BY change_date DESC", (pricing_id,))
+        await cursor.execute("""
+            SELECT l.id, l.pricing_id, u.username, l.change_date, l.field_name, l.old_value, l.new_value 
+            FROM Item_Change_Log l
+            LEFT JOIN Users u ON l.changed_by = u.id
+            WHERE l.pricing_id = ? ORDER BY l.change_date DESC
+        """, (pricing_id,))
         rows = await cursor.fetchall()
         logs = [{"id": r[0], "pricing_id": r[1], "changed_by": r[2], "change_date": r[3], "field_name": r[4], "old_value": r[5], "new_value": r[6]} for r in rows]
         await conn.close()
