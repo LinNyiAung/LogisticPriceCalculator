@@ -96,10 +96,10 @@ async def startup_db():
                 final_total_cost   DECIMAL(18,6),
                 channel            NVARCHAR(100),
                 status             NVARCHAR(50)  DEFAULT 'saved',
-                created_by         NVARCHAR(255),
-                submitted_by       NVARCHAR(255),
+                created_by         INT,
+                submitted_by       INT,
                 submitted_at       NVARCHAR(30),
-                claimed_by         NVARCHAR(255),
+                claimed_by         INT,
                 claimed_at         NVARCHAR(30)
             )
         """)
@@ -798,6 +798,7 @@ class UserCreate(BaseModel):
     role: str
 
 class UserUpdate(BaseModel):
+    username: Optional[str] = None
     password: Optional[str] = None
     role: Optional[str] = None
 
@@ -1103,6 +1104,15 @@ async def update_user(user_id: int, user_data: UserUpdate, user: dict = Depends(
             
         changes = []
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        if user_data.username and user_data.username != target_user[0]:
+            await cursor.execute("SELECT id FROM Users WHERE username = ?", (user_data.username,))
+            if await cursor.fetchone():
+                await conn.close()
+                raise HTTPException(status_code=400, detail="Username already exists")
+            await cursor.execute("UPDATE Users SET username = ?, edited_at = ?, edited_by = ? WHERE id = ?", (user_data.username, now_str, user['username'], user_id))
+            changes.append(f"username to {user_data.username}")
+
         if user_data.password:
             hashed_pw = pwd_context.hash(user_data.password)
             await cursor.execute("UPDATE Users SET hashed_password = ?, edited_at = ?, edited_by = ? WHERE id = ?", (hashed_pw, now_str, user['username'], user_id))
@@ -1114,7 +1124,8 @@ async def update_user(user_id: int, user_data: UserUpdate, user: dict = Depends(
         await conn.commit()
         await conn.close()
         
-        await log_user_activity(user['username'], "UPDATE_USER", f"Updated user: {target_user[0]} ({', '.join(changes)})")
+        if changes:
+            await log_user_activity(user['username'], "UPDATE_USER", f"Updated user ID {user_id} ({', '.join(changes)})")
         return {"message": "User updated successfully"}
     except HTTPException:
         raise
@@ -2657,7 +2668,7 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
                     INSERT INTO Calculation_History ([id], [created_at], [gate_name], [from_loc], [to_loc], [doc_nums], [total_weight], [manual_total_cost], [additional_charges], [final_total_cost], [channel], [status], [created_by], [gate_cost], [gate_uom], [gate_unit], [posm_total_cost])
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    new_id, created_at, data.gate_name, data.from_loc, data.to_loc, doc_nums_json, data.total_weight, data.manual_total_cost, data.additional_charges, data.final_total_cost, data.channel, data.status, user["username"], data.gate_cost, data.gate_uom, data.gate_unit, data.posm_total_cost
+                    new_id, created_at, data.gate_name, data.from_loc, data.to_loc, doc_nums_json, data.total_weight, data.manual_total_cost, data.additional_charges, data.final_total_cost, data.channel, data.status, user["id"], data.gate_cost, data.gate_uom, data.gate_unit, data.posm_total_cost
                 ))
             await _upsert_products(new_id, data.calculated_products)
             await _upsert_posm_products(new_id, data.posm_products)
@@ -2704,7 +2715,7 @@ async def submit_history_item(record_id: int, user: dict = Depends(require_permi
         # ------------------------------------------------------
 
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        await cursor.execute("UPDATE Calculation_History SET status = 'submitted', submitted_by = ?, submitted_at = ? WHERE id = ?", (user["username"], now_str, record_id))
+        await cursor.execute("UPDATE Calculation_History SET status = 'submitted', submitted_by = ?, submitted_at = ? WHERE id = ?", (user["id"], now_str, record_id))
         if cursor.rowcount == 0:
             await conn.close()
             raise HTTPException(status_code=404, detail="Record not found")
@@ -2723,7 +2734,7 @@ async def claim_history_item(record_id: int, user: dict = Depends(require_permis
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        await cursor.execute("UPDATE Calculation_History SET status = 'claimed', claimed_by = ?, claimed_at = ? WHERE id = ?", (user["username"], now_str, record_id))
+        await cursor.execute("UPDATE Calculation_History SET status = 'claimed', claimed_by = ?, claimed_at = ? WHERE id = ?", (user["id"], now_str, record_id))
         if cursor.rowcount == 0:
             await conn.close()
             raise HTTPException(status_code=404, detail="Record not found")
@@ -2738,7 +2749,17 @@ async def get_history_record(record_id: int, user: dict = Depends(require_permis
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT * FROM Calculation_History WHERE id = ?", (record_id,))
+        await cursor.execute("""
+            SELECT ch.*, 
+                   u1.username as created_by_name, 
+                   u2.username as submitted_by_name, 
+                   u3.username as claimed_by_name 
+            FROM Calculation_History ch
+            LEFT JOIN Users u1 ON ch.created_by = u1.id
+            LEFT JOIN Users u2 ON ch.submitted_by = u2.id
+            LEFT JOIN Users u3 ON ch.claimed_by = u3.id
+            WHERE ch.id = ?
+        """, (record_id,))
         row = await cursor.fetchone()
         if not row:
             await conn.close()
@@ -2747,6 +2768,11 @@ async def get_history_record(record_id: int, user: dict = Depends(require_permis
         columns = [desc[0] for desc in cursor.description]
         record = dict(zip(columns, row))
         record['doc_nums'] = json.loads(record['doc_nums']) if record['doc_nums'] else []
+        
+        # Swap the integer IDs for the dynamic string usernames
+        record["created_by"] = record.pop("created_by_name", None)
+        record["submitted_by"] = record.pop("submitted_by_name", None)
+        record["claimed_by"] = record.pop("claimed_by_name", None)
 
         await cursor.execute("""
             SELECT code, name, weight, doc_date, sin_no, principal, brand, ctns, bu,
@@ -2787,16 +2813,26 @@ async def get_history(user: dict = Depends(require_permission("view_history"))):
         permissions = user.get('permissions', [])
         username = user.get('username')
 
+        base_query = """
+            SELECT ch.*, 
+                   u1.username as created_by_name, 
+                   u2.username as submitted_by_name, 
+                   u3.username as claimed_by_name 
+            FROM Calculation_History ch
+            LEFT JOIN Users u1 ON ch.created_by = u1.id
+            LEFT JOIN Users u2 ON ch.submitted_by = u2.id
+            LEFT JOIN Users u3 ON ch.claimed_by = u3.id
+        """
+
         if 'view_all_history' in permissions:
-            await cursor.execute("SELECT * FROM Calculation_History ORDER BY created_at DESC")
+            await cursor.execute(base_query + " ORDER BY ch.created_at DESC")
         elif 'claim_calculation' in permissions:
-            await cursor.execute("""
-                SELECT * FROM Calculation_History 
-                WHERE created_by = ? OR status IN ('submitted', 'claimed') 
-                ORDER BY created_at DESC
-            """, (username,))
+            await cursor.execute(base_query + """
+                WHERE ch.created_by = ? OR ch.status IN ('submitted', 'claimed') 
+                ORDER BY ch.created_at DESC
+            """, (user['id'],))
         else:
-            await cursor.execute("SELECT * FROM Calculation_History WHERE created_by = ? OR created_by IS NULL ORDER BY created_at DESC", (username,))
+            await cursor.execute(base_query + " WHERE ch.created_by = ? OR ch.created_by IS NULL ORDER BY ch.created_at DESC", (user['id'],))
             
         rows = await cursor.fetchall()
         columns = [desc[0] for desc in cursor.description]
@@ -2804,6 +2840,12 @@ async def get_history(user: dict = Depends(require_permission("view_history"))):
         for row in rows:
             record_dict = dict(zip(columns, row))
             record_dict["doc_nums"] = json.loads(record_dict["doc_nums"]) if record_dict["doc_nums"] else []
+            
+            # Swap the integer IDs for the dynamic string usernames for the frontend
+            record_dict["created_by"] = record_dict.pop("created_by_name", None)
+            record_dict["submitted_by"] = record_dict.pop("submitted_by_name", None)
+            record_dict["claimed_by"] = record_dict.pop("claimed_by_name", None)
+            
             history.append(record_dict)
         await conn.close()
         return {"history": history}
