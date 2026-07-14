@@ -284,7 +284,7 @@ async def startup_db():
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='User_Activity_Log' AND xtype='U')
             CREATE TABLE User_Activity_Log (
                 id        INT IDENTITY(1,1) PRIMARY KEY,
-                username  INT,   # <--- Change to INT
+                user_id   INT,   # <--- Change to INT
                 action    NVARCHAR(255),
                 details   NVARCHAR(MAX),
                 timestamp NVARCHAR(30)
@@ -658,7 +658,7 @@ async def log_user_activity(username: str, action: str, details: str = ""):
         user_id = user_row[0] if user_row else None
         
         await cursor.execute(
-            "INSERT INTO User_Activity_Log (username, action, details, timestamp) VALUES (?, ?, ?, ?)",
+            "INSERT INTO User_Activity_Log (user_id, action, details, timestamp) VALUES (?, ?, ?, ?)",
             (user_id, action, details, now_str)
         )
         await conn.commit()
@@ -956,13 +956,13 @@ async def get_activity_logs(
         query = """
             SELECT l.id, COALESCE(u.username, '(deleted user)') AS username, l.action, l.details, l.timestamp 
             FROM User_Activity_Log l
-            LEFT JOIN Users u ON l.username = u.id
+            LEFT JOIN Users u ON l.user_id = u.id
             WHERE 1=1
         """
         count_query = """
             SELECT COUNT(*) 
             FROM User_Activity_Log l
-            LEFT JOIN Users u ON l.username = u.id
+            LEFT JOIN Users u ON l.user_id = u.id
             WHERE 1=1
         """
         params = []
