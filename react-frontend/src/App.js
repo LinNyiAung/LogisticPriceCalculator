@@ -155,11 +155,13 @@ const PricingApp = () => {
           const currentPermsStr = localStorage.getItem('permissions');
           const newPermsStr = JSON.stringify(data.permissions);
           
-          if (currentPermsStr !== newPermsStr || localStorage.getItem('userRole') !== data.role) {
+          if (currentPermsStr !== newPermsStr || localStorage.getItem('userRole') !== data.role || localStorage.getItem('username') !== data.username) {
             setPermissions(data.permissions);
             setUserRole(data.role);
+            setUsername(data.username);
             localStorage.setItem('permissions', newPermsStr);
             localStorage.setItem('userRole', data.role);
+            localStorage.setItem('username', data.username);
             
             // Optional: If they lose access to their current page, boot them to dashboard
             if (!data.permissions.includes(`view_${currentPage}`) && currentPage !== '') {

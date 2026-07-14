@@ -879,7 +879,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         await cursor.execute("""
-            SELECT u.role, r.permissions 
+            SELECT u.username, u.role, r.permissions 
             FROM Users u
             LEFT JOIN Roles r ON u.role = r.name
             WHERE u.id = ?
@@ -890,10 +890,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         if not user_record:
             raise credentials_exception 
             
-        fresh_role = user_record[0]
-        fresh_permissions = json.loads(user_record[1]) if user_record[1] else []
+        fresh_username = user_record[0]
+        fresh_role = user_record[1]
+        fresh_permissions = json.loads(user_record[2]) if user_record[2] else []
 
-        return {"id": user_id, "username": username, "role": fresh_role, "permissions": fresh_permissions}
+        return {"id": user_id, "username": fresh_username, "role": fresh_role, "permissions": fresh_permissions}
         
     except JWTError:
         raise credentials_exception
