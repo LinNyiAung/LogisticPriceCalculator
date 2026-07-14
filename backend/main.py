@@ -645,18 +645,21 @@ async def get_logistic_connection():
     return await aioodbc.connect(dsn=conn_str, autocommit=False)
 
 # --- Helper: Activity Logger ---
-async def log_user_activity(username: str, action: str, details: str = ""):
-    """Inserts a new record into the User_Activity_Log table."""
+async def log_user_activity(user_id: int, action: str, details: str = ""):
+    """Inserts a new record into the User_Activity_Log table.
+
+    IMPORTANT: takes a trusted user_id (e.g. current_user['id'], which is
+    validated against the DB on every request) rather than a username.
+    Usernames are mutable and can be reassigned/reused; JWTs live for 30
+    days and embed the username at login time, so re-resolving a username
+    back to an id at log time can silently attribute the action to the
+    WRONG user if that username was edited/reassigned in the meantime.
+    """
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        # Lookup the user ID from the string
-        await cursor.execute("SELECT id FROM Users WHERE username = ?", (username,))
-        user_row = await cursor.fetchone()
-        user_id = user_row[0] if user_row else None
-        
+
         await cursor.execute(
             "INSERT INTO User_Activity_Log (user_id, action, details, timestamp) VALUES (?, ?, ?, ?)",
             (user_id, action, details, now_str)
@@ -933,7 +936,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     permissions = json.loads(user[4]) if user[4] else []
     access_token = create_access_token(data={"sub": user[1], "id": user[0], "role": user[3], "permissions": permissions})
     
-    await log_user_activity(user[1], "LOGIN", "User authenticated successfully")
+    await log_user_activity(user[0], "LOGIN", "User authenticated successfully")
     
     return {"access_token": access_token, "token_type": "bearer", "role": user[3], "username": user[1], "permissions": permissions, "id": user[0]}
 
@@ -1030,7 +1033,7 @@ async def create_role(role_data: RoleCreate, user: dict = Depends(require_permis
         await conn.commit()
         await conn.close()
         
-        await log_user_activity(user['username'], "CREATE_ROLE", f"Created role: {role_data.name}")
+        await log_user_activity(user['id'], "CREATE_ROLE", f"Created role: {role_data.name}")
         return {"message": "Role created successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating role: {str(e)}")
@@ -1046,7 +1049,7 @@ async def update_role(role_name: str, role_data: RoleUpdate, user: dict = Depend
         await conn.commit()
         await conn.close()
         
-        await log_user_activity(user['username'], "UPDATE_ROLE", f"Updated permissions for role: {role_name}")
+        await log_user_activity(user['id'], "UPDATE_ROLE", f"Updated permissions for role: {role_name}")
         return {"message": "Role updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating role: {str(e)}")
@@ -1064,7 +1067,7 @@ async def delete_role(role_name: str, user: dict = Depends(require_permission("d
         await conn.commit()
         await conn.close()
         
-        await log_user_activity(user['username'], "DELETE_ROLE", f"Deleted role: {role_name}")
+        await log_user_activity(user['id'], "DELETE_ROLE", f"Deleted role: {role_name}")
         return {"message": "Role deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting role: {str(e)}")
@@ -1100,7 +1103,7 @@ async def create_user(user_data: UserCreate, user: dict = Depends(require_permis
         await conn.commit()
         await conn.close()
         
-        await log_user_activity(user['username'], "CREATE_USER", f"Created user: {user_data.username} with role: {user_data.role}")
+        await log_user_activity(user['id'], "CREATE_USER", f"Created user: {user_data.username} with role: {user_data.role}")
         return {"message": "User created successfully"}
     except HTTPException:
         raise
@@ -1141,7 +1144,7 @@ async def update_user(user_id: int, user_data: UserUpdate, user: dict = Depends(
         await conn.close()
         
         if changes:
-            await log_user_activity(user['username'], "UPDATE_USER", f"Updated user ID {user_id} ({', '.join(changes)})")
+            await log_user_activity(user['id'], "UPDATE_USER", f"Updated user ID {user_id} ({', '.join(changes)})")
         return {"message": "User updated successfully"}
     except HTTPException:
         raise
@@ -1166,7 +1169,7 @@ async def delete_user(user_id: int, user: dict = Depends(require_permission("del
         await conn.commit()
         await conn.close()
         
-        await log_user_activity(user['username'], "DELETE_USER", f"Deleted user: {target_user[0]}")
+        await log_user_activity(user['id'], "DELETE_USER", f"Deleted user: {target_user[0]}")
         return {"message": "User deleted successfully"}
     except HTTPException:
         raise
@@ -1175,13 +1178,11 @@ async def delete_user(user_id: int, user: dict = Depends(require_permission("del
     
 @app.put("/users/me/password")
 async def change_password(data: ChangePasswordRequest, current_user: dict = Depends(get_current_user)):
-    username = current_user["username"]
-    
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        
-        await cursor.execute("SELECT hashed_password FROM Users WHERE username = ?", (username,))
+
+        await cursor.execute("SELECT hashed_password FROM Users WHERE id = ?", (current_user["id"],))
         row = await cursor.fetchone()
         
         if not row:
@@ -1196,12 +1197,12 @@ async def change_password(data: ChangePasswordRequest, current_user: dict = Depe
             
         new_hashed_password = pwd_context.hash(data.new_password)
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        await cursor.execute("UPDATE Users SET hashed_password = ?, edited_at = ?, edited_by = ? WHERE username = ?", (new_hashed_password, now_str, current_user['id'], username))
+        await cursor.execute("UPDATE Users SET hashed_password = ?, edited_at = ?, edited_by = ? WHERE id = ?", (new_hashed_password, now_str, current_user['id'], current_user['id']))
         
         await conn.commit()
         await conn.close()
         
-        await log_user_activity(username, "CHANGE_PASSWORD", "User changed their own password")
+        await log_user_activity(current_user['id'], "CHANGE_PASSWORD", "User changed their own password")
         return {"message": "Password changed successfully"}
         
     except HTTPException:
@@ -1627,13 +1628,13 @@ async def save_rate_cart(data: RateCartData, user: dict = Depends(get_current_us
                 """, (data.location, user['id'], change_date, 'Cost', str(old_cost), str(data.cost)))
 
             await cursor.execute("UPDATE Rate_Cart SET cost = ?, edited_at = ?, edited_by = ? WHERE location = ?", (data.cost, change_date, user['id'], data.location))
-            await log_user_activity(username, "UPDATE_RATE_CART", f"Updated rate cart for {data.location}")
+            await log_user_activity(user['id'], "UPDATE_RATE_CART", f"Updated rate cart for {data.location}")
         else:
             if "add_rate_cart" not in perms:
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_rate_cart' permission")
             await cursor.execute("INSERT INTO Rate_Cart (location, cost, created_at, created_by) VALUES (?, ?, ?, ?)", (data.location, data.cost, change_date, user['id']))
-            await log_user_activity(username, "ADD_RATE_CART", f"Added rate cart for {data.location}")
+            await log_user_activity(user['id'], "ADD_RATE_CART", f"Added rate cart for {data.location}")
             
         await conn.commit()
         await conn.close()
@@ -1656,7 +1657,7 @@ async def delete_rate_cart(location: str, user: dict = Depends(require_permissio
         await conn.commit()
         await conn.close()
         
-        await log_user_activity(user['username'], "DELETE_RATE_CART", f"Deleted rate cart for {location}")
+        await log_user_activity(user['id'], "DELETE_RATE_CART", f"Deleted rate cart for {location}")
         return {"message": "Rate cart deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting rate cart: {str(e)}")
@@ -2041,8 +2042,7 @@ async def save_daily_override(data: DriverOverrideData, user: dict = Depends(req
         await conn.commit()
         await conn.close()
         
-        # We can still pass the string username here, because we updated log_user_activity to handle the ID lookup automatically
-        await log_user_activity(username, "ADD_EDIT_DRIVER_OVERRIDE", f"Set override {data.additional_amount} for {data.driver_name} on {data.target_date}")
+        await log_user_activity(user_id, "ADD_EDIT_DRIVER_OVERRIDE", f"Set override {data.additional_amount} for {data.driver_name} on {data.target_date}")
         
         # Trigger an automatic recalculation for this date
         await generate_and_save_daily_report(data.target_date)
@@ -2135,7 +2135,7 @@ async def delete_daily_override(override_id: int, target_date: str, user: dict =
         await conn.commit()
         await conn.close()
         
-        await log_user_activity(username, "DELETE_DRIVER_OVERRIDE", f"Deleted override ID {override_id}")
+        await log_user_activity(user['id'], "DELETE_DRIVER_OVERRIDE", f"Deleted override ID {override_id}")
         await generate_and_save_daily_report(target_date)
         
         return {"message": "Override deleted and report recalculated successfully"}
@@ -2219,7 +2219,7 @@ async def add_ref_location(item: ReferenceItem, user: dict = Depends(require_per
                 raise HTTPException(status_code=400, detail="Location already exists")
             raise
         await conn.close()
-        await log_user_activity(user['username'], "ADD_REFERENCE", f"Added location: {item.name}")
+        await log_user_activity(user['id'], "ADD_REFERENCE", f"Added location: {item.name}")
         return {"message": "Added successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2235,7 +2235,7 @@ async def delete_ref_location(name: str, user: dict = Depends(require_permission
              raise HTTPException(status_code=404, detail="Not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted location: {name}")
+        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted location: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2266,7 +2266,7 @@ async def add_ref_rate_cart_location(item: ReferenceItem, user: dict = Depends(r
                 raise HTTPException(status_code=400, detail="Rate Cart Location already exists")
             raise
         await conn.close()
-        await log_user_activity(user['username'], "ADD_REFERENCE", f"Added rate cart location: {item.name}")
+        await log_user_activity(user['id'], "ADD_REFERENCE", f"Added rate cart location: {item.name}")
         return {"message": "Added successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2282,7 +2282,7 @@ async def delete_ref_rate_cart_location(name: str, user: dict = Depends(require_
              raise HTTPException(status_code=404, detail="Not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted rate cart location: {name}")
+        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted rate cart location: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2313,7 +2313,7 @@ async def add_ref_uom(item: ReferenceItem, user: dict = Depends(require_permissi
                 raise HTTPException(status_code=400, detail="UOM already exists")
             raise
         await conn.close()
-        await log_user_activity(user['username'], "ADD_REFERENCE", f"Added UOM: {item.name}")
+        await log_user_activity(user['id'], "ADD_REFERENCE", f"Added UOM: {item.name}")
         return {"message": "Added successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2329,7 +2329,7 @@ async def delete_ref_uom(name: str, user: dict = Depends(require_permission("del
              raise HTTPException(status_code=404, detail="Not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted UOM: {name}")
+        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted UOM: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2360,7 +2360,7 @@ async def add_ref_channel(item: ReferenceItem, user: dict = Depends(require_perm
                 raise HTTPException(status_code=400, detail="Channel already exists")
             raise
         await conn.close()
-        await log_user_activity(user['username'], "ADD_REFERENCE", f"Added channel: {item.name}")
+        await log_user_activity(user['id'], "ADD_REFERENCE", f"Added channel: {item.name}")
         return {"message": "Added successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2376,7 +2376,7 @@ async def delete_ref_channel(name: str, user: dict = Depends(require_permission(
              raise HTTPException(status_code=404, detail="Not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted channel: {name}")
+        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted channel: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2407,7 +2407,7 @@ async def add_ref_department(item: ReferenceItem, user: dict = Depends(require_p
                 raise HTTPException(status_code=400, detail="Department already exists")
             raise
         await conn.close()
-        await log_user_activity(user['username'], "ADD_REFERENCE", f"Added department: {item.name}")
+        await log_user_activity(user['id'], "ADD_REFERENCE", f"Added department: {item.name}")
         return {"message": "Added successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2423,7 +2423,7 @@ async def delete_ref_department(name: str, user: dict = Depends(require_permissi
              raise HTTPException(status_code=404, detail="Not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted department: {name}")
+        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted department: {name}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2455,7 +2455,7 @@ async def add_ref_location_mapping(item: LocationMappingItem, user: dict = Depen
         """, (item.to_location, item.branch_code, now_str, user['id']))
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['username'], "ADD_REFERENCE", f"Mapped {item.to_location} to {item.branch_code}")
+        await log_user_activity(user['id'], "ADD_REFERENCE", f"Mapped {item.to_location} to {item.branch_code}")
         return {"message": "Mapping saved successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
@@ -2467,7 +2467,7 @@ async def delete_ref_location_mapping(to_location: str, user: dict = Depends(req
         await cursor.execute("DELETE FROM Location_Mapping WHERE to_location = ?", (to_location,))
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['username'], "DELETE_REFERENCE", f"Deleted mapping for: {to_location}")
+        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted mapping for: {to_location}")
         return {"message": "Deleted successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
@@ -2505,7 +2505,7 @@ async def save_branch_code(data: BranchCodeData, user: dict = Depends(get_curren
                 SET log_pric = ?, code = ?, name = ?, dept = ?, principal = ?, description = ?, edited_at = ?, edited_by = ?
                 WHERE log_pric = ?
             """, (data.log_pric, data.code, data.name, data.dept, data.principal, data.description, now_str, username, data.original_log_pric))
-            await log_user_activity(user['username'], "UPDATE_BRANCH_CODE", f"Updated Branch Code: {data.log_pric}")
+            await log_user_activity(user['id'], "UPDATE_BRANCH_CODE", f"Updated Branch Code: {data.log_pric}")
         else:
             if "add_branch_code" not in perms:
                 await conn.close()
@@ -2518,7 +2518,7 @@ async def save_branch_code(data: BranchCodeData, user: dict = Depends(get_curren
                 INSERT INTO Branch_Code (log_pric, code, name, dept, principal, description, created_at, created_by) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (data.log_pric, data.code, data.name, data.dept, data.principal, data.description, now_str, username))
-            await log_user_activity(user['username'], "ADD_BRANCH_CODE", f"Added Branch Code: {data.log_pric}")
+            await log_user_activity(user['id'], "ADD_BRANCH_CODE", f"Added Branch Code: {data.log_pric}")
 
         await conn.commit()
         await conn.close()
@@ -2537,7 +2537,7 @@ async def delete_branch_code(log_pric: str, user: dict = Depends(require_permiss
             raise HTTPException(status_code=404, detail="Branch code not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['username'], "DELETE_BRANCH_CODE", f"Deleted Branch Code: {log_pric}")
+        await log_user_activity(user['id'], "DELETE_BRANCH_CODE", f"Deleted Branch Code: {log_pric}")
         return {"message": "Branch code deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting branch code: {str(e)}")
@@ -2576,7 +2576,7 @@ async def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user))
                 SET channel = ?, code = ?, name = ?, dept = ?, principal = ?, log_pric = ?, edited_at = ?, edited_by = ?
                 WHERE log_pric = ?
             """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric, now_str, username, data.original_log_pric))
-            await log_user_activity(user['username'], "UPDATE_SD_CODE", f"Updated SD Code: {data.log_pric}")
+            await log_user_activity(user['id'], "UPDATE_SD_CODE", f"Updated SD Code: {data.log_pric}")
         else:
             if "add_sd_code" not in perms:
                 await conn.close()
@@ -2589,7 +2589,7 @@ async def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user))
                 INSERT INTO SD_Code (channel, code, name, dept, principal, log_pric, created_at, created_by) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric, now_str, username))
-            await log_user_activity(user['username'], "ADD_SD_CODE", f"Added SD Code: {data.log_pric}")
+            await log_user_activity(user['id'], "ADD_SD_CODE", f"Added SD Code: {data.log_pric}")
 
         await conn.commit()
         await conn.close()
@@ -2608,7 +2608,7 @@ async def delete_sd_code(log_pric: str, user: dict = Depends(require_permission(
             raise HTTPException(status_code=404, detail="SD code not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['username'], "DELETE_SD_CODE", f"Deleted SD Code: {log_pric}")
+        await log_user_activity(user['id'], "DELETE_SD_CODE", f"Deleted SD Code: {log_pric}")
         return {"message": "SD code deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting SD code: {str(e)}")
@@ -2680,7 +2680,7 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
             await _upsert_products(data.id, data.calculated_products)
             await _upsert_posm_products(data.id, data.posm_products)
             message = "Calculation updated successfully"
-            await log_user_activity(user['username'], "UPDATE_CALCULATION", f"Updated saved calculation ID: {data.id}")
+            await log_user_activity(user['id'], "UPDATE_CALCULATION", f"Updated saved calculation ID: {data.id}")
         else:
             while True:
                 new_id = int(datetime.datetime.now().strftime("%y%m%d%H%M%S"))
@@ -2697,7 +2697,7 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
             await _upsert_products(new_id, data.calculated_products)
             await _upsert_posm_products(new_id, data.posm_products)
             message = "Calculation saved successfully"
-            await log_user_activity(user['username'], "SAVE_CALCULATION", f"Saved new calculation ID: {new_id}")
+            await log_user_activity(user['id'], "SAVE_CALCULATION", f"Saved new calculation ID: {new_id}")
 
         await conn.commit()
         await conn.close()
@@ -2745,7 +2745,7 @@ async def submit_history_item(record_id: int, user: dict = Depends(require_permi
             raise HTTPException(status_code=404, detail="Record not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['username'], "SUBMIT_CALCULATION", f"Submitted calculation ID: {record_id}")
+        await log_user_activity(user['id'], "SUBMIT_CALCULATION", f"Submitted calculation ID: {record_id}")
         return {"message": "Calculation submitted successfully"}
     except HTTPException: 
         raise # Ensures the 400 error passes cleanly to the frontend
@@ -2764,7 +2764,7 @@ async def claim_history_item(record_id: int, user: dict = Depends(require_permis
             raise HTTPException(status_code=404, detail="Record not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['username'], "CLAIM_CALCULATION", f"Claimed calculation ID: {record_id}")
+        await log_user_activity(user['id'], "CLAIM_CALCULATION", f"Claimed calculation ID: {record_id}")
         return {"message": "Calculation claimed successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error claiming record: {str(e)}")
 
@@ -2888,7 +2888,7 @@ async def delete_history_item(record_id: int, user: dict = Depends(require_permi
         await cursor.execute("DELETE FROM Calculation_POSM_Products WHERE calc_id = ?", (record_id,))
         await cursor.execute("DELETE FROM Calculation_History WHERE id = ?", (record_id,))
         await conn.commit()
-        await log_user_activity(user['username'], "DELETE_CALCULATION", f"Deleted calculation ID: {record_id}")
+        await log_user_activity(user['id'], "DELETE_CALCULATION", f"Deleted calculation ID: {record_id}")
         return {"message": "Record deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting record: {str(e)}")
@@ -3332,7 +3332,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         await conn.commit()
         await conn.close()
         
-        await log_user_activity(username, "BULK_IMPORT_ITEMS", f"Imported items to gate ID {gate_id} (Updates: {updates_made}, Inserts: {inserts_made}, Deletes: {deletes_made})")
+        await log_user_activity(user['id'], "BULK_IMPORT_ITEMS", f"Imported items to gate ID {gate_id} (Updates: {updates_made}, Inserts: {inserts_made}, Deletes: {deletes_made})")
         return {"message": "Import completed successfully", "updates": updates_made, "inserts": inserts_made, "deletes": deletes_made}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error importing: {str(e)}")
@@ -3445,7 +3445,7 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
             await cursor.execute("""
                 UPDATE Gate SET gate_name = ?, from_loc = ?, to_loc = ?, uom = ?, unit = ?, cost = ?, edited_at = ?, edited_by = ? WHERE id = ?
             """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, change_date, username, gate_data.gate_id))
-            await log_user_activity(user['username'], "UPDATE_GATE", f"Updated gate ID {gate_data.gate_id}: {gate_data.gate_name}")
+            await log_user_activity(user['id'], "UPDATE_GATE", f"Updated gate ID {gate_data.gate_id}: {gate_data.gate_name}")
         else:
             if "add_gate" not in perms:
                 await conn.close()
@@ -3456,7 +3456,7 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
 
             await cursor.execute("INSERT INTO Gate (gate_name, from_loc, to_loc, uom, unit, cost, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
                   (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, now_str, username))
-            await log_user_activity(user['username'], "CREATE_GATE", f"Created gate: {gate_data.gate_name}")
+            await log_user_activity(user['id'], "CREATE_GATE", f"Created gate: {gate_data.gate_name}")
         
         await conn.commit()
         await conn.close()
@@ -3495,7 +3495,7 @@ async def delete_gate(gate_id: int, user: dict = Depends(require_permission("del
         await conn.commit()
         await conn.close()
         
-        await log_user_activity(user['username'], "DELETE_GATE", f"Deleted gate ID: {gate_id}")
+        await log_user_activity(user['id'], "DELETE_GATE", f"Deleted gate ID: {gate_id}")
         return {"message": f"Gate {gate_id} deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting gate: {str(e)}")
@@ -3542,7 +3542,7 @@ async def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get
 
             await cursor.execute("UPDATE Item_Pricing SET item_id = ?, bu = ?, item_name = ?, principal = ?, brand = ?, transportation_cost = ?, edited_at = ?, edited_by = ? WHERE id = ?", 
                 (item_data.item_code, item_data.bu, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost, change_date, username, pricing_id))
-            await log_user_activity(user['username'], "UPDATE_ITEM_PRICING", f"Updated pricing for item {item_data.item_code} on gate ID {item_data.gate_id}")
+            await log_user_activity(user['id'], "UPDATE_ITEM_PRICING", f"Updated pricing for item {item_data.item_code} on gate ID {item_data.gate_id}")
         else:
             if "add_item" not in perms:
                 await conn.close()
@@ -3558,7 +3558,7 @@ async def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get
             await cursor.execute("INSERT INTO Item_Pricing (id, gate_id, bu, item_id, item_name, principal, brand, transportation_cost, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
                 (new_id, item_data.gate_id, item_data.bu, item_data.item_code, item_data.item_name, item_data.principal, item_data.brand, item_data.transportation_cost, now_str, username))
 
-            await log_user_activity(user['username'], "CREATE_ITEM_PRICING", f"Added pricing for item {item_data.item_code} to gate ID {item_data.gate_id}")
+            await log_user_activity(user['id'], "CREATE_ITEM_PRICING", f"Added pricing for item {item_data.item_code} to gate ID {item_data.gate_id}")
 
         await conn.commit()
         await conn.close()
@@ -3598,7 +3598,7 @@ async def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends
             raise HTTPException(status_code=404, detail="Item not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['username'], "DELETE_ITEM_PRICING", f"Deleted item {item_code} from gate {gate_id}")
+        await log_user_activity(user['id'], "DELETE_ITEM_PRICING", f"Deleted item {item_code} from gate {gate_id}")
         return {"message": "Item deleted successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error deleting item: {str(e)}")
 
