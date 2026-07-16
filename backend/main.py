@@ -34,6 +34,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 43200 # 30 days expiration
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+
+scheduler = AsyncIOScheduler()
+
 # --- Initialization ---
 
 async def startup_db():
@@ -569,12 +572,7 @@ async def startup_db():
         logger.info("Logistic DB initialized successfully")
         
         # --- Start Scheduler ---
-        scheduler = AsyncIOScheduler()
-        
-        # Schedule daily job at 23:55 (11:55 PM) to compute end-of-day reports
         scheduler.add_job(daily_job_generator, 'cron', hour=23, minute=55)
-        
-        # Schedule daily job at 01:00 AM to clean up 1-month-old activity logs
         scheduler.add_job(cleanup_old_activity_logs, 'cron', hour=1, minute=0)
         
         scheduler.start()
