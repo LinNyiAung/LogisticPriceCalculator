@@ -287,7 +287,7 @@ async def startup_db():
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='User_Activity_Log' AND xtype='U')
             CREATE TABLE User_Activity_Log (
                 id        INT IDENTITY(1,1) PRIMARY KEY,
-                user_id   INT,   # <--- Change to INT
+                user_id   INT,   
                 action    NVARCHAR(255),
                 details   NVARCHAR(MAX),
                 timestamp NVARCHAR(30)
@@ -413,7 +413,7 @@ async def startup_db():
             CREATE TABLE Gate_Change_Log (
                 id          INT IDENTITY(1,1) PRIMARY KEY,
                 gate_id     INT,
-                changed_by  INT,  # <--- Change to INT
+                changed_by  INT,  
                 change_date NVARCHAR(30),
                 field_name  NVARCHAR(255),
                 old_value   NVARCHAR(MAX),
@@ -428,7 +428,7 @@ async def startup_db():
             CREATE TABLE Item_Change_Log (
                 id          INT IDENTITY(1,1) PRIMARY KEY,
                 pricing_id  INT,
-                changed_by  INT,  # <--- Change to INT
+                changed_by  INT,  
                 change_date NVARCHAR(30),
                 field_name  NVARCHAR(255),
                 old_value   NVARCHAR(MAX),
@@ -443,7 +443,7 @@ async def startup_db():
             CREATE TABLE Rate_Cart_Change_Log (
                 id          INT IDENTITY(1,1) PRIMARY KEY,
                 location    NVARCHAR(255),
-                changed_by  INT,  # <--- Change to INT
+                changed_by  INT,  
                 change_date NVARCHAR(30),
                 field_name  NVARCHAR(255),
                 old_value   NVARCHAR(MAX),
@@ -490,7 +490,7 @@ async def startup_db():
                 id          INT IDENTITY(1,1) PRIMARY KEY,
                 target_date NVARCHAR(10),
                 driver_name NVARCHAR(255),
-                changed_by  INT,  # <--- Change to INT
+                changed_by  INT,  
                 change_date NVARCHAR(30),
                 field_name  NVARCHAR(255),
                 old_value   NVARCHAR(MAX),
@@ -570,16 +570,16 @@ async def startup_db():
         await conn.commit()
         await conn.close()
         logger.info("Logistic DB initialized successfully")
-        
-        # --- Start Scheduler ---
-        scheduler.add_job(daily_job_generator, 'cron', hour=23, minute=55)
-        scheduler.add_job(cleanup_old_activity_logs, 'cron', hour=1, minute=0)
-        
-        scheduler.start()
-        logger.info("Daily end-of-day report and activity log cleanup schedulers started.")
 
     except Exception as e:
         logger.error(f"Error initializing database: {str(e)}")
+        raise  # or handle explicitly — don't let this hide scheduler failures
+
+    # Scheduler setup outside the DB migration try block
+    scheduler.add_job(daily_job_generator, 'cron', hour=23, minute=55)
+    scheduler.add_job(cleanup_old_activity_logs, 'cron', hour=1, minute=0)
+    scheduler.start()
+    logger.info("Schedulers started.")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
