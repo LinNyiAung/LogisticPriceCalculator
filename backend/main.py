@@ -5014,13 +5014,13 @@ async def export_daily_rate_cut_report(
         if report_type == 'item':
             headers = [
                 "BU", "Date", "Branch", "Driver Name", "Principal", "Brand", "Item Code", "Item Name", 
-                "Cartons", "Driver Total (Ctns)", "Branch Rate Cost", "Additional Amount", "Cost per Carton",
+                "Cartons", "Driver Total (Ctns)", "Additional Ctns", "Branch Rate Cost", "Additional Amount", "Cost per Carton",
                 "Allocated Cost", "Sales Amount"
             ]
         else:
             headers = [
                 "Branch", "Date", "Driver Name", "Township", "Customer Code", "Contact Person", 
-                "Customer Total (Ctns)", "Driver Total (Ctns)", "Branch Rate Cost", "Additional Amount", "Total Drop Points",
+                "Customer Total (Ctns)", "Driver Total (Ctns)", "Additional Ctns", "Branch Rate Cost", "Additional Amount", "Total Drop Points",
                 "Cost per Drop Point", "Cost per Carton", "Allocated Cost", "Sales Amount"
             ]
 
@@ -5036,7 +5036,7 @@ async def export_daily_rate_cut_report(
                 row_data = [
                     row.get("bu", "-"), row.get("target_date", ""), row.get("branch", ""), row.get("driver_name", ""),
                     row.get("principal", ""), row.get("brand", ""), row.get("item_code", ""),
-                    row.get("item_name", ""), float(row.get("ctns", 0)), float(row.get("driver_total_ctns", 0)),
+                    row.get("item_name", ""), float(row.get("ctns", 0)), float(row.get("driver_total_ctns", 0)), float(row.get("additional_ctns", 0)),
                     float(row.get("branch_cost", 0)), float(row.get("additional_amount", 0)), float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
                     float(row.get("sales_amount", 0))
                 ]
@@ -5044,7 +5044,7 @@ async def export_daily_rate_cut_report(
                 row_data = [
                     row.get("branch", ""), row.get("target_date", ""), row.get("driver_name", ""), row.get("township", ""),
                     row.get("customer_code", ""), row.get("contact_person", ""), float(row.get("ctns", 0)),
-                    float(row.get("driver_total_ctns", 0)), float(row.get("branch_cost", 0)), float(row.get("additional_amount", 0)), float(row.get("total_drop_points", 0)),
+                    float(row.get("driver_total_ctns", 0)), float(row.get("additional_ctns", 0)), float(row.get("branch_cost", 0)), float(row.get("additional_amount", 0)), float(row.get("total_drop_points", 0)),
                     float(row.get("cost_per_drop_point", 0)), float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
                     float(row.get("sales_amount", 0))
                 ]

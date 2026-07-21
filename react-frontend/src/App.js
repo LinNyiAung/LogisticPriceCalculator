@@ -661,11 +661,11 @@ const PricingApp = () => {
   
   const [dailyReportFilters, setDailyReportFilters] = useState({ 
     date_filter: '', bu: '', branch: '', item_code: '', item_name: '', principal: '', brand: '', driver_name: '',
-    ctns: '', driver_total_ctns: '', branch_cost: '', additional_amount: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
+    ctns: '', driver_total_ctns: '', additional_ctns: '', branch_cost: '', additional_amount: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
   });
   
   const [townshipFilters, setTownshipFilters] = useState({ 
-    date_filter: '', branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', driver_total_ctns: '', branch_cost: '', additional_amount: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
+    date_filter: '', branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', driver_total_ctns: '', additional_ctns: '', branch_cost: '', additional_amount: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
   });
 
   const [submittedAllocationData, setSubmittedAllocationData] = useState([]);
@@ -3354,13 +3354,14 @@ const [overrideDate, setOverrideDate] = useState('');
         const matchDriverName = (row.driver_name || '').toLowerCase().includes(dailyReportFilters.driver_name.toLowerCase());
         const matchCtns = String(row.ctns || '').toLowerCase().includes(dailyReportFilters.ctns.toLowerCase());
         const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(dailyReportFilters.driver_total_ctns.toLowerCase());
+        const matchAdditionalCtns = String(row.additional_ctns || '').toLowerCase().includes((dailyReportFilters.additional_ctns || '').toLowerCase());
         const matchBranchCost = String(row.branch_cost || '').toLowerCase().includes(dailyReportFilters.branch_cost.toLowerCase());
         const matchAdditionalAmount = String(row.additional_amount || '').toLowerCase().includes(dailyReportFilters.additional_amount.toLowerCase());
         const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(dailyReportFilters.cost_per_carton.toLowerCase());
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(dailyReportFilters.allocated_cost.toLowerCase());
         const matchSalesAmount = String(row.sales_amount || '').toLowerCase().includes(dailyReportFilters.sales_amount.toLowerCase());
 
-        return matchDate && matchBu && matchBranch && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchDriverName && matchCtns && matchDriverTotal && matchBranchCost && matchAdditionalAmount && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
+        return matchDate && matchBu && matchBranch && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchDriverName && matchCtns && matchDriverTotal && matchAdditionalCtns && matchBranchCost && matchAdditionalAmount && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
       });
 
       const filteredTownshipReportData = dailyTownshipReportData.filter(row => {
@@ -3372,6 +3373,7 @@ const [overrideDate, setOverrideDate] = useState('');
         const matchContactPerson = (row.contact_person || '').toLowerCase().includes(townshipFilters.contact_person.toLowerCase());
         const matchCtns = String(row.ctns || '').toLowerCase().includes(townshipFilters.ctns.toLowerCase());
         const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(townshipFilters.driver_total_ctns.toLowerCase());
+        const matchAdditionalCtns = String(row.additional_ctns || '').toLowerCase().includes((townshipFilters.additional_ctns || '').toLowerCase());
         const matchBranchCost = String(row.branch_cost || '').toLowerCase().includes(townshipFilters.branch_cost.toLowerCase());
         const matchAdditionalAmount = String(row.additional_amount || '').toLowerCase().includes(townshipFilters.additional_amount.toLowerCase());
         const matchTotalDropPoints = String(row.total_drop_points || '').toLowerCase().includes(townshipFilters.total_drop_points.toLowerCase());
@@ -3380,7 +3382,7 @@ const [overrideDate, setOverrideDate] = useState('');
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(townshipFilters.allocated_cost.toLowerCase());
         const matchSalesAmount = String(row.sales_amount || '').toLowerCase().includes(townshipFilters.sales_amount.toLowerCase());
         
-        return matchDate && matchBranch && matchDriver && matchTownship && matchCustomer && matchContactPerson && matchCtns && matchDriverTotal && matchBranchCost && matchAdditionalAmount && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
+        return matchDate && matchBranch && matchDriver && matchTownship && matchCustomer && matchContactPerson && matchCtns && matchDriverTotal && matchAdditionalCtns && matchBranchCost && matchAdditionalAmount && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
       });
 
       const filteredAllocation = submittedAllocationData.filter(row => {
@@ -3671,6 +3673,10 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <div>Driver Total (Ctns)</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.driver_total_ctns} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_total_ctns: e.target.value})} />
                                             </th>
+                                            <th className="border p-2 text-right text-green-700">
+                                                <div>Additional Ctns</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.additional_ctns || ''} onChange={(e) => setDailyReportFilters({...dailyReportFilters, additional_ctns: e.target.value})} />
+                                            </th>
                                             <th className="border p-2 text-right">
                                                 <div>Branch Rate Cost</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.branch_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, branch_cost: e.target.value})} />
@@ -3709,6 +3715,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2">{row.item_name}</td>
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
+                                                    <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.additional_ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>
                                                     <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.additional_amount)}</td>
                                                     <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
@@ -3771,6 +3778,10 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <div>Driver Total (Ctns)</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.driver_total_ctns} onChange={(e) => setTownshipFilters({...townshipFilters, driver_total_ctns: e.target.value})} />
                                             </th>
+                                            <th className="border p-2 text-right text-green-700">
+                                                <div>Additional Ctns</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.additional_ctns || ''} onChange={(e) => setTownshipFilters({...townshipFilters, additional_ctns: e.target.value})} />
+                                            </th>
                                             <th className="border p-2 text-right">
                                                 <div>Branch Rate Cost</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.branch_cost} onChange={(e) => setTownshipFilters({...townshipFilters, branch_cost: e.target.value})} />
@@ -3815,6 +3826,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2">{row.contact_person}</td>
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
+                                                    <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.additional_ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>
                                                     <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.additional_amount)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.total_drop_points)}</td>
