@@ -228,12 +228,21 @@ async def startup_db():
                 target_date       NVARCHAR(10) NOT NULL,
                 driver_name       NVARCHAR(255) NOT NULL,
                 additional_amount DECIMAL(18,6) NOT NULL,
+                additional_ctns   DECIMAL(18,6) DEFAULT 0,
                 created_at        NVARCHAR(30),
                 created_by        INT,
                 edited_at         NVARCHAR(30),
                 edited_by         INT,
                 UNIQUE (target_date, driver_name)
             )
+        """)
+        
+        # Add additional_ctns column if it doesn't exist
+        await cursor.execute("""
+            IF COL_LENGTH('Daily_Driver_Override', 'additional_ctns') IS NULL
+            BEGIN
+                ALTER TABLE Daily_Driver_Override ADD additional_ctns DECIMAL(18,6) DEFAULT 0;
+            END
         """)
 
         # Daily_Item_Report table
@@ -714,7 +723,8 @@ class LocationMappingItem(BaseModel):
 class DriverOverrideData(BaseModel):
     target_date: str
     driver_name: str
-    additional_amount: Decimal
+    additional_amount: Optional[Decimal] = Decimal("0.0")
+    additional_ctns: Optional[Decimal] = Decimal("0.0")
 
 class RateCartData(BaseModel):
     location: str
@@ -1712,8 +1722,8 @@ async def _get_daily_report_data(target_date: str):
 
     conn_log = await get_logistic_connection()
     cursor_log = await conn_log.cursor()
-    await cursor_log.execute("SELECT driver_name, additional_amount FROM Daily_Driver_Override WHERE target_date = ?", (target_date,))
-    overrides = {row[0].strip(): Decimal(str(row[1])) for row in await cursor_log.fetchall()}
+    await cursor_log.execute("SELECT driver_name, additional_amount, additional_ctns FROM Daily_Driver_Override WHERE target_date = ?", (target_date,))
+    overrides = {row[0].strip(): {'amount': Decimal(str(row[1])), 'ctns': Decimal(str(row[2] or 0))} for row in await cursor_log.fetchall()}
     await conn_log.close()
 
     conn_dwbi = await get_dwbi_connection()
@@ -1777,10 +1787,14 @@ async def _get_daily_report_data(target_date: str):
         d_total = driver_totals.get((b, d), Decimal("0.0"))
         b_cost = rate_carts.get(b, Decimal("0.0"))
         
-        driver_extra = overrides.get(d, Decimal("0.0"))
-        effective_branch_cost = b_cost + driver_extra
+        driver_override = overrides.get(d, {'amount': Decimal("0.0"), 'ctns': Decimal("0.0")})
+        driver_extra = driver_override['amount']
+        driver_extra_ctns = driver_override['ctns']
         
-        cost_per_ctn = (effective_branch_cost / d_total) if d_total > Decimal("0.0") else Decimal("0.0")
+        effective_branch_cost = b_cost + driver_extra
+        effective_driver_total_ctns = d_total + driver_extra_ctns
+        
+        cost_per_ctn = (effective_branch_cost / effective_driver_total_ctns) if effective_driver_total_ctns > Decimal("0.0") else Decimal("0.0")
         allocated_cost = g["ctns"] * cost_per_ctn
 
         d_total_customers = Decimal(str(len(driver_customers.get((b, d), set()))))
@@ -1793,7 +1807,7 @@ async def _get_daily_report_data(target_date: str):
                 "bu": g["bu"], "branch": b, "driver_name": d, "item_code": g["item_code"],
                 "item_name": g["item_name"], "principal": g["principal"], "brand": g["brand"],
                 "ctns": Decimal("0.0"), "allocated_cost": Decimal("0.0"), "cost_per_carton": cost_per_ctn,
-                "driver_total_ctns": d_total, "branch_cost": effective_branch_cost, "additional_amount": driver_extra,
+                "driver_total_ctns": effective_driver_total_ctns, "branch_cost": effective_branch_cost, "additional_amount": driver_extra,
                 "sales_amount": Decimal("0.0")
             }
         item_report_dict[i_key]["ctns"] += g["ctns"]
@@ -1806,7 +1820,7 @@ async def _get_daily_report_data(target_date: str):
                 "target_date": target_date, 
                 "branch": b, "driver_name": g["driver_name"], "township": g["township"], 
                 "customer_code": g["customer_code"], "contact_person": g["contact_person"], 
-                "ctns": Decimal("0.0"), "driver_total_ctns": d_total, "branch_cost": effective_branch_cost,
+                "ctns": Decimal("0.0"), "driver_total_ctns": effective_driver_total_ctns, "branch_cost": effective_branch_cost,
                 "additional_amount": driver_extra,
                 "cost_per_carton": cost_per_ctn, "allocated_cost": Decimal("0.0"),
                 "total_drop_points": d_total_customers, "cost_per_drop_point": cost_per_drop_point,
@@ -1923,12 +1937,16 @@ async def get_or_generate_daily_report(target_date: str):
             for k in ["ctns","driver_total_ctns","branch_cost","cost_per_carton","allocated_cost","total_drop_points","cost_per_drop_point","sales_amount"]:
                 tw[k] = Decimal(str(tw[k])) if tw[k] is not None else Decimal("0.0")
 
-        await cursor.execute("SELECT driver_name, additional_amount FROM Daily_Driver_Override WHERE target_date = ?", (target_date,))
-        overrides = {r[0].strip(): Decimal(str(r[1])) for r in await cursor.fetchall()}
+        await cursor.execute("SELECT driver_name, additional_amount, additional_ctns FROM Daily_Driver_Override WHERE target_date = ?", (target_date,))
+        overrides = {r[0].strip(): {'amount': Decimal(str(r[1])), 'ctns': Decimal(str(r[2] or 0))} for r in await cursor.fetchall()}
         for it in item_report:
-            it["additional_amount"] = overrides.get((it.get("driver_name") or "").strip(), Decimal("0.0"))
+            ov = overrides.get((it.get("driver_name") or "").strip(), {'amount': Decimal("0.0"), 'ctns': Decimal("0.0")})
+            it["additional_amount"] = ov['amount']
+            it["additional_ctns"] = ov['ctns']
         for tw in township_report:
-            tw["additional_amount"] = overrides.get((tw.get("driver_name") or "").strip(), Decimal("0.0"))
+            ov = overrides.get((tw.get("driver_name") or "").strip(), {'amount': Decimal("0.0"), 'ctns': Decimal("0.0")})
+            tw["additional_amount"] = ov['amount']
+            tw["additional_ctns"] = ov['ctns']
 
         await conn.close()
         return {"item_report": item_report, "township_report": township_report}
@@ -2005,38 +2023,53 @@ def _aggregate_reports(daily_datas: List[dict]):
 @app.post("/account/daily-override")
 async def save_daily_override(data: DriverOverrideData, user: dict = Depends(require_permission("view_daily_report"))):
     try:
+        data.additional_amount = data.additional_amount if data.additional_amount is not None else Decimal("0.0")
+        data.additional_ctns = data.additional_ctns if data.additional_ctns is not None else Decimal("0.0")
+        
+        if data.additional_amount == Decimal("0.0") and data.additional_ctns == Decimal("0.0"):
+            raise HTTPException(status_code=400, detail="Either Additional Amount or Additional Ctns must be provided.")
+
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         
-        await cursor.execute("SELECT additional_amount FROM Daily_Driver_Override WHERE target_date = ? AND driver_name = ?", (data.target_date, data.driver_name))
+        await cursor.execute("SELECT additional_amount, additional_ctns FROM Daily_Driver_Override WHERE target_date = ? AND driver_name = ?", (data.target_date, data.driver_name))
         existing = await cursor.fetchone()
         
         username = user['username']
-        user_id = user['id'] # Grab the numeric ID from the session token
+        user_id = user['id']
         change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         if existing:
             old_amount = existing[0]
+            old_ctns = existing[1] or 0
+            
             old_cost_str = str(old_amount)
             new_cost_str = str(data.additional_amount)
+            
             if old_cost_str != new_cost_str:
                 await cursor.execute("""
                     INSERT INTO Driver_Override_Change_Log (target_date, driver_name, changed_by, change_date, field_name, old_value, new_value)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (data.target_date, data.driver_name, user_id, change_date, 'Override Amount', old_cost_str, new_cost_str)) # Changed to user_id
+                """, (data.target_date, data.driver_name, user_id, change_date, 'Override Amount', old_cost_str, new_cost_str))
+
+            if str(old_ctns) != str(data.additional_ctns):
+                await cursor.execute("""
+                    INSERT INTO Driver_Override_Change_Log (target_date, driver_name, changed_by, change_date, field_name, old_value, new_value)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (data.target_date, data.driver_name, user_id, change_date, 'Override Ctns', str(old_ctns), str(data.additional_ctns)))
         else:
             await cursor.execute("""
                 INSERT INTO Driver_Override_Change_Log (target_date, driver_name, changed_by, change_date, field_name, old_value, new_value)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (data.target_date, data.driver_name, user_id, change_date, 'Record Created', None, str(data.additional_amount))) # Changed to user_id
+            """, (data.target_date, data.driver_name, user_id, change_date, 'Record Created', None, str(data.additional_amount)))
 
         await cursor.execute("""
             MERGE Daily_Driver_Override AS target
-            USING (SELECT ? AS target_date, ? AS driver_name, ? AS additional_amount, ? AS edited_at, ? AS edited_by, ? AS created_at, ? AS created_by) AS source
+            USING (SELECT ? AS target_date, ? AS driver_name, ? AS additional_amount, ? AS additional_ctns, ? AS edited_at, ? AS edited_by, ? AS created_at, ? AS created_by) AS source
             ON target.target_date = source.target_date AND target.driver_name = source.driver_name
-            WHEN MATCHED THEN UPDATE SET additional_amount = source.additional_amount, edited_at = source.edited_at, edited_by = source.edited_by
-            WHEN NOT MATCHED THEN INSERT (target_date, driver_name, additional_amount, created_at, created_by) VALUES (source.target_date, source.driver_name, source.additional_amount, source.created_at, source.created_by);
-        """, (data.target_date, data.driver_name, data.additional_amount, change_date, user_id, change_date, user_id)) # Changed both to user_id
+            WHEN MATCHED THEN UPDATE SET additional_amount = source.additional_amount, additional_ctns = source.additional_ctns, edited_at = source.edited_at, edited_by = source.edited_by
+            WHEN NOT MATCHED THEN INSERT (target_date, driver_name, additional_amount, additional_ctns, created_at, created_by) VALUES (source.target_date, source.driver_name, source.additional_amount, source.additional_ctns, source.created_at, source.created_by);
+        """, (data.target_date, data.driver_name, data.additional_amount, data.additional_ctns, change_date, user_id, change_date, user_id))
         
         await conn.commit()
         await conn.close()
@@ -2100,10 +2133,10 @@ async def get_daily_overrides(target_date: str, user: dict = Depends(require_per
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT id, target_date, driver_name, additional_amount FROM Daily_Driver_Override WHERE target_date = ?", (target_date,))
+        await cursor.execute("SELECT id, target_date, driver_name, additional_amount, additional_ctns FROM Daily_Driver_Override WHERE target_date = ?", (target_date,))
         rows = await cursor.fetchall()
         await conn.close()
-        return [{"id": r[0], "target_date": r[1], "driver_name": r[2], "additional_amount": r[3]} for r in rows]
+        return [{"id": r[0], "target_date": r[1], "driver_name": r[2], "additional_amount": r[3], "additional_ctns": r[4] or 0} for r in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching overrides: {str(e)}")
 

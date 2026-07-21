@@ -686,6 +686,7 @@ const PricingApp = () => {
 const [overrideDate, setOverrideDate] = useState('');
   const [overrideDriver, setOverrideDriver] = useState('');
   const [overrideAmount, setOverrideAmount] = useState('');
+  const [overrideCtns, setOverrideCtns] = useState(''); // NEW
   const [overrideDriversList, setOverrideDriversList] = useState([]);
   const [overridesList, setOverridesList] = useState([]); // NEW: State for override list
   const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
@@ -711,7 +712,7 @@ const [overrideDate, setOverrideDate] = useState('');
 
   const handleOverrideSubmit = async (e) => {
       e.preventDefault();
-      if (!overrideDate || !overrideDriver || !overrideAmount) return;
+      if (!overrideDate || !overrideDriver || (!overrideAmount && !overrideCtns)) return;
       setIsSubmittingOverride(true);
       try {
           const res = await authFetch(`${API_URL}/account/daily-override`, {
@@ -720,12 +721,14 @@ const [overrideDate, setOverrideDate] = useState('');
               body: JSON.stringify({
                   target_date: overrideDate,
                   driver_name: overrideDriver,
-                  additional_amount: parseFloat(overrideAmount)
+                  additional_amount: parseFloat(overrideAmount),
+                  additional_ctns: parseFloat(overrideCtns || 0)
               })
           });
           if (res.ok) {
               showNotification('Override saved and report recalculated', 'success');
               setOverrideAmount('');
+              setOverrideCtns('');
               setOverrideDriver('');
               
               // Refresh override list
@@ -750,6 +753,7 @@ const [overrideDate, setOverrideDate] = useState('');
   const handleEditOverride = (ov) => {
       setOverrideDriver(ov.driver_name);
       setOverrideAmount(ov.additional_amount);
+      setOverrideCtns(ov.additional_ctns);
       // Auto scrolls up to form if far away
       window.scrollTo({ top: 0, behavior: 'smooth' }); 
   };
@@ -3526,10 +3530,14 @@ const [overrideDate, setOverrideDate] = useState('');
                                       </select>
                                   </div>
                                   <div className="flex-1 min-w-[150px]">
-                                      <label className="block text-sm font-semibold mb-1 text-gray-700">Additional Amount <span className="text-red-500">*</span></label>
-                                      <input type="number" step="any" value={overrideAmount} onChange={e => setOverrideAmount(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" placeholder="e.g. 5000" required />
+                                      <label className="block text-sm font-semibold mb-1 text-gray-700">Additional Amount {!overrideCtns && <span className="text-red-500">*</span>}</label>
+                                      <input type="number" step="any" value={overrideAmount} onChange={e => setOverrideAmount(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" placeholder="e.g. 5000" required={!overrideCtns} />
                                   </div>
-                                  <button type="submit" disabled={isSubmittingOverride || !overrideDate || !overrideDriver || !overrideAmount} className="bg-blue-600 text-white px-6 py-2 rounded font-semibold hover:bg-blue-700 disabled:opacity-50 transition">
+                                  <div className="flex-1 min-w-[150px]">
+                                      <label className="block text-sm font-semibold mb-1 text-gray-700">Additional Ctns {!overrideAmount && <span className="text-red-500">*</span>}</label>
+                                      <input type="number" step="any" value={overrideCtns} onChange={e => setOverrideCtns(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" placeholder="e.g. 10" required={!overrideAmount} />
+                                  </div>
+                                  <button type="submit" disabled={isSubmittingOverride || !overrideDate || !overrideDriver || (!overrideAmount && !overrideCtns)} className="bg-blue-600 text-white px-6 py-2 rounded font-semibold hover:bg-blue-700 disabled:opacity-50 transition">
                                       {isSubmittingOverride ? 'Saving...' : 'Save Override'}
                                   </button>
                               </form>
@@ -3544,6 +3552,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                                   <tr>
                                                       <th className="border p-2 text-left">Driver Name</th>
                                                       <th className="border p-2 text-left">Amount (MMK)</th>
+                                                      <th className="border p-2 text-left">Additional Ctns</th>
                                                       <th className="border p-2 text-center w-24">Actions</th>
                                                   </tr>
                                               </thead>
@@ -3552,6 +3561,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                                       <tr key={ov.id} className="hover:bg-gray-50">
                                                           <td className="border p-2 font-semibold text-gray-700">{ov.driver_name}</td>
                                                           <td className="border p-2 text-blue-600 font-bold">{formatNumber(ov.additional_amount)}</td>
+                                                          <td className="border p-2 text-green-600 font-bold">{formatNumber(ov.additional_ctns)}</td>
                                                           <td className="border p-2 text-center">
                                                               <div className="flex justify-center gap-2">
                                                                   <button type="button" onClick={() => fetchOverrideLogs(ov)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs">
