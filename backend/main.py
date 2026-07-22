@@ -2012,7 +2012,7 @@ def _aggregate_reports(daily_datas: List[dict]):
     township_report_list = list(township_report_dict.values())
     for tw in township_report_list:
         tw["cost_per_carton"] = tw["allocated_cost"] / tw["ctns"] if tw["ctns"] > Decimal("0.0") else Decimal("0.0")
-        tw["cost_per_drop_point"] = tw["allocated_cost"] / tw["total_drop_points"] if tw["total_drop_points"] > Decimal("0.0") else Decimal("0.0")
+        tw["cost_per_drop_point"] = tw["branch_cost"] / tw["total_drop_points"] if tw["total_drop_points"] > Decimal("0.0") else Decimal("0.0")
     township_report_list.sort(key=lambda x: (x.get("target_date", ""), x["branch"], x["driver_name"], x["township"], x["customer_code"]))
 
     return {
