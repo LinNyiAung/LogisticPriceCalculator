@@ -134,12 +134,17 @@ async def startup_db():
             END
         """)
 
-        # Add warehouse code columns to Calculation_Products if they don't exist
+        # Add warehouse code and edited value columns to Calculation_Products if they don't exist
         await cursor.execute("""
             IF COL_LENGTH('Calculation_Products', 'FromWhsCode') IS NULL
             BEGIN
                 ALTER TABLE Calculation_Products ADD FromWhsCode NVARCHAR(255);
                 ALTER TABLE Calculation_Products ADD ToWhsCode NVARCHAR(255);
+            END
+            IF COL_LENGTH('Calculation_Products', 'edited_ctns') IS NULL
+            BEGIN
+                ALTER TABLE Calculation_Products ADD edited_ctns DECIMAL(18,6);
+                ALTER TABLE Calculation_Products ADD edited_weight DECIMAL(18,6);
             END
         """)
 
@@ -1255,7 +1260,7 @@ def get_rounded_ctns(val):
         return Decimal("0")
     
     
-async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, manual_total_cost=None, additional_charges=Decimal("0.0"), posm_items=None, posm_total_cost=None):
+async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=None, manual_total_cost=None, additional_charges=Decimal("0.0"), posm_items=None, posm_total_cost=None, edited_items_json=None):
     add_charges = Decimal(str(additional_charges)) if additional_charges is not None else Decimal("0.0")
 
     pg_nums = [str(d).replace("PG - ", "").replace("PG-", "") for d in doc_nums if not str(d).startswith("PDG")]
@@ -1297,6 +1302,57 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
     
     if not pick_rows:
         raise Exception("No products found for the selected Doc Nums")
+        
+    # --- NEW: Process overrides ---
+    edited_items = json.loads(edited_items_json) if edited_items_json else {}
+
+    item_totals = {}
+    for row in pick_rows:
+        code = row[0]
+        ctns = get_rounded_ctns(row[7])
+        weight = Decimal(str(row[3])) if row[3] else Decimal("0.0")
+        if code not in item_totals:
+            item_totals[code] = {'ctns': Decimal("0.0"), 'weight': Decimal("0.0")}
+        item_totals[code]['ctns'] += ctns
+        item_totals[code]['weight'] += weight
+
+    adjusted_pick_rows = []
+    for row in pick_rows:
+        row_list = list(row)
+        code = row_list[0]
+        orig_ctns = get_rounded_ctns(row_list[7])
+        orig_weight = Decimal(str(row_list[3])) if row_list[3] else Decimal("0.0")
+        
+        original_ctns_val = None
+        original_weight_val = None
+        
+        if code in edited_items:
+            edited_total_ctns = Decimal(str(edited_items[code].get('ctns', 0)))
+            orig_total_ctns = item_totals.get(code, {}).get('ctns', Decimal("0.0"))
+            if orig_total_ctns > Decimal("0"):
+                ratio = edited_total_ctns / orig_total_ctns
+                final_ctns = orig_ctns * ratio
+                final_weight = orig_weight * ratio
+            else:
+                final_ctns = Decimal("0")
+                final_weight = Decimal("0")
+            
+            original_ctns_val = orig_ctns
+            original_weight_val = orig_weight
+            
+            row_list[7] = final_ctns
+            row_list[3] = final_weight
+        else:
+            row_list[7] = orig_ctns
+            row_list[3] = orig_weight
+            
+        row_list.append(original_ctns_val) # index 12
+        row_list.append(original_weight_val) # index 13
+        adjusted_pick_rows.append(row_list)
+        
+    pick_rows = adjusted_pick_rows
+    # --- END NEW ---
+    
     
     try:
         conn_log = await get_logistic_connection()
@@ -1381,12 +1437,14 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
                 "code": row[0] if row[0] else "",
                 "name": row[1] if row[1] else "",
                 "uom": row[2] if row[2] else "",
-                "weight": Decimal(str(row[3])) if row[3] else Decimal("0.0"),
+                "weight": row[3],
                 "doc_date": doc_date_str,         
                 "sin_no": f"{row[9]} - {str(row[5])}" if row[5] else "",           
                 "principal": principal_val,
                 "brand": brand_val,
-                "ctns": get_rounded_ctns(row[7]),
+                "ctns": row[7],
+                "original_ctns": row[12],
+                "original_weight": row[13],
                 "bu": row[9],
                 "b_code": bc_info.get("Code", ""),
                 "b_name": bc_info.get("Name", ""),
@@ -1465,12 +1523,14 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
                 "code": row[0] if row[0] else "",
                 "name": row[1] if row[1] else "",
                 "uom": row[2] if row[2] else "",
-                "weight": Decimal(str(row[3])) if row[3] else Decimal("0.0"),
+                "weight": row[3],
                 "doc_date": doc_date_str,
                 "sin_no": f"{row[9]} - {str(row[5])}" if row[5] else "",
                 "principal": principal_val,
                 "brand": brand_val,
-                "ctns": get_rounded_ctns(row[7]),
+                "ctns": row[7],
+                "original_ctns": row[12],
+                "original_weight": row[13],
                 "bu": row[9],
                 "b_code": bc_info.get("Code", ""),
                 "b_name": bc_info.get("Name", ""),
@@ -1531,6 +1591,7 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
                 "code": item_code, "name": row[1] if row[1] else "", "ctns": ctns,
                 "uom": row[2] if row[2] else "", "weight": weight, "doc_date": doc_date_str,       
                 "sin_no": f"{row[9]} - {str(row[5])}" if row[5] else "", "principal": principal_val, "brand": brand_val,
+                "original_ctns": row[12], "original_weight": row[13],
                 "bu": row[9], "b_code": bc_info.get("Code", ""), "b_name": bc_info.get("Name", ""), 
                 "b_dept": bc_info.get("Dept", ""), "b_principal": bc_info.get("Principal", ""), 
                 "b_desc": bc_info.get("Description", ""), "s_dept": sd_info.get("Dept", ""), 
@@ -2658,25 +2719,34 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
         async def _upsert_products(calc_id, products):
             await cursor.execute("DELETE FROM Calculation_Products WHERE calc_id = ?", (calc_id,))
             for p in products:
+                # If original values exist, it was edited. Store original in base columns, edited in edited columns
+                db_ctns = p.get("original_ctns") if p.get("original_ctns") is not None else p.get("ctns", 0)
+                db_weight = p.get("original_weight") if p.get("original_weight") is not None else p.get("weight", 0)
+                
+                db_edited_ctns = p.get("ctns") if p.get("original_ctns") is not None else None
+                db_edited_weight = p.get("weight") if p.get("original_weight") is not None else None
+
                 await cursor.execute("""
                     INSERT INTO Calculation_Products
                     (calc_id, code, name, weight, doc_date, sin_no, principal, brand, ctns, bu,
                      b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
                      calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost,
-                     FromWhsCode, ToWhsCode)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                     FromWhsCode, ToWhsCode, edited_ctns, edited_weight)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """, (
                     calc_id,
                     p.get("code", ""), p.get("name", ""),
-                    Decimal(str(p.get("weight", 0))), p.get("doc_date", ""), p.get("sin_no", ""),
-                    p.get("principal", ""), p.get("brand", ""), Decimal(str(p.get("ctns", 0))),
+                    Decimal(str(db_weight)), p.get("doc_date", ""), p.get("sin_no", ""),
+                    p.get("principal", ""), p.get("brand", ""), Decimal(str(db_ctns)),
                     p.get("bu", ""), p.get("b_code", ""), p.get("b_name", ""),
                     p.get("b_dept", ""), p.get("b_principal", ""), p.get("b_desc", ""),
                     p.get("s_dept", ""), p.get("s_principal", ""),
                     p.get("calculation_type", ""), p.get("system_rate"),
                     Decimal(str(p.get("unit_cost", 0))), Decimal(str(p.get("total_cost", 0))),
                     p.get("standard_unit_cost"),
-                    p.get("FromWhsCode", ""), p.get("ToWhsCode", "")
+                    p.get("FromWhsCode", ""), p.get("ToWhsCode", ""),
+                    Decimal(str(db_edited_ctns)) if db_edited_ctns is not None else None, 
+                    Decimal(str(db_edited_weight)) if db_edited_weight is not None else None
                 ))
 
         async def _upsert_posm_products(calc_id, posm_products):
@@ -2831,17 +2901,22 @@ async def get_history_record(record_id: int, user: dict = Depends(require_permis
         record["claimed_by"] = record.pop("claimed_by_name", None)
 
         await cursor.execute("""
-            SELECT code, name, weight, doc_date, sin_no, principal, brand, ctns, bu,
-                   b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
+            SELECT code, name, 
+                   COALESCE(edited_weight, weight) AS weight, 
+                   doc_date, sin_no, principal, brand, 
+                   COALESCE(edited_ctns, ctns) AS ctns, 
+                   bu, b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
                    calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost,
-                   FromWhsCode, ToWhsCode
+                   FromWhsCode, ToWhsCode, 
+                   CASE WHEN edited_ctns IS NOT NULL THEN ctns ELSE NULL END AS original_ctns, 
+                   CASE WHEN edited_weight IS NOT NULL THEN weight ELSE NULL END AS original_weight
             FROM Calculation_Products WHERE calc_id = ?
         """, (record_id,))
         prod_rows = await cursor.fetchall()
         prod_cols = ["code","name","weight","doc_date","sin_no","principal","brand","ctns","bu",
                      "b_code","b_name","b_dept","b_principal","b_desc","s_dept","s_principal",
                      "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost",
-                     "FromWhsCode", "ToWhsCode"]
+                     "FromWhsCode", "ToWhsCode", "original_ctns", "original_weight"]
         record['calculated_products'] = [dict(zip(prod_cols, r)) for r in prod_rows]
 
         await cursor.execute("""
@@ -2944,10 +3019,15 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
         record['doc_nums'] = json.loads(record['doc_nums']) if record['doc_nums'] else []
         
         await cursor.execute("""
-            SELECT code, name, weight, doc_date, sin_no, principal, brand, ctns, bu,
-                   b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
+            SELECT code, name, 
+                   COALESCE(edited_weight, weight) AS weight, 
+                   doc_date, sin_no, principal, brand, 
+                   COALESCE(edited_ctns, ctns) AS ctns, 
+                   bu, b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal,
                    calculation_type, system_rate, unit_cost, total_cost, standard_unit_cost,
-                   FromWhsCode, ToWhsCode
+                   FromWhsCode, ToWhsCode, 
+                   CASE WHEN edited_ctns IS NOT NULL THEN ctns ELSE NULL END AS original_ctns, 
+                   CASE WHEN edited_weight IS NOT NULL THEN weight ELSE NULL END AS original_weight
             FROM Calculation_Products WHERE calc_id = ?
         """, (record_id,))
         
@@ -2960,7 +3040,7 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
         prod_cols = ["code","name","weight","doc_date","sin_no","principal","brand","ctns","bu",
                      "b_code","b_name","b_dept","b_principal","b_desc","s_dept","s_principal",
                      "calculation_type","system_rate","unit_cost","total_cost","standard_unit_cost",
-                     "FromWhsCode", "ToWhsCode"]
+                     "FromWhsCode", "ToWhsCode", "original_ctns", "original_weight"]
         products = [dict(zip(prod_cols, r)) for r in prod_rows]
         
         # Location -> Branch code mapping (e.g. "Yangon" -> "YGN"), used for description fields below
@@ -3725,6 +3805,7 @@ async def calculate_with_gate(
     additional_charges: Optional[Decimal] = Decimal("0.0"),
     posm_items_json: Optional[str] = Query(None),
     posm_total_cost: Optional[Decimal] = None,
+    edited_items_json: Optional[str] = Query(None), # <-- NEW
     user: dict = Depends(require_permission("view_calculator"))
 ):
     try:
@@ -3745,7 +3826,8 @@ async def calculate_with_gate(
             manual_total_cost=manual_total_cost, 
             additional_charges=additional_charges,
             posm_items=posm_items,
-            posm_total_cost=posm_total_cost
+            posm_total_cost=posm_total_cost,
+            edited_items_json=edited_items_json # <-- NEW
         )
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")
@@ -3857,7 +3939,9 @@ async def get_submitted_allocation_report(
                 ch.id, ch.submitted_at, ch.gate_name, ch.from_loc, ch.to_loc, ch.channel,
                 cp.doc_date, cp.sin_no, cp.bu, cp.code, cp.name, cp.principal, cp.brand,
                 cp.b_code, cp.b_name, cp.b_desc, cp.s_dept, cp.s_principal,
-                cp.ctns, cp.weight, cp.total_cost, cp.unit_cost, cp.calculation_type
+                COALESCE(cp.edited_ctns, cp.ctns) AS ctns, 
+                COALESCE(cp.edited_weight, cp.weight) AS weight, 
+                cp.total_cost, cp.unit_cost, cp.calculation_type
             FROM Calculation_History ch
             JOIN Calculation_Products cp ON cp.calc_id = ch.id
             WHERE ch.status IN ('submitted', 'claimed')
@@ -4373,7 +4457,7 @@ async def get_third_party_allocation(
         
         query = """
             SELECT ch.submitted_at, ch.to_loc, cp.bu, cp.principal, cp.brand, cp.name,
-                   cp.ctns, cp.total_cost
+                   COALESCE(cp.edited_ctns, cp.ctns) AS ctns, cp.total_cost
             FROM Calculation_History ch
             JOIN Calculation_Products cp ON cp.calc_id = ch.id
             WHERE ch.status IN ('submitted', 'claimed')
@@ -4578,7 +4662,7 @@ async def get_cost_comparison(
 
         cc_query = """
             SELECT ch.submitted_at, ch.to_loc, cp.doc_date, cp.bu, cp.principal, cp.brand,
-                   cp.code, cp.name, cp.ctns, cp.total_cost
+                   cp.code, cp.name, COALESCE(cp.edited_ctns, cp.ctns) AS ctns, cp.total_cost
             FROM Calculation_History ch
             JOIN Calculation_Products cp ON cp.calc_id = ch.id
             WHERE ch.status IN ('submitted', 'claimed')

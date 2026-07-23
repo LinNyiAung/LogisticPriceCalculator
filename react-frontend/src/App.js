@@ -592,6 +592,8 @@ const PricingApp = () => {
   };
 
   // App State
+
+  const [editedItems, setEditedItems] = useState({});
   
   const [docNums, setDocNums] = useState([]); 
   const [selectedDocNums, setSelectedDocNums] = useState([]); 
@@ -1514,7 +1516,7 @@ const [overrideDate, setOverrideDate] = useState('');
         id: isUpdate ? currentHistoryId : null, 
         gate_name: selectedGate, from_loc: selectedFrom, to_loc: selectedTo,
         doc_nums: selectedDocNums.map(String), 
-        total_weight: totalWeight,
+        total_weight: calculatedProducts.reduce((sum, item) => sum + (item.weight || 0), 0),
         manual_total_cost: (manualTotalCost && isManualTotalCostEnabled) ? parseFloat(manualTotalCost) : null,
         additional_charges: additionalCharges ? parseFloat(additionalCharges) : 0, 
         final_total_cost: calculatedTotalCost, channel: selectedChannel, status: "saved",
@@ -1787,6 +1789,11 @@ const [overrideDate, setOverrideDate] = useState('');
         url += `&posm_total_cost=${encodeURIComponent(posmTotalCost)}`;
       }
       
+      // --- NEW ---
+      if (Object.keys(editedItems).length > 0) {
+        url += `&edited_items_json=${encodeURIComponent(JSON.stringify(editedItems))}`;
+      }
+      
       const response = await authFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
       if (response.ok) {
         const data = await response.json();
@@ -1811,6 +1818,7 @@ const [overrideDate, setOverrideDate] = useState('');
   };
 
   const handleAddDocNum = (docNum) => {
+    setEditedItems({});
     if (!docNum) return;
     if (selectedDocNums.includes(docNum)) { showNotification('Doc Num already selected', 'info'); return; }
     const newSelection = [...selectedDocNums, docNum];
@@ -1818,22 +1826,26 @@ const [overrideDate, setOverrideDate] = useState('');
     fetchAggregatedProducts(newSelection);
   };
   const handleRemoveDocNum = (docNum) => {
+    setEditedItems({});
     const newSelection = selectedDocNums.filter(id => id !== docNum);
     setSelectedDocNums(newSelection); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setCurrentHistoryId(null); setHistoricalGate(null);
     fetchAggregatedProducts(newSelection);
   };
   const handleFromChange = (val) => {
+    setEditedItems({});
     setSelectedFrom(val); setSelectedTo(''); setSelectedGate(''); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null); setHistoricalGate(null);
     if (val) loadToLocations(val); else setToLocations([]);
   };
-  const handleToChange = (val) => { setSelectedTo(val); setSelectedGate(''); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null); setHistoricalGate(null);};
+  const handleToChange = (val) => { setEditedItems({}); setSelectedTo(val); setSelectedGate(''); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null); setHistoricalGate(null);};
   const handleGateChange = (gateName) => {
+    setEditedItems({});
     setSelectedGate(gateName); setSelectedChannel(''); setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setManualTotalCost(''); setCurrentHistoryId(null); setHistoricalGate(null);
     const gateInfo = gates.find(g => g.gate_name === gateName && g.from_loc === selectedFrom && g.to_loc === selectedTo);
     if (gateInfo) setCalculationType(gateInfo.calculation_type);
   };
 
   const handleAddPosmItem = () => {
+    setEditedItems({});
     if (!posmDraft.item_name.trim() || !posmDraft.department || !posmDraft.uom || !posmDraft.quantity || parseFloat(posmDraft.quantity) <= 0) {
       showNotification('Fill in Department, Item Name, Unit, and a valid Quantity for the POSM item.', 'error');
       return;
@@ -1844,6 +1856,7 @@ const [overrideDate, setOverrideDate] = useState('');
   };
 
   const handleRemovePosmItem = (index) => {
+    setEditedItems({});
     setPosmItems(posmItems.filter((_, i) => i !== index));
     setCalculatedProducts([]); setCalculatedTotalCost(null); setEstimatedTotalCost(null); setCalculatedPosmProducts([]);
   };
@@ -4635,18 +4648,44 @@ const [overrideDate, setOverrideDate] = useState('');
     const hasDirectPricingItems = hasCalculated && calculatedProducts.some(p => p.system_rate !== undefined && p.system_rate !== null);
 
     const tableData = Object.values(rawTableData.reduce((acc, curr) => {
-      if (!acc[curr.code]) { acc[curr.code] = { ...curr }; } 
-      else {
+      if (!acc[curr.code]) { 
+        acc[curr.code] = { 
+            ...curr,
+            original_ctns: curr.original_ctns != null ? curr.original_ctns : curr.ctns,
+            original_weight: curr.original_weight != null ? curr.original_weight : curr.weight
+        }; 
+      } else {
         acc[curr.code].ctns = (acc[curr.code].ctns || 0) + (curr.ctns || 0);
         acc[curr.code].weight += curr.weight || 0;
+        
+        const currOrigCtns = curr.original_ctns != null ? curr.original_ctns : curr.ctns;
+        const currOrigWeight = curr.original_weight != null ? curr.original_weight : curr.weight;
+        
+        acc[curr.code].original_ctns = (acc[curr.code].original_ctns || 0) + currOrigCtns;
+        acc[curr.code].original_weight = (acc[curr.code].original_weight || 0) + currOrigWeight;
+        
         if (curr.total_cost !== undefined) acc[curr.code].total_cost = (acc[curr.code].total_cost || 0) + curr.total_cost;
       }
       return acc;
     }, {})).map(item => {
-      if (item.total_cost !== undefined && item.ctns > 0) item.display_calculated_rate = item.total_cost / item.ctns;
+      // Resolve overrides
+      if (editedItems[item.code]) {
+          item.display_ctns = editedItems[item.code].ctns;
+          item.display_weight = editedItems[item.code].weight;
+          item.is_edited = true;
+      } else {
+          item.display_ctns = item.ctns;
+          item.display_weight = item.weight;
+          item.is_edited = item.original_ctns !== undefined && Math.abs(item.ctns - item.original_ctns) > 0.001;
+      }
+      
+      if (item.total_cost !== undefined && item.display_ctns > 0) item.display_calculated_rate = item.total_cost / item.display_ctns;
       else item.display_calculated_rate = item.unit_cost; 
       return item;
     }).sort((a, b) => a.code.localeCompare(b.code));
+
+    // Determine accurate total weight (live tracked)
+    const currentTotalWeight = tableData.reduce((sum, item) => sum + (item.display_weight || 0), 0);
 
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -4807,8 +4846,52 @@ const [overrideDate, setOverrideDate] = useState('');
                             <td className="border p-2 font-semibold text-gray-700">{product.bu || '-'}</td>
                             <td className="border p-2">{product.code}</td>
                             <td className="border p-2">{product.name}</td>
-                            <td className="border p-2">{product.ctns}</td>
-                            <td className="border p-2">{formatNumber(product.weight)}</td>
+                            <td className="border p-2">
+                              {!hasCalculated && currentHistoryId === null ? (
+                                <div className="flex flex-col">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={product.original_ctns}
+                                    value={product.display_ctns}
+                                    onChange={(e) => {
+                                       let val = parseFloat(e.target.value);
+                                       if (isNaN(val) || val < 0) val = 0;
+                                       const origCtns = product.original_ctns;
+                                       const origWeight = product.original_weight;
+                                       if (val > origCtns) val = origCtns;
+                                       
+                                       setEditedItems(prev => ({
+                                           ...prev,
+                                           [product.code]: {
+                                               ctns: val,
+                                               weight: origCtns > 0 ? origWeight * (val / origCtns) : 0
+                                           }
+                                       }));
+                                    }}
+                                    className="w-24 p-1 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                  />
+                                  {product.is_edited && (
+                                      <span className="text-xs text-red-500 mt-1 font-semibold">Original: {formatNumber(product.original_ctns)}</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="flex flex-col">
+                                  <span>{formatNumber(product.display_ctns)}</span>
+                                  {product.is_edited && (
+                                      <span className="text-xs text-red-500 mt-1 font-semibold">Original: {formatNumber(product.original_ctns)}</span>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                            <td className="border p-2">
+                                <div className="flex flex-col">
+                                  <span>{formatNumber(product.display_weight)}</span>
+                                  {product.is_edited && (
+                                      <span className="text-xs text-red-500 mt-1 font-semibold">Original: {formatNumber(product.original_weight)}</span>
+                                  )}
+                                </div>
+                            </td>
                             <td className="border p-2">Kg</td>
                             {hasDirectPricingItems && (<td className="border p-2">{product.system_rate !== undefined && product.system_rate !== null ? formatNumber(product.system_rate) : '-'}</td>)}
                             {hasCalculated && (<td className="border p-2">{product.display_calculated_rate !== undefined && product.display_calculated_rate !== null ? formatNumber(product.display_calculated_rate) : '-'}</td>)}
@@ -4897,7 +4980,7 @@ const [overrideDate, setOverrideDate] = useState('');
                 <div className="bg-white rounded-lg border p-6 mb-6">
                   <h2 className="text-xl font-bold mb-4">Total Summary</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200 p-6 flex flex-col justify-center"><div className="flex justify-between items-center mb-2"><span className="text-lg font-semibold text-gray-700 mb-2">Total Weight</span><span className="text-3xl font-bold text-purple-600">{formatNumber(totalWeight)} Kg</span></div></div>
+                    <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200 p-6 flex flex-col justify-center"><div className="flex justify-between items-center mb-2"><span className="text-lg font-semibold text-gray-700 mb-2">Total Weight</span><span className="text-3xl font-bold text-purple-600">{formatNumber(currentTotalWeight)} Kg</span></div></div>
                     {calculatedTotalCost !== null && (
                       <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200 p-6 flex flex-col justify-center">
                         <div className="flex justify-between items-center mb-2"><span className="text-lg font-semibold text-gray-700">Total Cost</span><span className="text-3xl font-bold text-blue-600">{formatNumber(calculatedTotalCost)} MMK</span></div>
