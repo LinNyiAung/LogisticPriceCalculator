@@ -4884,23 +4884,23 @@ const [overrideDate, setOverrideDate] = useState('');
                                   />
                                   {product.used_ctns > 0 && (
                                       <span className="text-xs text-orange-600 font-semibold bg-orange-50 px-1.5 py-0.5 rounded w-fit border border-orange-200">
-                                          Submitted: {formatNumber(product.used_ctns)} / {formatNumber(product.original_total_ctns)}
+                                          Submitted: {Number(product.used_ctns).toLocaleString()} / {Number(product.original_total_ctns).toLocaleString()}
                                       </span>
                                   )}
                                   {product.is_edited && (
-                                      <span className="text-xs text-blue-500 font-semibold">Original: {formatNumber(product.original_ctns)}</span>
+                                      <span className="text-xs text-blue-500 font-semibold">Original: {Number(product.original_ctns).toLocaleString()}</span>
                                   )}
                                 </div>
                               ) : (
                                 <div className="flex flex-col gap-1">
-                                  <span className={`font-semibold ${product.display_ctns === 0 ? 'text-red-500' : ''}`}>{formatNumber(product.display_ctns)}</span>
+                                  <span className={`font-semibold ${product.display_ctns === 0 ? 'text-red-500' : ''}`}>{Number(product.display_ctns).toLocaleString()}</span>
                                   {product.used_ctns > 0 && (
                                       <span className="text-xs text-orange-600 font-semibold bg-orange-50 px-1.5 py-0.5 rounded w-fit border border-orange-200">
-                                          Submitted: {formatNumber(product.used_ctns)} / {formatNumber(product.original_total_ctns)}
+                                          Submitted: {Number(product.used_ctns).toLocaleString()} / {Number(product.original_total_ctns).toLocaleString()}
                                       </span>
                                   )}
                                   {product.is_edited && (
-                                      <span className="text-xs text-blue-500 font-semibold">Original: {formatNumber(product.original_ctns)}</span>
+                                      <span className="text-xs text-blue-500 font-semibold">Original: {Number(product.original_ctns).toLocaleString()}</span>
                                   )}
                                 </div>
                               )}
