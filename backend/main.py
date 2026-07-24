@@ -1303,52 +1303,112 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
     if not pick_rows:
         raise Exception("No products found for the selected Doc Nums")
         
-    # --- NEW: Process overrides ---
+    # --- NEW: Process overrides and calculate remaining amounts ---
+    conn_log = await get_logistic_connection()
+    cursor_log = await conn_log.cursor()
+    
+    sin_nos = []
+    for row in pick_rows:
+        prefix = row[9] # 'PG' or 'PDG'
+        docnum = row[5] # DocNum
+        if docnum:
+            sin_nos.append(f"{prefix} - {docnum}")
+            
+    sin_nos = list(set(sin_nos))
+    used_map = {}
+    
+    if sin_nos:
+        placeholders = ','.join('?' * len(sin_nos))
+        await cursor_log.execute(f"""
+            SELECT cp.sin_no, cp.code, SUM(COALESCE(cp.edited_ctns, cp.ctns)), SUM(COALESCE(cp.edited_weight, cp.weight))
+            FROM Calculation_Products cp
+            JOIN Calculation_History ch ON cp.calc_id = ch.id
+            WHERE ch.status IN ('submitted', 'claimed')
+            AND cp.sin_no IN ({placeholders})
+            GROUP BY cp.sin_no, cp.code
+        """, sin_nos)
+        used_amounts_rows = await cursor_log.fetchall()
+        for r in used_amounts_rows:
+            sin_no = r[0]
+            code = r[1]
+            used_ctns = Decimal(str(r[2])) if r[2] is not None else Decimal("0.0")
+            used_weight = Decimal(str(r[3])) if r[3] is not None else Decimal("0.0")
+            used_map[(sin_no, code)] = {"used_ctns": used_ctns, "used_weight": used_weight}
+            
+    await conn_log.close()
+
     edited_items = json.loads(edited_items_json) if edited_items_json else {}
 
     item_totals = {}
     for row in pick_rows:
         code = row[0]
-        ctns = get_rounded_ctns(row[7])
-        weight = Decimal(str(row[3])) if row[3] else Decimal("0.0")
+        prefix = row[9]
+        docnum = row[5]
+        sin_no = f"{prefix} - {docnum}" if docnum else ""
+        
+        orig_ctns = get_rounded_ctns(row[7])
+        orig_weight = Decimal(str(row[3])) if row[3] else Decimal("0.0")
+        
+        used = used_map.get((sin_no, code), {"used_ctns": Decimal("0.0"), "used_weight": Decimal("0.0")})
+        remaining_ctns = orig_ctns - used["used_ctns"]
+        remaining_weight = orig_weight - used["used_weight"]
+        
+        if remaining_ctns < Decimal("0.01"): remaining_ctns = Decimal("0")
+        if remaining_weight < Decimal("0.01"): remaining_weight = Decimal("0")
+        
         if code not in item_totals:
             item_totals[code] = {'ctns': Decimal("0.0"), 'weight': Decimal("0.0")}
-        item_totals[code]['ctns'] += ctns
-        item_totals[code]['weight'] += weight
+            
+        item_totals[code]['ctns'] += remaining_ctns
+        item_totals[code]['weight'] += remaining_weight
 
     adjusted_pick_rows = []
     for row in pick_rows:
         row_list = list(row)
         code = row_list[0]
+        prefix = row_list[9]
+        docnum = row_list[5]
+        sin_no = f"{prefix} - {docnum}" if docnum else ""
+        
         orig_ctns = get_rounded_ctns(row_list[7])
-        orig_weight = Decimal(str(row_list[3])) if row_list[3] else Decimal("0.0")
+        orig_weight = Decimal(str(row[3])) if row[3] else Decimal("0.0")
         
-        original_ctns_val = None
-        original_weight_val = None
+        used = used_map.get((sin_no, code), {"used_ctns": Decimal("0.0"), "used_weight": Decimal("0.0")})
+        default_ctns = orig_ctns - used["used_ctns"]
+        default_weight = orig_weight - used["used_weight"]
         
+        if default_ctns < Decimal("0.01"): default_ctns = Decimal("0")
+        if default_weight < Decimal("0.01"): default_weight = Decimal("0")
+
         if code in edited_items:
             edited_total_ctns = Decimal(str(edited_items[code].get('ctns', 0)))
-            orig_total_ctns = item_totals.get(code, {}).get('ctns', Decimal("0.0"))
-            if orig_total_ctns > Decimal("0"):
-                ratio = edited_total_ctns / orig_total_ctns
-                final_ctns = orig_ctns * ratio
-                final_weight = orig_weight * ratio
+            rem_total_ctns = item_totals.get(code, {}).get('ctns', Decimal("0.0"))
+            if rem_total_ctns > Decimal("0"):
+                ratio = edited_total_ctns / rem_total_ctns
+                final_ctns = default_ctns * ratio
+                final_weight = default_weight * ratio
             else:
                 final_ctns = Decimal("0")
                 final_weight = Decimal("0")
+        else:
+            final_ctns = default_ctns
+            final_weight = default_weight
             
+        if final_ctns != orig_ctns or final_weight != orig_weight:
             original_ctns_val = orig_ctns
             original_weight_val = orig_weight
-            
-            row_list[7] = final_ctns
-            row_list[3] = final_weight
         else:
-            row_list[7] = orig_ctns
-            row_list[3] = orig_weight
+            original_ctns_val = None
+            original_weight_val = None
             
+        row_list[7] = final_ctns
+        row_list[3] = final_weight
+        
         row_list.append(original_ctns_val) # index 12
         row_list.append(original_weight_val) # index 13
-        adjusted_pick_rows.append(row_list)
+        
+        if final_ctns > Decimal("0") or final_weight > Decimal("0"):
+            adjusted_pick_rows.append(tuple(row_list))
         
     pick_rows = adjusted_pick_rows
     # --- END NEW ---
@@ -2813,30 +2873,56 @@ async def submit_history_item(record_id: int, user: dict = Depends(require_permi
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         
-        # --- NEW VALIDATION: Check for overlapping Doc Nums ---
-        await cursor.execute("SELECT doc_nums FROM Calculation_History WHERE id = ?", (record_id,))
-        row = await cursor.fetchone()
-        if not row:
-            await conn.close()
-            raise HTTPException(status_code=404, detail="Record not found")
-            
-        current_doc_nums = json.loads(row[0]) if row[0] else []
+        # --- NEW VALIDATION: Check for exceeding cartons/weight ---
+        await cursor.execute("""
+            SELECT code, name, 
+                   COALESCE(edited_ctns, ctns) as used_ctns, 
+                   COALESCE(edited_weight, weight) as used_weight,
+                   ctns as original_ctns,
+                   weight as original_weight,
+                   sin_no
+            FROM Calculation_Products
+            WHERE calc_id = ?
+        """, (record_id,))
+        current_products = await cursor.fetchall()
         
-        for doc_num in current_doc_nums:
-            # Check if this doc_num exists in any other submitted or claimed calculation
-            await cursor.execute("""
-                SELECT id FROM Calculation_History 
-                WHERE status IN ('submitted', 'claimed') 
-                AND id != ? 
-                AND doc_nums LIKE ?
-            """, (record_id, f'%"{doc_num}"%'))
+        for prod in current_products:
+            code, name, used_ctns, used_weight, original_ctns, original_weight, sin_no = prod
             
-            conflict = await cursor.fetchone()
-            if conflict:
+            # Sum used ctns and weight for this item across all OTHER submitted/claimed calculations
+            await cursor.execute("""
+                SELECT SUM(COALESCE(cp.edited_ctns, cp.ctns)), SUM(COALESCE(cp.edited_weight, cp.weight))
+                FROM Calculation_Products cp
+                JOIN Calculation_History ch ON cp.calc_id = ch.id
+                WHERE ch.status IN ('submitted', 'claimed')
+                AND ch.id != ?
+                AND cp.code = ?
+                AND cp.sin_no = ?
+            """, (record_id, code, sin_no))
+            
+            sums = await cursor.fetchone()
+            prev_ctns = Decimal(str(sums[0])) if sums and sums[0] is not None else Decimal("0.0")
+            prev_weight = Decimal(str(sums[1])) if sums and sums[1] is not None else Decimal("0.0")
+            
+            curr_ctns = Decimal(str(used_ctns)) if used_ctns is not None else Decimal("0.0")
+            curr_weight = Decimal(str(used_weight)) if used_weight is not None else Decimal("0.0")
+            
+            orig_ctns = Decimal(str(original_ctns)) if original_ctns is not None else Decimal("0.0")
+            orig_weight = Decimal(str(original_weight)) if original_weight is not None else Decimal("0.0")
+            
+            # Allow a tiny margin for float precision errors
+            if prev_ctns + curr_ctns > orig_ctns + Decimal("0.01"):
                 await conn.close()
                 raise HTTPException(
                     status_code=400, 
-                    detail=f"Cannot submit: Doc Num '{doc_num}' is already included in previously submitted calculation #{conflict[0]}."
+                    detail=f"Cannot submit: Item '{code}' in Doc Num '{sin_no}' exceeds original cartons. Used: {prev_ctns + curr_ctns}, Allowed: {orig_ctns}."
+                )
+                
+            if prev_weight + curr_weight > orig_weight + Decimal("0.01"):
+                await conn.close()
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Cannot submit: Item '{code}' in Doc Num '{sin_no}' exceeds original weight. Used: {prev_weight + curr_weight}, Allowed: {orig_weight}."
                 )
         # ------------------------------------------------------
 
@@ -3877,7 +3963,6 @@ async def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_n
             rows = await cursor.fetchall()
             for row in rows:
                 weight = Decimal(str(row[3])) if row[3] else Decimal("0.0")
-                total_weight += weight
                 products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7], "sin_no": f"{row[7]} - {row[4]}", "FromWhsCode": row[8] or "", "ToWhsCode": row[9] or ""})
                 
         if pdg_nums:
@@ -3886,10 +3971,58 @@ async def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_n
             rows = await cursor.fetchall()
             for row in rows:
                 weight = Decimal(str(row[3])) if row[3] else Decimal("0.0")
-                total_weight += weight
                 products.append({"code": row[0] or "", "name": row[1] or "", "uom": row[2] or "", "weight": weight, "ctns": get_rounded_ctns(row[5] if len(row) > 5 else 0), "brand": row[6] or "", "bu": row[7], "sin_no": f"{row[7]} - {row[4]}", "FromWhsCode": row[8] or "", "ToWhsCode": row[9] or ""})
         
         await conn.close()
+        
+        # --- NEW LOGIC: Calculate remaining amounts ---
+        conn_log = await get_logistic_connection()
+        cursor_log = await conn_log.cursor()
+        
+        sin_nos = list(set([p["sin_no"] for p in products]))
+        if sin_nos:
+            placeholders = ','.join('?' * len(sin_nos))
+            await cursor_log.execute(f"""
+                SELECT cp.sin_no, cp.code, SUM(COALESCE(cp.edited_ctns, cp.ctns)), SUM(COALESCE(cp.edited_weight, cp.weight))
+                FROM Calculation_Products cp
+                JOIN Calculation_History ch ON cp.calc_id = ch.id
+                WHERE ch.status IN ('submitted', 'claimed')
+                AND cp.sin_no IN ({placeholders})
+                GROUP BY cp.sin_no, cp.code
+            """, sin_nos)
+            used_amounts_rows = await cursor_log.fetchall()
+            
+            used_map = {}
+            for r in used_amounts_rows:
+                used_map[(r[0], r[1])] = {
+                    "used_ctns": Decimal(str(r[2])) if r[2] is not None else Decimal("0.0"),
+                    "used_weight": Decimal(str(r[3])) if r[3] is not None else Decimal("0.0")
+                }
+                
+            filtered_products = []
+            for p in products:
+                key = (p["sin_no"], p["code"])
+                used = used_map.get(key, {"used_ctns": Decimal("0.0"), "used_weight": Decimal("0.0")})
+                
+                remaining_ctns = p["ctns"] - used["used_ctns"]
+                remaining_weight = p["weight"] - used["used_weight"]
+                
+                if remaining_ctns < Decimal("0.01"): remaining_ctns = Decimal("0.0")
+                if remaining_weight < Decimal("0.01"): remaining_weight = Decimal("0.0")
+                
+                if remaining_ctns > 0 or remaining_weight > 0:
+                    p["ctns"] = remaining_ctns
+                    p["weight"] = remaining_weight
+                    filtered_products.append(p)
+                    
+            products = filtered_products
+            
+        await conn_log.close()
+        
+        # Recalculate total_weight 
+        total_weight = sum(p["weight"] for p in products)
+        # ----------------------------------------------
+        
         return {"products": products, "total_weight": total_weight}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
