@@ -4652,15 +4652,26 @@ const [overrideDate, setOverrideDate] = useState('');
         acc[curr.code] = { 
             ...curr,
             original_ctns: curr.original_ctns != null ? curr.original_ctns : curr.ctns,
-            original_weight: curr.original_weight != null ? curr.original_weight : curr.weight
+            original_weight: curr.original_weight != null ? curr.original_weight : curr.weight,
+            used_ctns: curr.used_ctns || 0,
+            used_weight: curr.used_weight || 0,
+            original_total_ctns: curr.original_total_ctns != null ? curr.original_total_ctns : curr.ctns,
+            original_total_weight: curr.original_total_weight != null ? curr.original_total_weight : curr.weight
         }; 
       } else {
         acc[curr.code].ctns = (acc[curr.code].ctns || 0) + (curr.ctns || 0);
         acc[curr.code].weight += curr.weight || 0;
         
+        acc[curr.code].used_ctns = (acc[curr.code].used_ctns || 0) + (curr.used_ctns || 0);
+        acc[curr.code].used_weight = (acc[curr.code].used_weight || 0) + (curr.used_weight || 0);
+        
+        const currOrigTotalCtns = curr.original_total_ctns != null ? curr.original_total_ctns : curr.ctns;
+        const currOrigTotalWeight = curr.original_total_weight != null ? curr.original_total_weight : curr.weight;
+        acc[curr.code].original_total_ctns = (acc[curr.code].original_total_ctns || 0) + currOrigTotalCtns;
+        acc[curr.code].original_total_weight = (acc[curr.code].original_total_weight || 0) + currOrigTotalWeight;
+        
         const currOrigCtns = curr.original_ctns != null ? curr.original_ctns : curr.ctns;
         const currOrigWeight = curr.original_weight != null ? curr.original_weight : curr.weight;
-        
         acc[curr.code].original_ctns = (acc[curr.code].original_ctns || 0) + currOrigCtns;
         acc[curr.code].original_weight = (acc[curr.code].original_weight || 0) + currOrigWeight;
         
@@ -4848,7 +4859,7 @@ const [overrideDate, setOverrideDate] = useState('');
                             <td className="border p-2">{product.name}</td>
                             <td className="border p-2">
                               {!hasCalculated && currentHistoryId === null ? (
-                                <div className="flex flex-col">
+                                <div className="flex flex-col gap-1">
                                   <input
                                     type="number"
                                     min="0"
@@ -4869,26 +4880,41 @@ const [overrideDate, setOverrideDate] = useState('');
                                            }
                                        }));
                                     }}
-                                    className="w-24 p-1 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className={`w-24 p-1 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none ${product.display_ctns === 0 ? 'bg-red-50 text-red-700 font-bold' : ''}`}
                                   />
+                                  {product.used_ctns > 0 && (
+                                      <span className="text-xs text-orange-600 font-semibold bg-orange-50 px-1.5 py-0.5 rounded w-fit border border-orange-200">
+                                          Submitted: {formatNumber(product.used_ctns)} / {formatNumber(product.original_total_ctns)}
+                                      </span>
+                                  )}
                                   {product.is_edited && (
-                                      <span className="text-xs text-red-500 mt-1 font-semibold">Original: {formatNumber(product.original_ctns)}</span>
+                                      <span className="text-xs text-blue-500 font-semibold">Original: {formatNumber(product.original_ctns)}</span>
                                   )}
                                 </div>
                               ) : (
-                                <div className="flex flex-col">
-                                  <span>{formatNumber(product.display_ctns)}</span>
+                                <div className="flex flex-col gap-1">
+                                  <span className={`font-semibold ${product.display_ctns === 0 ? 'text-red-500' : ''}`}>{formatNumber(product.display_ctns)}</span>
+                                  {product.used_ctns > 0 && (
+                                      <span className="text-xs text-orange-600 font-semibold bg-orange-50 px-1.5 py-0.5 rounded w-fit border border-orange-200">
+                                          Submitted: {formatNumber(product.used_ctns)} / {formatNumber(product.original_total_ctns)}
+                                      </span>
+                                  )}
                                   {product.is_edited && (
-                                      <span className="text-xs text-red-500 mt-1 font-semibold">Original: {formatNumber(product.original_ctns)}</span>
+                                      <span className="text-xs text-blue-500 font-semibold">Original: {formatNumber(product.original_ctns)}</span>
                                   )}
                                 </div>
                               )}
                             </td>
                             <td className="border p-2">
-                                <div className="flex flex-col">
-                                  <span>{formatNumber(product.display_weight)}</span>
+                                <div className="flex flex-col gap-1">
+                                  <span className={`${product.display_weight === 0 ? 'text-red-500 font-semibold' : ''}`}>{formatNumber(product.display_weight)}</span>
+                                  {product.used_weight > 0 && (
+                                      <span className="text-xs text-orange-600 font-semibold bg-orange-50 px-1.5 py-0.5 rounded w-fit border border-orange-200">
+                                          Submitted: {formatNumber(product.used_weight)} / {formatNumber(product.original_total_weight)}
+                                      </span>
+                                  )}
                                   {product.is_edited && (
-                                      <span className="text-xs text-red-500 mt-1 font-semibold">Original: {formatNumber(product.original_weight)}</span>
+                                      <span className="text-xs text-blue-500 font-semibold">Original: {formatNumber(product.original_weight)}</span>
                                   )}
                                 </div>
                             </td>

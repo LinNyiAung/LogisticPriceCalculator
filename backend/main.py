@@ -1406,9 +1406,12 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
         
         row_list.append(original_ctns_val) # index 12
         row_list.append(original_weight_val) # index 13
+        row_list.append(used["used_ctns"]) # index 14
+        row_list.append(used["used_weight"]) # index 15
+        row_list.append(orig_ctns) # index 16
+        row_list.append(orig_weight) # index 17
         
-        if final_ctns > Decimal("0") or final_weight > Decimal("0"):
-            adjusted_pick_rows.append(tuple(row_list))
+        adjusted_pick_rows.append(tuple(row_list))
         
     pick_rows = adjusted_pick_rows
     # --- END NEW ---
@@ -1505,6 +1508,10 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
                 "ctns": row[7],
                 "original_ctns": row[12],
                 "original_weight": row[13],
+                "used_ctns": row[14] if len(row) > 14 else Decimal("0.0"),
+                "used_weight": row[15] if len(row) > 15 else Decimal("0.0"),
+                "original_total_ctns": row[16] if len(row) > 16 else row[7],
+                "original_total_weight": row[17] if len(row) > 17 else row[3],
                 "bu": row[9],
                 "b_code": bc_info.get("Code", ""),
                 "b_name": bc_info.get("Name", ""),
@@ -1591,6 +1598,10 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
                 "ctns": row[7],
                 "original_ctns": row[12],
                 "original_weight": row[13],
+                "used_ctns": row[14] if len(row) > 14 else Decimal("0.0"),
+                "used_weight": row[15] if len(row) > 15 else Decimal("0.0"),
+                "original_total_ctns": row[16] if len(row) > 16 else row[7],
+                "original_total_weight": row[17] if len(row) > 17 else row[3],
                 "bu": row[9],
                 "b_code": bc_info.get("Code", ""),
                 "b_name": bc_info.get("Name", ""),
@@ -1652,6 +1663,10 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
                 "uom": row[2] if row[2] else "", "weight": weight, "doc_date": doc_date_str,       
                 "sin_no": f"{row[9]} - {str(row[5])}" if row[5] else "", "principal": principal_val, "brand": brand_val,
                 "original_ctns": row[12], "original_weight": row[13],
+                "used_ctns": row[14] if len(row) > 14 else Decimal("0.0"),
+                "used_weight": row[15] if len(row) > 15 else Decimal("0.0"),
+                "original_total_ctns": row[16] if len(row) > 16 else ctns,
+                "original_total_weight": row[17] if len(row) > 17 else weight,
                 "bu": row[9], "b_code": bc_info.get("Code", ""), "b_name": bc_info.get("Name", ""), 
                 "b_dept": bc_info.get("Dept", ""), "b_principal": bc_info.get("Principal", ""), 
                 "b_desc": bc_info.get("Description", ""), "s_dept": sd_info.get("Dept", ""), 
@@ -4010,10 +4025,13 @@ async def get_products_by_doc_nums(doc_nums: List[str] = Query(..., alias="doc_n
                 if remaining_ctns < Decimal("0.01"): remaining_ctns = Decimal("0.0")
                 if remaining_weight < Decimal("0.01"): remaining_weight = Decimal("0.0")
                 
-                if remaining_ctns > 0 or remaining_weight > 0:
-                    p["ctns"] = remaining_ctns
-                    p["weight"] = remaining_weight
-                    filtered_products.append(p)
+                p["original_total_ctns"] = p["ctns"]
+                p["original_total_weight"] = p["weight"]
+                p["used_ctns"] = used["used_ctns"]
+                p["used_weight"] = used["used_weight"]
+                p["ctns"] = remaining_ctns
+                p["weight"] = remaining_weight
+                filtered_products.append(p)
                     
             products = filtered_products
             
