@@ -30,6 +30,7 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'delete_item', label: 'Delete Item' },
   { id: 'view_references', label: 'View References' },
   { id: 'add_reference', label: 'Add Reference' },
+  { id: 'edit_reference', label: 'Edit Reference' },
   { id: 'delete_reference', label: 'Delete Reference' },
   { id: 'view_all_history', label: 'View All History' },
   { id: 'submit_calculation', label: 'Submit Calculation' },
@@ -800,6 +801,33 @@ const [overrideDate, setOverrideDate] = useState('');
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
 
+  const [editingRef, setEditingRef] = useState({ type: null, originalValue: '', newValue: '' });
+
+  const editReference = async (type, originalValue, newValue) => {
+      if(!newValue.trim() || originalValue === newValue) {
+          setEditingRef({ type: null, originalValue: '', newValue: '' });
+          return;
+      }
+      setIsSaving(true);
+      try {
+          const response = await authFetch(`${API_URL}/references/${type}`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ original_name: originalValue, new_name: newValue })
+          });
+          if(response.ok) {
+              showNotification('Updated successfully', 'success');
+              setEditingRef({ type: null, originalValue: '', newValue: '' });
+              loadReferenceData();
+          } else { 
+              const err = await response.json(); 
+              showNotification(getErrorMessage(err), 'error'); 
+          }
+      } catch (error) { 
+          showNotification(`Error: ${error.message}`, 'error'); 
+      } finally { 
+          setIsSaving(false); 
+      }
+  };
   const [refLocations, setRefLocations] = useState([]);
   const [refRateCartLocations, setRefRateCartLocations] = useState([]); 
   const [refUOMs, setRefUOMs] = useState([]);
@@ -3992,8 +4020,21 @@ const [overrideDate, setOverrideDate] = useState('');
                         <div className="border rounded max-h-96 overflow-y-auto">
                             {refLocations.map((loc, i) => (
                                 <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
-                                    <span>{loc}</span>
-                                    {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteReference('locations', loc)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
+                                    {editingRef.type === 'locations' && editingRef.originalValue === loc ? (
+                                        <div className="flex gap-2 w-full">
+                                            <input type="text" value={editingRef.newValue} onChange={e => setEditingRef({...editingRef, newValue: e.target.value})} className="border p-1 rounded flex-1 text-sm" />
+                                            <button onClick={() => editReference('locations', loc, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
+                                            <button onClick={() => setEditingRef({ type: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <span>{loc}</span>
+                                            <div className="flex gap-2">
+                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'locations', originalValue: loc, newValue: loc })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
+                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('locations', loc)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -4010,8 +4051,21 @@ const [overrideDate, setOverrideDate] = useState('');
                         <div className="border rounded max-h-96 overflow-y-auto">
                             {refRateCartLocations.map((loc, i) => (
                                 <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
-                                    <span>{loc}</span>
-                                    {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteReference('rate-cart-locations', loc)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
+                                    {editingRef.type === 'rate-cart-locations' && editingRef.originalValue === loc ? (
+                                        <div className="flex gap-2 w-full">
+                                            <input type="text" value={editingRef.newValue} onChange={e => setEditingRef({...editingRef, newValue: e.target.value})} className="border p-1 rounded flex-1 text-sm" />
+                                            <button onClick={() => editReference('rate-cart-locations', loc, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
+                                            <button onClick={() => setEditingRef({ type: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <span>{loc}</span>
+                                            <div className="flex gap-2">
+                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'rate-cart-locations', originalValue: loc, newValue: loc })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
+                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('rate-cart-locations', loc)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -4098,8 +4152,21 @@ const [overrideDate, setOverrideDate] = useState('');
                         <div className="border rounded max-h-96 overflow-y-auto">
                             {refUOMs.map((u, i) => (
                                 <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
-                                    <span>{u}</span>
-                                    {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteReference('uoms', u)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
+                                    {editingRef.type === 'uoms' && editingRef.originalValue === u ? (
+                                        <div className="flex gap-2 w-full">
+                                            <input type="text" value={editingRef.newValue} onChange={e => setEditingRef({...editingRef, newValue: e.target.value})} className="border p-1 rounded flex-1 text-sm" />
+                                            <button onClick={() => editReference('uoms', u, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
+                                            <button onClick={() => setEditingRef({ type: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <span>{u}</span>
+                                            <div className="flex gap-2">
+                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'uoms', originalValue: u, newValue: u })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
+                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('uoms', u)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -4116,8 +4183,21 @@ const [overrideDate, setOverrideDate] = useState('');
                         <div className="border rounded max-h-96 overflow-y-auto">
                             {refChannels.map((c, i) => (
                                 <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
-                                    <span>{c}</span>
-                                    {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteReference('channels', c)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
+                                    {editingRef.type === 'channels' && editingRef.originalValue === c ? (
+                                        <div className="flex gap-2 w-full">
+                                            <input type="text" value={editingRef.newValue} onChange={e => setEditingRef({...editingRef, newValue: e.target.value})} className="border p-1 rounded flex-1 text-sm" />
+                                            <button onClick={() => editReference('channels', c, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
+                                            <button onClick={() => setEditingRef({ type: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <span>{c}</span>
+                                            <div className="flex gap-2">
+                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'channels', originalValue: c, newValue: c })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
+                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('channels', c)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -4134,8 +4214,21 @@ const [overrideDate, setOverrideDate] = useState('');
                         <div className="border rounded max-h-96 overflow-y-auto">
                             {refDepartments.map((d, i) => (
                                 <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
-                                    <span>{d}</span>
-                                    {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteReference('departments', d)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
+                                    {editingRef.type === 'departments' && editingRef.originalValue === d ? (
+                                        <div className="flex gap-2 w-full">
+                                            <input type="text" value={editingRef.newValue} onChange={e => setEditingRef({...editingRef, newValue: e.target.value})} className="border p-1 rounded flex-1 text-sm" />
+                                            <button onClick={() => editReference('departments', d, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
+                                            <button onClick={() => setEditingRef({ type: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <span>{d}</span>
+                                            <div className="flex gap-2">
+                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'departments', originalValue: d, newValue: d })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
+                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('departments', d)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             ))}
                         </div>

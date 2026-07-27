@@ -488,12 +488,18 @@ async def startup_db():
                 END
             """)
             
-        tables_to_update_created_only = ['Locations', 'UOMs', 'Channels', 'Departments', 'Location_Mapping']
+        tables_to_update_created_only = ['Locations', 'Rate_Cart_Locations', 'UOMs', 'Channels', 'Departments', 'Location_Mapping']
         for table in tables_to_update_created_only:
             await cursor.execute(f"""
                 IF COL_LENGTH('{table}', 'created_at') IS NULL
                 BEGIN
                     ALTER TABLE {table} ADD created_at NVARCHAR(30), created_by INT;
+                END
+            """)
+            await cursor.execute(f"""
+                IF COL_LENGTH('{table}', 'edited_at') IS NULL
+                BEGIN
+                    ALTER TABLE {table} ADD edited_at NVARCHAR(30), edited_by INT;
                 END
             """)
         
@@ -813,6 +819,10 @@ class CalculationSaveRequest(BaseModel):
 
 class ReferenceItem(BaseModel):
     name: str
+
+class ReferenceEditItem(BaseModel):
+    original_name: str
+    new_name: str
 
 class UserCreate(BaseModel):
     username: str
@@ -2595,6 +2605,101 @@ async def delete_ref_department(name: str, user: dict = Depends(require_permissi
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.put("/references/locations")
+async def edit_ref_location(item: ReferenceEditItem, user: dict = Depends(require_permission("edit_reference"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await cursor.execute("UPDATE Locations SET name = ?, edited_at = ?, edited_by = ? WHERE name = ?", (item.new_name, now_str, user['id'], item.original_name))
+        if cursor.rowcount == 0:
+             await conn.close()
+             raise HTTPException(status_code=404, detail="Not found")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited location from {item.original_name} to {item.new_name}")
+        return {"message": "Edited successfully"}
+    except Exception as e:
+        if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
+            raise HTTPException(status_code=400, detail="Location already exists")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.put("/references/rate-cart-locations")
+async def edit_ref_rate_cart_location(item: ReferenceEditItem, user: dict = Depends(require_permission("edit_reference"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await cursor.execute("UPDATE Rate_Cart_Locations SET name = ?, edited_at = ?, edited_by = ? WHERE name = ?", (item.new_name, now_str, user['id'], item.original_name))
+        if cursor.rowcount == 0:
+             await conn.close()
+             raise HTTPException(status_code=404, detail="Not found")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited rate cart location from {item.original_name} to {item.new_name}")
+        return {"message": "Edited successfully"}
+    except Exception as e:
+        if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
+            raise HTTPException(status_code=400, detail="Rate Cart Location already exists")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.put("/references/uoms")
+async def edit_ref_uom(item: ReferenceEditItem, user: dict = Depends(require_permission("edit_reference"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await cursor.execute("UPDATE UOMs SET name = ?, edited_at = ?, edited_by = ? WHERE name = ?", (item.new_name, now_str, user['id'], item.original_name))
+        if cursor.rowcount == 0:
+             await conn.close()
+             raise HTTPException(status_code=404, detail="Not found")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited UOM from {item.original_name} to {item.new_name}")
+        return {"message": "Edited successfully"}
+    except Exception as e:
+        if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
+            raise HTTPException(status_code=400, detail="UOM already exists")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.put("/references/channels")
+async def edit_ref_channel(item: ReferenceEditItem, user: dict = Depends(require_permission("edit_reference"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await cursor.execute("UPDATE Channels SET name = ?, edited_at = ?, edited_by = ? WHERE name = ?", (item.new_name, now_str, user['id'], item.original_name))
+        if cursor.rowcount == 0:
+             await conn.close()
+             raise HTTPException(status_code=404, detail="Not found")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited channel from {item.original_name} to {item.new_name}")
+        return {"message": "Edited successfully"}
+    except Exception as e:
+        if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
+            raise HTTPException(status_code=400, detail="Channel already exists")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.put("/references/departments")
+async def edit_ref_department(item: ReferenceEditItem, user: dict = Depends(require_permission("edit_reference"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await cursor.execute("UPDATE Departments SET name = ?, edited_at = ?, edited_by = ? WHERE name = ?", (item.new_name, now_str, user['id'], item.original_name))
+        if cursor.rowcount == 0:
+             await conn.close()
+             raise HTTPException(status_code=404, detail="Not found")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited department from {item.original_name} to {item.new_name}")
+        return {"message": "Edited successfully"}
+    except Exception as e:
+        if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
+            raise HTTPException(status_code=400, detail="Department already exists")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.get("/references/location-mappings")
 async def get_ref_location_mappings():
