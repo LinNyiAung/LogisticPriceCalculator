@@ -801,22 +801,22 @@ const [overrideDate, setOverrideDate] = useState('');
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
 
-  const [editingRef, setEditingRef] = useState({ type: null, originalValue: '', newValue: '' });
+  const [editingRef, setEditingRef] = useState({ type: null, id: null, originalValue: '', newValue: '' });
 
-  const editReference = async (type, originalValue, newValue) => {
+  const editReference = async (type, id, originalValue, newValue) => {
       if(!newValue.trim() || originalValue === newValue) {
-          setEditingRef({ type: null, originalValue: '', newValue: '' });
+          setEditingRef({ type: null, id: null, originalValue: '', newValue: '' });
           return;
       }
       setIsSaving(true);
       try {
           const response = await authFetch(`${API_URL}/references/${type}`, {
               method: 'PUT', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ original_name: originalValue, new_name: newValue })
+              body: JSON.stringify({ id: id, new_name: newValue })
           });
           if(response.ok) {
               showNotification('Updated successfully', 'success');
-              setEditingRef({ type: null, originalValue: '', newValue: '' });
+              setEditingRef({ type: null, id: null, originalValue: '', newValue: '' });
               loadReferenceData();
           } else { 
               const err = await response.json(); 
@@ -1559,12 +1559,13 @@ const [overrideDate, setOverrideDate] = useState('');
       finally { setIsSaving(false); }
   }
 
-  const deleteReference = async (type, value) => {
-      if(!window.confirm(`Delete ${value}?`)) return;
+  const deleteReference = async (type, id, displayName) => {
+      if(!window.confirm(`Delete ${displayName}?`)) return;
       setIsDeleting(true);
       try {
-          const response = await authFetch(`${API_URL}/references/${type}/${value}`, { method: 'DELETE' });
+          const response = await authFetch(`${API_URL}/references/${type}/${id}`, { method: 'DELETE' });
           if(response.ok) loadReferenceData();
+          else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
       } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
       finally { setIsDeleting(false); }
   }
@@ -2094,10 +2095,10 @@ const [overrideDate, setOverrideDate] = useState('');
           <h2 className="text-2xl font-bold mb-4">{gate ? 'Edit Gate' : 'Add New Gate'}</h2>
           <div className="space-y-4">
             <div><label className="block text-sm font-semibold mb-1">Gate Name <span className="text-red-500">*</span></label><input disabled={isSaving} type="text" value={formData.gate_name ?? ''} onChange={(e) => setFormData({...formData, gate_name: e.target.value})} className="w-full p-2 border rounded" /></div>
-            <div><label className="block text-sm font-semibold mb-1">From <span className="text-red-500">*</span></label><select disabled={isSaving} value={formData.from_loc ?? ''} onChange={(e) => setFormData({...formData, from_loc: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}</select></div>
-            <div><label className="block text-sm font-semibold mb-1">To <span className="text-red-500">*</span></label><select disabled={isSaving} value={formData.to_loc ?? ''} onChange={(e) => setFormData({...formData, to_loc: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}</select></div>
+            <div><label className="block text-sm font-semibold mb-1">From <span className="text-red-500">*</span></label><select disabled={isSaving} value={formData.from_loc ?? ''} onChange={(e) => setFormData({...formData, from_loc: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refLocations.map((loc) => (<option key={loc.id} value={loc.name}>{loc.name}</option>))}</select></div>
+            <div><label className="block text-sm font-semibold mb-1">To <span className="text-red-500">*</span></label><select disabled={isSaving} value={formData.to_loc ?? ''} onChange={(e) => setFormData({...formData, to_loc: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refLocations.map((loc) => (<option key={loc.id} value={loc.name}>{loc.name}</option>))}</select></div>
             <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-sm font-semibold mb-1">UOM</label><select disabled={isSaving} value={formData.uom ?? ''} onChange={(e) => setFormData({...formData, uom: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refUOMs.map((u, i) => (<option key={i} value={u}>{u}</option>))}</select></div>
+                <div><label className="block text-sm font-semibold mb-1">UOM</label><select disabled={isSaving} value={formData.uom ?? ''} onChange={(e) => setFormData({...formData, uom: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refUOMs.map((u) => (<option key={u.id} value={u.name}>{u.name}</option>))}</select></div>
                 <div><label className="block text-sm font-semibold mb-1">Unit</label><input disabled={isSaving} type="number" value={formData.unit ?? ''} onChange={(e) => setFormData({...formData, unit: e.target.value})} className="w-full p-2 border rounded" placeholder="1" /></div>
             </div>
             <div><label className="block text-sm font-semibold mb-1">Cost</label><input disabled={isSaving} type="number" value={formData.cost ?? ''} onChange={(e) => setFormData({...formData, cost: e.target.value})} className="w-full p-2 border rounded" /></div>
@@ -2270,7 +2271,7 @@ const [overrideDate, setOverrideDate] = useState('');
                             disabled={!!rateCart || isSaving}
                         >
                             <option value="">-- Select Location --</option>
-                            {refRateCartLocations.map((loc, i) => (<option key={i} value={loc}>{loc}</option>))}
+                            {refRateCartLocations.map((loc) => (<option key={loc.id} value={loc.name}>{loc.name}</option>))}
                         </select>
                     </div>
                     <div>
@@ -4054,20 +4055,20 @@ const [overrideDate, setOverrideDate] = useState('');
                             </div>
                         )}
                         <div className="border rounded max-h-96 overflow-y-auto">
-                            {refLocations.map((loc, i) => (
-                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
-                                    {editingRef.type === 'locations' && editingRef.originalValue === loc ? (
+                            {refLocations.map((loc) => (
+                                <div key={loc.id} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
+                                    {editingRef.type === 'locations' && editingRef.id === loc.id ? (
                                         <div className="flex gap-2 w-full">
                                             <input type="text" value={editingRef.newValue} onChange={e => setEditingRef({...editingRef, newValue: e.target.value})} className="border p-1 rounded flex-1 text-sm" />
-                                            <button onClick={() => editReference('locations', loc, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
-                                            <button onClick={() => setEditingRef({ type: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
+                                            <button onClick={() => editReference('locations', loc.id, loc.name, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
+                                            <button onClick={() => setEditingRef({ type: null, id: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
                                         </div>
                                     ) : (
                                         <>
-                                            <span>{loc}</span>
+                                            <span>{loc.name}</span>
                                             <div className="flex gap-2">
-                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'locations', originalValue: loc, newValue: loc })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
-                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('locations', loc)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'locations', id: loc.id, originalValue: loc.name, newValue: loc.name })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
+                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('locations', loc.id, loc.name)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
                                             </div>
                                         </>
                                     )}
@@ -4085,20 +4086,20 @@ const [overrideDate, setOverrideDate] = useState('');
                             </div>
                         )}
                         <div className="border rounded max-h-96 overflow-y-auto">
-                            {refRateCartLocations.map((loc, i) => (
-                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
-                                    {editingRef.type === 'rate-cart-locations' && editingRef.originalValue === loc ? (
+                            {refRateCartLocations.map((loc) => (
+                                <div key={loc.id} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
+                                    {editingRef.type === 'rate-cart-locations' && editingRef.id === loc.id ? (
                                         <div className="flex gap-2 w-full">
                                             <input type="text" value={editingRef.newValue} onChange={e => setEditingRef({...editingRef, newValue: e.target.value})} className="border p-1 rounded flex-1 text-sm" />
-                                            <button onClick={() => editReference('rate-cart-locations', loc, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
-                                            <button onClick={() => setEditingRef({ type: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
+                                            <button onClick={() => editReference('rate-cart-locations', loc.id, loc.name, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
+                                            <button onClick={() => setEditingRef({ type: null, id: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
                                         </div>
                                     ) : (
                                         <>
-                                            <span>{loc}</span>
+                                            <span>{loc.name}</span>
                                             <div className="flex gap-2">
-                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'rate-cart-locations', originalValue: loc, newValue: loc })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
-                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('rate-cart-locations', loc)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'rate-cart-locations', id: loc.id, originalValue: loc.name, newValue: loc.name })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
+                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('rate-cart-locations', loc.id, loc.name)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
                                             </div>
                                         </>
                                     )}
@@ -4121,8 +4122,8 @@ const [overrideDate, setOverrideDate] = useState('');
                                     className="border p-2 rounded flex-1 bg-white"
                                 >
                                     <option value="">-- Select Gate Location --</option>
-                                    {refLocations.map((loc, i) => (
-                                        <option key={i} value={loc}>{loc}</option>
+                                    {refLocations.map((loc) => (
+                                        <option key={loc.id} value={loc.name}>{loc.name}</option>
                                     ))}
                                 </select>
                                 
@@ -4135,8 +4136,8 @@ const [overrideDate, setOverrideDate] = useState('');
                                     className="border p-2 rounded w-full sm:w-1/3 bg-white"
                                 >
                                     <option value="">-- Select Rate Cart Location --</option>
-                                    {refRateCartLocations.map((loc, i) => (
-                                        <option key={i} value={loc}>{loc}</option>
+                                    {refRateCartLocations.map((loc) => (
+                                        <option key={loc.id} value={loc.name}>{loc.name}</option>
                                     ))}
                                 </select>
                                 
@@ -4172,8 +4173,8 @@ const [overrideDate, setOverrideDate] = useState('');
                                                             className="border p-2 rounded w-full bg-white text-sm"
                                                         >
                                                             <option value="">-- Select Gate Location --</option>
-                                                            {refLocations.map((loc, idx) => (
-                                                                <option key={idx} value={loc}>{loc}</option>
+                                                            {refLocations.map((loc) => (
+                                                                <option key={loc.id} value={loc.name}>{loc.name}</option>
                                                             ))}
                                                         </select>
                                                     </td>
@@ -4184,8 +4185,8 @@ const [overrideDate, setOverrideDate] = useState('');
                                                             className="border p-2 rounded w-full bg-white text-sm"
                                                         >
                                                             <option value="">-- Select Rate Cart Location --</option>
-                                                            {refRateCartLocations.map((loc, idx) => (
-                                                                <option key={idx} value={loc}>{loc}</option>
+                                                            {refRateCartLocations.map((loc) => (
+                                                                <option key={loc.id} value={loc.name}>{loc.name}</option>
                                                             ))}
                                                         </select>
                                                     </td>
@@ -4222,20 +4223,20 @@ const [overrideDate, setOverrideDate] = useState('');
                             </div>
                         )}
                         <div className="border rounded max-h-96 overflow-y-auto">
-                            {refUOMs.map((u, i) => (
-                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
-                                    {editingRef.type === 'uoms' && editingRef.originalValue === u ? (
+                            {refUOMs.map((u) => (
+                                <div key={u.id} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
+                                    {editingRef.type === 'uoms' && editingRef.id === u.id ? (
                                         <div className="flex gap-2 w-full">
                                             <input type="text" value={editingRef.newValue} onChange={e => setEditingRef({...editingRef, newValue: e.target.value})} className="border p-1 rounded flex-1 text-sm" />
-                                            <button onClick={() => editReference('uoms', u, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
-                                            <button onClick={() => setEditingRef({ type: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
+                                            <button onClick={() => editReference('uoms', u.id, u.name, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
+                                            <button onClick={() => setEditingRef({ type: null, id: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
                                         </div>
                                     ) : (
                                         <>
-                                            <span>{u}</span>
+                                            <span>{u.name}</span>
                                             <div className="flex gap-2">
-                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'uoms', originalValue: u, newValue: u })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
-                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('uoms', u)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'uoms', id: u.id, originalValue: u.name, newValue: u.name })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
+                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('uoms', u.id, u.name)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
                                             </div>
                                         </>
                                     )}
@@ -4253,20 +4254,20 @@ const [overrideDate, setOverrideDate] = useState('');
                             </div>
                         )}
                         <div className="border rounded max-h-96 overflow-y-auto">
-                            {refChannels.map((c, i) => (
-                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
-                                    {editingRef.type === 'channels' && editingRef.originalValue === c ? (
+                            {refChannels.map((c) => (
+                                <div key={c.id} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
+                                    {editingRef.type === 'channels' && editingRef.id === c.id ? (
                                         <div className="flex gap-2 w-full">
                                             <input type="text" value={editingRef.newValue} onChange={e => setEditingRef({...editingRef, newValue: e.target.value})} className="border p-1 rounded flex-1 text-sm" />
-                                            <button onClick={() => editReference('channels', c, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
-                                            <button onClick={() => setEditingRef({ type: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
+                                            <button onClick={() => editReference('channels', c.id, c.name, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
+                                            <button onClick={() => setEditingRef({ type: null, id: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
                                         </div>
                                     ) : (
                                         <>
-                                            <span>{c}</span>
+                                            <span>{c.name}</span>
                                             <div className="flex gap-2">
-                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'channels', originalValue: c, newValue: c })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
-                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('channels', c)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'channels', id: c.id, originalValue: c.name, newValue: c.name })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
+                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('channels', c.id, c.name)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
                                             </div>
                                         </>
                                     )}
@@ -4284,20 +4285,20 @@ const [overrideDate, setOverrideDate] = useState('');
                             </div>
                         )}
                         <div className="border rounded max-h-96 overflow-y-auto">
-                            {refDepartments.map((d, i) => (
-                                <div key={i} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
-                                    {editingRef.type === 'departments' && editingRef.originalValue === d ? (
+                            {refDepartments.map((d) => (
+                                <div key={d.id} className="flex justify-between items-center p-3 border-b last:border-0 hover:bg-gray-50">
+                                    {editingRef.type === 'departments' && editingRef.id === d.id ? (
                                         <div className="flex gap-2 w-full">
                                             <input type="text" value={editingRef.newValue} onChange={e => setEditingRef({...editingRef, newValue: e.target.value})} className="border p-1 rounded flex-1 text-sm" />
-                                            <button onClick={() => editReference('departments', d, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
-                                            <button onClick={() => setEditingRef({ type: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
+                                            <button onClick={() => editReference('departments', d.id, d.name, editingRef.newValue)} className="text-green-600 hover:text-green-800"><CheckCircle size={18} /></button>
+                                            <button onClick={() => setEditingRef({ type: null, id: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
                                         </div>
                                     ) : (
                                         <>
-                                            <span>{d}</span>
+                                            <span>{d.name}</span>
                                             <div className="flex gap-2">
-                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'departments', originalValue: d, newValue: d })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
-                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('departments', d)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
+                                                {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'departments', id: d.id, originalValue: d.name, newValue: d.name })} className="text-blue-500 hover:text-blue-700"><Edit2 size={16} /></button>}
+                                                {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteReference('departments', d.id, d.name)} className="text-red-500 hover:text-red-700"><X size={18} /></button>}
                                             </div>
                                         </>
                                     )}
@@ -4933,7 +4934,7 @@ const [overrideDate, setOverrideDate] = useState('');
                 {(selectedFrom && selectedTo) && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Gate <span className="text-red-500">*</span></h2><select disabled={isLoading || isSaving} value={selectedGate} onChange={(e) => handleGateChange(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"><option value="">-- Select a Gate --</option>{gates.filter(gate => gate.from_loc === selectedFrom && gate.to_loc === selectedTo).map((gate) => (<option key={gate.gate_name} value={gate.gate_name}>{gate.gate_name} - {gate.calculation_type === 'gate_pricing' ? ' Gate Pricing' : gate.calculation_type === 'per_trip_pricing' ? ' Per Trip' : gate.calculation_type === 'direct_pricing' ? ' Direct Pricing' : ' Unknown'}</option>))}</select></div>
-                    <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Channel <span className="text-red-500">*</span></h2><select disabled={isLoading || isSaving} value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"><option value="">-- Select a Channel --</option>{refChannels.map((chan, i) => (<option key={i} value={chan}>{chan}</option>))}</select></div>
+                    <div className="bg-white rounded-lg border p-6"><h2 className="text-xl font-bold mb-4">Select Channel <span className="text-red-500">*</span></h2><select disabled={isLoading || isSaving} value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"><option value="">-- Select a Channel --</option>{refChannels.map((chan) => (<option key={chan.id} value={chan.name}>{chan.name}</option>))}</select></div>
                   </div>
                 )}
               </div>
@@ -5101,12 +5102,12 @@ const [overrideDate, setOverrideDate] = useState('');
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
                     <select disabled={currentHistoryId !== null || isLoading || isSaving} value={posmDraft.department} onChange={(e) => setPosmDraft({ ...posmDraft, department: e.target.value })} className="p-2 border rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed">
                       <option value="">-- Department --</option>
-                      {refDepartments.map((d, i) => (<option key={i} value={d}>{d}</option>))}
+                      {refDepartments.map((d) => (<option key={d.id} value={d.name}>{d.name}</option>))}
                     </select>
                     <input disabled={currentHistoryId !== null || isLoading || isSaving} type="text" placeholder="Item Name" value={posmDraft.item_name} onChange={(e) => setPosmDraft({ ...posmDraft, item_name: e.target.value })} className="p-2 border rounded-lg md:col-span-2 disabled:bg-gray-100 disabled:cursor-not-allowed" />
                     <select disabled={currentHistoryId !== null || isLoading || isSaving} value={posmDraft.uom} onChange={(e) => setPosmDraft({ ...posmDraft, uom: e.target.value })} className="p-2 border rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed">
                       <option value="">-- Unit --</option>
-                      {refUOMs.map((u, i) => (<option key={i} value={u}>{u}</option>))}
+                      {refUOMs.map((u) => (<option key={u.id} value={u.name}>{u.name}</option>))}
                     </select>
                     <div className="flex gap-2">
                       <input disabled={currentHistoryId !== null || isLoading || isSaving} type="number" min="0" placeholder="Qty" value={posmDraft.quantity} onChange={(e) => setPosmDraft({ ...posmDraft, quantity: e.target.value })} className="p-2 border rounded-lg w-full disabled:bg-gray-100 disabled:cursor-not-allowed" />

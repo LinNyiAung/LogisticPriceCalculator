@@ -821,7 +821,7 @@ class ReferenceItem(BaseModel):
     name: str
 
 class ReferenceEditItem(BaseModel):
-    original_name: str
+    id: int
     new_name: str
 
 class LocationMappingEditItem(BaseModel):
@@ -2380,10 +2380,10 @@ async def get_ref_locations():
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT name FROM Locations ORDER BY name")
+        await cursor.execute("SELECT id, name FROM Locations ORDER BY name")
         rows = await cursor.fetchall()
         await conn.close()
-        return [row[0] for row in rows]
+        return [{"id": row[0], "name": row[1]} for row in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
@@ -2407,18 +2407,20 @@ async def add_ref_location(item: ReferenceItem, user: dict = Depends(require_per
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-@app.delete("/references/locations/{name}")
-async def delete_ref_location(name: str, user: dict = Depends(require_permission("delete_reference"))):
+@app.delete("/references/locations/{location_id}")
+async def delete_ref_location(location_id: int, user: dict = Depends(require_permission("delete_reference"))):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("DELETE FROM Locations WHERE name = ?", (name,))
-        if cursor.rowcount == 0:
+        await cursor.execute("SELECT name FROM Locations WHERE id = ?", (location_id,))
+        row = await cursor.fetchone()
+        if not row:
              await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
+        await cursor.execute("DELETE FROM Locations WHERE id = ?", (location_id,))
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted location: {name}")
+        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted location: {row[0]}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2428,10 +2430,10 @@ async def get_ref_rate_cart_locations():
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT name FROM Rate_Cart_Locations ORDER BY name")
+        await cursor.execute("SELECT id, name FROM Rate_Cart_Locations ORDER BY name")
         rows = await cursor.fetchall()
         await conn.close()
-        return [row[0] for row in rows]
+        return [{"id": row[0], "name": row[1]} for row in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
@@ -2454,18 +2456,20 @@ async def add_ref_rate_cart_location(item: ReferenceItem, user: dict = Depends(r
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-@app.delete("/references/rate-cart-locations/{name}")
-async def delete_ref_rate_cart_location(name: str, user: dict = Depends(require_permission("delete_reference"))):
+@app.delete("/references/rate-cart-locations/{location_id}")
+async def delete_ref_rate_cart_location(location_id: int, user: dict = Depends(require_permission("delete_reference"))):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("DELETE FROM Rate_Cart_Locations WHERE name = ?", (name,))
-        if cursor.rowcount == 0:
+        await cursor.execute("SELECT name FROM Rate_Cart_Locations WHERE id = ?", (location_id,))
+        row = await cursor.fetchone()
+        if not row:
              await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
+        await cursor.execute("DELETE FROM Rate_Cart_Locations WHERE id = ?", (location_id,))
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted rate cart location: {name}")
+        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted rate cart location: {row[0]}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2475,10 +2479,10 @@ async def get_ref_uoms():
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT name FROM UOMs ORDER BY name")
+        await cursor.execute("SELECT id, name FROM UOMs ORDER BY name")
         rows = await cursor.fetchall()
         await conn.close()
-        return [row[0] for row in rows]
+        return [{"id": row[0], "name": row[1]} for row in rows]
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/uoms")
@@ -2501,18 +2505,20 @@ async def add_ref_uom(item: ReferenceItem, user: dict = Depends(require_permissi
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-@app.delete("/references/uoms/{name}")
-async def delete_ref_uom(name: str, user: dict = Depends(require_permission("delete_reference"))):
+@app.delete("/references/uoms/{uom_id}")
+async def delete_ref_uom(uom_id: int, user: dict = Depends(require_permission("delete_reference"))):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("DELETE FROM UOMs WHERE name = ?", (name,))
-        if cursor.rowcount == 0:
+        await cursor.execute("SELECT name FROM UOMs WHERE id = ?", (uom_id,))
+        row = await cursor.fetchone()
+        if not row:
              await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
+        await cursor.execute("DELETE FROM UOMs WHERE id = ?", (uom_id,))
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted UOM: {name}")
+        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted UOM: {row[0]}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2522,10 +2528,10 @@ async def get_ref_channels():
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT name FROM Channels ORDER BY name")
+        await cursor.execute("SELECT id, name FROM Channels ORDER BY name")
         rows = await cursor.fetchall()
         await conn.close()
-        return [row[0] for row in rows]
+        return [{"id": row[0], "name": row[1]} for row in rows]
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/channels")
@@ -2548,18 +2554,20 @@ async def add_ref_channel(item: ReferenceItem, user: dict = Depends(require_perm
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-@app.delete("/references/channels/{name}")
-async def delete_ref_channel(name: str, user: dict = Depends(require_permission("delete_reference"))):
+@app.delete("/references/channels/{channel_id}")
+async def delete_ref_channel(channel_id: int, user: dict = Depends(require_permission("delete_reference"))):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("DELETE FROM Channels WHERE name = ?", (name,))
-        if cursor.rowcount == 0:
+        await cursor.execute("SELECT name FROM Channels WHERE id = ?", (channel_id,))
+        row = await cursor.fetchone()
+        if not row:
              await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
+        await cursor.execute("DELETE FROM Channels WHERE id = ?", (channel_id,))
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted channel: {name}")
+        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted channel: {row[0]}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2569,10 +2577,10 @@ async def get_ref_departments():
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT name FROM Departments ORDER BY name")
+        await cursor.execute("SELECT id, name FROM Departments ORDER BY name")
         rows = await cursor.fetchall()
         await conn.close()
-        return [row[0] for row in rows]
+        return [{"id": row[0], "name": row[1]} for row in rows]
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.post("/references/departments")
@@ -2595,18 +2603,20 @@ async def add_ref_department(item: ReferenceItem, user: dict = Depends(require_p
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-@app.delete("/references/departments/{name}")
-async def delete_ref_department(name: str, user: dict = Depends(require_permission("delete_reference"))):
+@app.delete("/references/departments/{department_id}")
+async def delete_ref_department(department_id: int, user: dict = Depends(require_permission("delete_reference"))):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("DELETE FROM Departments WHERE name = ?", (name,))
-        if cursor.rowcount == 0:
+        await cursor.execute("SELECT name FROM Departments WHERE id = ?", (department_id,))
+        row = await cursor.fetchone()
+        if not row:
              await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
+        await cursor.execute("DELETE FROM Departments WHERE id = ?", (department_id,))
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted department: {name}")
+        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted department: {row[0]}")
         return {"message": "Deleted successfully"}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -2617,13 +2627,13 @@ async def edit_ref_location(item: ReferenceEditItem, user: dict = Depends(requir
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        await cursor.execute("UPDATE Locations SET name = ?, edited_at = ?, edited_by = ? WHERE name = ?", (item.new_name, now_str, user['id'], item.original_name))
+        await cursor.execute("UPDATE Locations SET name = ?, edited_at = ?, edited_by = ? WHERE id = ?", (item.new_name, now_str, user['id'], item.id))
         if cursor.rowcount == 0:
              await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited location from {item.original_name} to {item.new_name}")
+        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited location (id {item.id}) to {item.new_name}")
         return {"message": "Edited successfully"}
     except Exception as e:
         if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
@@ -2636,13 +2646,13 @@ async def edit_ref_rate_cart_location(item: ReferenceEditItem, user: dict = Depe
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        await cursor.execute("UPDATE Rate_Cart_Locations SET name = ?, edited_at = ?, edited_by = ? WHERE name = ?", (item.new_name, now_str, user['id'], item.original_name))
+        await cursor.execute("UPDATE Rate_Cart_Locations SET name = ?, edited_at = ?, edited_by = ? WHERE id = ?", (item.new_name, now_str, user['id'], item.id))
         if cursor.rowcount == 0:
              await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited rate cart location from {item.original_name} to {item.new_name}")
+        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited rate cart location (id {item.id}) to {item.new_name}")
         return {"message": "Edited successfully"}
     except Exception as e:
         if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
@@ -2655,13 +2665,13 @@ async def edit_ref_uom(item: ReferenceEditItem, user: dict = Depends(require_per
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        await cursor.execute("UPDATE UOMs SET name = ?, edited_at = ?, edited_by = ? WHERE name = ?", (item.new_name, now_str, user['id'], item.original_name))
+        await cursor.execute("UPDATE UOMs SET name = ?, edited_at = ?, edited_by = ? WHERE id = ?", (item.new_name, now_str, user['id'], item.id))
         if cursor.rowcount == 0:
              await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited UOM from {item.original_name} to {item.new_name}")
+        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited UOM (id {item.id}) to {item.new_name}")
         return {"message": "Edited successfully"}
     except Exception as e:
         if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
@@ -2674,13 +2684,13 @@ async def edit_ref_channel(item: ReferenceEditItem, user: dict = Depends(require
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        await cursor.execute("UPDATE Channels SET name = ?, edited_at = ?, edited_by = ? WHERE name = ?", (item.new_name, now_str, user['id'], item.original_name))
+        await cursor.execute("UPDATE Channels SET name = ?, edited_at = ?, edited_by = ? WHERE id = ?", (item.new_name, now_str, user['id'], item.id))
         if cursor.rowcount == 0:
              await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited channel from {item.original_name} to {item.new_name}")
+        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited channel (id {item.id}) to {item.new_name}")
         return {"message": "Edited successfully"}
     except Exception as e:
         if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
@@ -2693,13 +2703,13 @@ async def edit_ref_department(item: ReferenceEditItem, user: dict = Depends(requ
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        await cursor.execute("UPDATE Departments SET name = ?, edited_at = ?, edited_by = ? WHERE name = ?", (item.new_name, now_str, user['id'], item.original_name))
+        await cursor.execute("UPDATE Departments SET name = ?, edited_at = ?, edited_by = ? WHERE id = ?", (item.new_name, now_str, user['id'], item.id))
         if cursor.rowcount == 0:
              await conn.close()
              raise HTTPException(status_code=404, detail="Not found")
         await conn.commit()
         await conn.close()
-        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited department from {item.original_name} to {item.new_name}")
+        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited department (id {item.id}) to {item.new_name}")
         return {"message": "Edited successfully"}
     except Exception as e:
         if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
