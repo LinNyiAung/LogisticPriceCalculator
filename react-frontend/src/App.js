@@ -194,6 +194,7 @@ const PricingApp = () => {
 
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Dashboard State
   const [activeDashboardTab, setActiveDashboardTab] = useState('rate_cart'); 
@@ -2073,6 +2074,7 @@ const [overrideDate, setOverrideDate] = useState('');
     const file = event.target.files[0];
     if (!file) return;
     if (!selectedGateForPricing) { showNotification('Please select a gate first', 'error'); event.target.value = ''; return; }
+    setIsUploading(true);
     try {
       const formData = new FormData(); formData.append('file', file);
       const response = await authFetch(`${API_URL}/account/item-pricing/import/${selectedGateForPricing}`, { method: 'POST', body: formData });
@@ -2086,7 +2088,7 @@ const [overrideDate, setOverrideDate] = useState('');
         else showNotification(getErrorMessage(error), 'error');
       }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); } 
-    finally { event.target.value = ''; }
+    finally { setIsUploading(false); event.target.value = ''; }
   };
 
   const fetchGateLogs = async (gate) => {
@@ -4655,6 +4657,13 @@ const [overrideDate, setOverrideDate] = useState('');
                     {/* Content: Items */}
                     {activeDataTab === 'items' && permissions.includes('view_items') && (
                         <div className="animation-fade-in">
+                            {isUploading && (
+                                <div className="fixed inset-0 z-[9999] bg-black bg-opacity-60 flex flex-col items-center justify-center cursor-not-allowed backdrop-blur-sm">
+                                    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-blue-500 border-solid mb-4"></div>
+                                    <h2 className="text-white text-2xl font-bold tracking-wide">Processing Excel Upload...</h2>
+                                    <p className="text-gray-200 mt-2">Please do not click anything or refresh the page.</p>
+                                </div>
+                            )}
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-2xl font-bold text-gray-800">Transportation Cost by Item</h2>
                                 <div className="flex gap-2">
