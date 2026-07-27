@@ -3660,8 +3660,8 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
                     UPDATE Item_Pricing
                     SET bu = ?, item_name = ?, principal = ?, brand = ?, transportation_cost = ?,
                         edited_at = ?, edited_by = ?
-                    WHERE gate_id = ? AND item_id = ?
-                """, (row["bu"], row["name"], row["principal"], row["brand"], row["cost"], change_date, user['id'], gate_id, item_code))
+                    WHERE id = ?
+                """, (row["bu"], row["name"], row["principal"], row["brand"], row["cost"], change_date, user['id'], pricing_id))
                 updates_made += 1
             else:
                 while True:
@@ -3683,7 +3683,7 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
         for item_code in items_to_delete:
             pricing_id = existing_items_data[item_code]['pricing_id']
             await cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (pricing_id,))
-            await cursor.execute("DELETE FROM Item_Pricing WHERE gate_id = ? AND item_id = ?", (gate_id, item_code))
+            await cursor.execute("DELETE FROM Item_Pricing WHERE id = ?", (pricing_id,))
             deletes_made += 1
             
         await conn.commit()
@@ -3875,22 +3875,38 @@ async def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT id, transportation_cost FROM Item_Pricing WHERE gate_id = ? AND item_id = ?", (item_data.gate_id, item_data.original_item_code or item_data.item_code))
-        existing = await cursor.fetchone()
 
-        if existing:
+        is_edit = item_data.pricing_id is not None
+
+        if is_edit:
             if "edit_item" not in perms:
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'edit_item' permission")
-                
+
+            await cursor.execute("SELECT id, transportation_cost FROM Item_Pricing WHERE id = ?", (item_data.pricing_id,))
+            existing = await cursor.fetchone()
+            if not existing:
+                await conn.close()
+                raise HTTPException(status_code=404, detail="Item not found")
             pricing_id, old_cost = existing
+
+            # If the item code is being changed, make sure it doesn't collide with a different row on this gate
+            await cursor.execute(
+                "SELECT id FROM Item_Pricing WHERE gate_id = ? AND item_id = ? AND id != ?",
+                (item_data.gate_id, item_data.item_code, pricing_id)
+            )
+            collision = await cursor.fetchone()
+            if collision:
+                await conn.close()
+                raise HTTPException(status_code=400, detail=f"Item '{item_data.item_code}' already exists on this gate. Duplicate items are not allowed.")
+
             old_cost_str = str(old_cost).strip() if old_cost else ""
             new_cost_str = str(item_data.transportation_cost).strip() if item_data.transportation_cost else ""
-            
+
             change_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             username = user['id']
             changes = []
-            
+
             if old_cost_str != new_cost_str:
                  changes.append((pricing_id, user['id'], change_date, 'Transportation Cost', old_cost_str, new_cost_str))
 
@@ -3904,7 +3920,13 @@ async def save_item_pricing(item_data: ItemPricingData, user: dict = Depends(get
             if "add_item" not in perms:
                 await conn.close()
                 raise HTTPException(status_code=403, detail="Requires 'add_item' permission")
-                
+
+            await cursor.execute("SELECT id FROM Item_Pricing WHERE gate_id = ? AND item_id = ?", (item_data.gate_id, item_data.item_code))
+            existing = await cursor.fetchone()
+            if existing:
+                await conn.close()
+                raise HTTPException(status_code=400, detail=f"Item '{item_data.item_code}' already exists on this gate. Duplicate items are not allowed.")
+
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             username = user['id']
 
@@ -3947,9 +3969,14 @@ async def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends
         cursor = await conn.cursor()
         await cursor.execute("SELECT id FROM Item_Pricing WHERE gate_id = ? AND item_id = ?", (gate_id, item_code))
         row = await cursor.fetchone()
-        if row: await cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (row[0],))
+        if not row:
+            await conn.close()
+            raise HTTPException(status_code=404, detail="Item not found")
 
-        await cursor.execute("DELETE FROM Item_Pricing WHERE gate_id = ? AND item_id = ?", (gate_id, item_code))
+        pricing_id = row[0]
+        await cursor.execute("DELETE FROM Item_Change_Log WHERE pricing_id = ?", (pricing_id,))
+
+        await cursor.execute("DELETE FROM Item_Pricing WHERE id = ?", (pricing_id,))
         if cursor.rowcount == 0:
             await conn.close()
             raise HTTPException(status_code=404, detail="Item not found")
