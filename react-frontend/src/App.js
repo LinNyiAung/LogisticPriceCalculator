@@ -828,6 +828,42 @@ const [overrideDate, setOverrideDate] = useState('');
           setIsSaving(false); 
       }
   };
+
+  const [editingMapRef, setEditingMapRef] = useState(null);
+
+  const editLocationMapping = async (originalToLoc, newToLoc, newBranchCode) => {
+      if (!newToLoc || !newBranchCode) {
+          showNotification('Both fields are required', 'warning');
+          return;
+      }
+      if (originalToLoc === newToLoc && editingMapRef.originalBranchCode === newBranchCode) {
+          setEditingMapRef(null);
+          return;
+      }
+      setIsSaving(true);
+      try {
+          const response = await authFetch(`${API_URL}/references/location-mappings`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                  original_to_location: originalToLoc, 
+                  new_to_location: newToLoc, 
+                  new_branch_code: newBranchCode 
+              })
+          });
+          if(response.ok) {
+              showNotification('Mapping updated successfully', 'success');
+              setEditingMapRef(null);
+              loadReferenceData();
+          } else { 
+              const err = await response.json(); 
+              showNotification(getErrorMessage(err), 'error'); 
+          }
+      } catch (error) { 
+          showNotification(`Error: ${error.message}`, 'error'); 
+      } finally { 
+          setIsSaving(false); 
+      }
+  };
   const [refLocations, setRefLocations] = useState([]);
   const [refRateCartLocations, setRefRateCartLocations] = useState([]); 
   const [refUOMs, setRefUOMs] = useState([]);
@@ -4127,13 +4163,49 @@ const [overrideDate, setOverrideDate] = useState('');
                                     {refLocationMappings.length === 0 ? (<tr><td colSpan="3" className="p-4 text-center text-gray-500">No mappings set.</td></tr>) : 
                                     refLocationMappings.map((mapItem, i) => (
                                         <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
-                                            <td className="p-3 font-medium text-gray-700">{mapItem.to_location}</td>
-                                            <td className="p-3">
-                                                <span className="bg-rose-100 text-rose-800 px-2 py-1 rounded font-bold">{mapItem.branch_code}</span>
-                                            </td>
-                                            <td className="p-3 text-right">
-                                                {permissions.includes('delete_reference') && <button disabled={isDeleting} onClick={() => deleteLocationMapping(mapItem.to_location)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
-                                            </td>
+                                            {editingMapRef && editingMapRef.originalToLoc === mapItem.to_location ? (
+                                                <>
+                                                    <td className="p-2">
+                                                        <select 
+                                                            value={editingMapRef.newToLoc} 
+                                                            onChange={(e) => setEditingMapRef({...editingMapRef, newToLoc: e.target.value})} 
+                                                            className="border p-2 rounded w-full bg-white text-sm"
+                                                        >
+                                                            <option value="">-- Select Gate Location --</option>
+                                                            {refLocations.map((loc, idx) => (
+                                                                <option key={idx} value={loc}>{loc}</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="p-2">
+                                                        <select 
+                                                            value={editingMapRef.newBranchCode} 
+                                                            onChange={(e) => setEditingMapRef({...editingMapRef, newBranchCode: e.target.value})} 
+                                                            className="border p-2 rounded w-full bg-white text-sm"
+                                                        >
+                                                            <option value="">-- Select Rate Cart Location --</option>
+                                                            {refRateCartLocations.map((loc, idx) => (
+                                                                <option key={idx} value={loc}>{loc}</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="p-2 text-right whitespace-nowrap">
+                                                        <button onClick={() => editLocationMapping(mapItem.to_location, editingMapRef.newToLoc, editingMapRef.newBranchCode)} className="text-green-600 hover:text-green-800 mr-2"><CheckCircle size={18} /></button>
+                                                        <button onClick={() => setEditingMapRef(null)} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
+                                                    </td>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <td className="p-3 font-medium text-gray-700">{mapItem.to_location}</td>
+                                                    <td className="p-3">
+                                                        <span className="bg-rose-100 text-rose-800 px-2 py-1 rounded font-bold">{mapItem.branch_code}</span>
+                                                    </td>
+                                                    <td className="p-3 text-right whitespace-nowrap">
+                                                        {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingMapRef({ originalToLoc: mapItem.to_location, originalBranchCode: mapItem.branch_code, newToLoc: mapItem.to_location, newBranchCode: mapItem.branch_code })} className="text-blue-500 hover:text-blue-700 mr-3"><Edit2 size={16} /></button>}
+                                                        {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteLocationMapping(mapItem.to_location)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
+                                                    </td>
+                                                </>
+                                            )}
                                         </tr>
                                     ))}
                                 </tbody>

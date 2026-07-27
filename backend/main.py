@@ -824,6 +824,11 @@ class ReferenceEditItem(BaseModel):
     original_name: str
     new_name: str
 
+class LocationMappingEditItem(BaseModel):
+    original_to_location: str
+    new_to_location: str
+    new_branch_code: str
+
 class UserCreate(BaseModel):
     username: str
     password: str
@@ -2731,6 +2736,30 @@ async def add_ref_location_mapping(item: LocationMappingItem, user: dict = Depen
         await log_user_activity(user['id'], "ADD_REFERENCE", f"Mapped {item.to_location} to {item.branch_code}")
         return {"message": "Mapping saved successfully"}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+    
+    
+@app.put("/references/location-mappings")
+async def edit_ref_location_mapping(item: LocationMappingEditItem, user: dict = Depends(require_permission("edit_reference"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await cursor.execute("""
+            UPDATE Location_Mapping 
+            SET to_location = ?, branch_code = ?, edited_at = ?, edited_by = ? 
+            WHERE to_location = ?
+        """, (item.new_to_location, item.new_branch_code, now_str, user['id'], item.original_to_location))
+        if cursor.rowcount == 0:
+             await conn.close()
+             raise HTTPException(status_code=404, detail="Mapping not found")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited mapping from {item.original_to_location} to {item.new_to_location} ({item.new_branch_code})")
+        return {"message": "Mapping edited successfully"}
+    except Exception as e:
+        if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
+            raise HTTPException(status_code=400, detail="Mapping for this location already exists")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.delete("/references/location-mappings/{to_location}")
 async def delete_ref_location_mapping(to_location: str, user: dict = Depends(require_permission("delete_reference"))):
