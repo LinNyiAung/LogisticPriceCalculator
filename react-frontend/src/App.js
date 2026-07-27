@@ -804,15 +804,30 @@ const [overrideDate, setOverrideDate] = useState('');
   const [editingRef, setEditingRef] = useState({ type: null, id: null, originalValue: '', newValue: '' });
 
   const editReference = async (type, id, originalValue, newValue) => {
-      if(!newValue.trim() || originalValue === newValue) {
+      const trimmedNewValue = newValue.trim();
+      if(!trimmedNewValue || originalValue === trimmedNewValue) {
           setEditingRef({ type: null, id: null, originalValue: '', newValue: '' });
           return;
       }
+
+      let isDuplicate = false;
+      const lowerValue = trimmedNewValue.toLowerCase();
+      if (type === 'locations') isDuplicate = refLocations.some(item => item.id !== id && item.name.toLowerCase() === lowerValue);
+      else if (type === 'rate-cart-locations') isDuplicate = refRateCartLocations.some(item => item.id !== id && item.name.toLowerCase() === lowerValue);
+      else if (type === 'uoms') isDuplicate = refUOMs.some(item => item.id !== id && item.name.toLowerCase() === lowerValue);
+      else if (type === 'channels') isDuplicate = refChannels.some(item => item.id !== id && item.name.toLowerCase() === lowerValue);
+      else if (type === 'departments') isDuplicate = refDepartments.some(item => item.id !== id && item.name.toLowerCase() === lowerValue);
+
+      if (isDuplicate) {
+          showNotification(`${trimmedNewValue} already exists.`, 'error');
+          return;
+      }
+
       setIsSaving(true);
       try {
           const response = await authFetch(`${API_URL}/references/${type}`, {
               method: 'PUT', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: id, new_name: newValue })
+              body: JSON.stringify({ id: id, new_name: trimmedNewValue })
           });
           if(response.ok) {
               showNotification('Updated successfully', 'success');
@@ -840,6 +855,13 @@ const [overrideDate, setOverrideDate] = useState('');
           setEditingMapRef(null);
           return;
       }
+
+      const isDuplicate = refLocationMappings.some(map => map.to_location !== originalToLoc && map.to_location.toLowerCase() === newToLoc.toLowerCase());
+      if (isDuplicate) {
+          showNotification(`Mapping for ${newToLoc} already exists.`, 'error');
+          return;
+      }
+
       setIsSaving(true);
       try {
           const response = await authFetch(`${API_URL}/references/location-mappings`, {
@@ -1338,6 +1360,13 @@ const [overrideDate, setOverrideDate] = useState('');
   // Add these two functions right below addReference and deleteReference
   const saveLocationMapping = async () => {
       if (!newMapToLoc || !newMapBranch) { showNotification('Both fields required', 'warning'); return; }
+      
+      const isDuplicate = refLocationMappings.some(map => map.to_location.toLowerCase() === newMapToLoc.toLowerCase());
+      if (isDuplicate) {
+          showNotification(`Mapping for ${newMapToLoc} already exists.`, 'error');
+          return;
+      }
+
       setIsSaving(true);
       try {
           const response = await authFetch(`${API_URL}/references/location-mappings`, {
@@ -1547,11 +1576,26 @@ const [overrideDate, setOverrideDate] = useState('');
   };
 
   const addReference = async (type, value) => {
-      if(!value.trim()) return;
+      const trimmedValue = value.trim();
+      if(!trimmedValue) return;
+
+      let isDuplicate = false;
+      const lowerValue = trimmedValue.toLowerCase();
+      if (type === 'locations') isDuplicate = refLocations.some(item => item.name.toLowerCase() === lowerValue);
+      else if (type === 'rate-cart-locations') isDuplicate = refRateCartLocations.some(item => item.name.toLowerCase() === lowerValue);
+      else if (type === 'uoms') isDuplicate = refUOMs.some(item => item.name.toLowerCase() === lowerValue);
+      else if (type === 'channels') isDuplicate = refChannels.some(item => item.name.toLowerCase() === lowerValue);
+      else if (type === 'departments') isDuplicate = refDepartments.some(item => item.name.toLowerCase() === lowerValue);
+
+      if (isDuplicate) {
+          showNotification(`${trimmedValue} already exists.`, 'error');
+          return;
+      }
+
       setIsSaving(true);
       try {
           const response = await authFetch(`${API_URL}/references/${type}`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: value })
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: trimmedValue })
           });
           if(response.ok) { showNotification('Added successfully', 'success'); setNewRefValue(''); loadReferenceData(); } 
           else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
