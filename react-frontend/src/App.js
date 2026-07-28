@@ -665,11 +665,11 @@ const PricingApp = () => {
   
   const [dailyReportFilters, setDailyReportFilters] = useState({ 
     date_filter: '', bu: '', branch: '', item_code: '', item_name: '', principal: '', brand: '', driver_name: '',
-    ctns: '', driver_total_ctns: '', additional_ctns: '', branch_cost: '', additional_amount: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
+    ctns: '', driver_total_ctns: '', additional_ctns: '', rate_cart_cost: '', additional_amount: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
   });
   
   const [townshipFilters, setTownshipFilters] = useState({ 
-    date_filter: '', branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', driver_total_ctns: '', additional_ctns: '', branch_cost: '', additional_amount: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
+    date_filter: '', branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', driver_total_ctns: '', additional_ctns: '', rate_cart_cost: '', additional_amount: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
   });
 
   const [submittedAllocationData, setSubmittedAllocationData] = useState([]);
@@ -3480,7 +3480,7 @@ const [overrideDate, setOverrideDate] = useState('');
         const matchCtns = String(row.ctns || '').toLowerCase().includes(dailyReportFilters.ctns.toLowerCase());
         const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(dailyReportFilters.driver_total_ctns.toLowerCase());
         const matchAdditionalCtns = String(row.additional_ctns || '').toLowerCase().includes((dailyReportFilters.additional_ctns || '').toLowerCase());
-        const matchBranchCost = String(row.branch_cost || '').toLowerCase().includes(dailyReportFilters.branch_cost.toLowerCase());
+        const matchBranchCost = String(row.rate_cart_cost || '').toLowerCase().includes(dailyReportFilters.rate_cart_cost.toLowerCase());
         const matchAdditionalAmount = String(row.additional_amount || '').toLowerCase().includes(dailyReportFilters.additional_amount.toLowerCase());
         const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(dailyReportFilters.cost_per_carton.toLowerCase());
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(dailyReportFilters.allocated_cost.toLowerCase());
@@ -3499,7 +3499,7 @@ const [overrideDate, setOverrideDate] = useState('');
         const matchCtns = String(row.ctns || '').toLowerCase().includes(townshipFilters.ctns.toLowerCase());
         const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(townshipFilters.driver_total_ctns.toLowerCase());
         const matchAdditionalCtns = String(row.additional_ctns || '').toLowerCase().includes((townshipFilters.additional_ctns || '').toLowerCase());
-        const matchBranchCost = String(row.branch_cost || '').toLowerCase().includes(townshipFilters.branch_cost.toLowerCase());
+        const matchBranchCost = String(row.rate_cart_cost || '').toLowerCase().includes(townshipFilters.rate_cart_cost.toLowerCase());
         const matchAdditionalAmount = String(row.additional_amount || '').toLowerCase().includes(townshipFilters.additional_amount.toLowerCase());
         const matchTotalDropPoints = String(row.total_drop_points || '').toLowerCase().includes(townshipFilters.total_drop_points.toLowerCase());
         const matchCostPerDropPoint = String(row.cost_per_drop_point || '').toLowerCase().includes(townshipFilters.cost_per_drop_point.toLowerCase());
@@ -3803,8 +3803,8 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.additional_ctns || ''} onChange={(e) => setDailyReportFilters({...dailyReportFilters, additional_ctns: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right">
-                                                <div>Branch Rate Cost</div>
-                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.branch_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, branch_cost: e.target.value})} />
+                                                <div>Rate Cart Cost</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.rate_cart_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, rate_cart_cost: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right text-indigo-700">
                                                 <div>Additional Amount</div>
@@ -3841,7 +3841,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
                                                     <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.additional_ctns)}</td>
-                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>
+                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.rate_cart_cost)}</td>
                                                     <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.additional_amount)}</td>
                                                     <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
                                                     <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
@@ -3908,8 +3908,8 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.additional_ctns || ''} onChange={(e) => setTownshipFilters({...townshipFilters, additional_ctns: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right">
-                                                <div>Branch Rate Cost</div>
-                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.branch_cost} onChange={(e) => setTownshipFilters({...townshipFilters, branch_cost: e.target.value})} />
+                                                <div>Rate Cart Cost</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.rate_cart_cost} onChange={(e) => setTownshipFilters({...townshipFilters, rate_cart_cost: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right text-indigo-700">
                                                 <div>Additional Amount</div>
@@ -3952,7 +3952,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
                                                     <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.additional_ctns)}</td>
-                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.branch_cost)}</td>
+                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.rate_cart_cost)}</td>
                                                     <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.additional_amount)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.total_drop_points)}</td>
                                                     <td className="border p-2 text-right font-bold text-orange-600">{formatNumber(row.cost_per_drop_point)}</td>
@@ -4428,7 +4428,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                     <h4 className="font-semibold text-gray-800 mb-1">1. Driver's Cost per Carton</h4>
                                     <p className="text-xs text-gray-500 mb-2 italic">How much it costs the branch to deliver a single carton that day.</p>
                                     <div className="bg-white p-3 rounded-lg border border-green-100 font-mono text-xs shadow-sm">
-                                        <span className="text-green-600 font-bold">Cost per Carton</span> = Branch Rate Cost ÷ Driver's Total Cartons for the Day
+                                        <span className="text-green-600 font-bold">Cost per Carton</span> = Rate Cart Cost ÷ Driver's Total Cartons for the Day
                                     </div>
                                 </div>
                                 
@@ -4444,7 +4444,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                     <h4 className="font-semibold text-gray-800 mb-1">3. Cost per Drop Point</h4>
                                     <p className="text-xs text-gray-500 mb-2 italic">Used in Township Reports to calculate how much it costs to deliver to one specific customer location.</p>
                                     <div className="bg-white p-3 rounded-lg border border-green-100 font-mono text-xs shadow-sm">
-                                        <span className="text-green-600 font-bold">Cost per Drop Point</span> = Branch Rate Cost ÷ Total Unique Customers Visited by Driver
+                                        <span className="text-green-600 font-bold">Cost per Drop Point</span> = Rate Cart Cost ÷ Total Unique Customers Visited by Driver
                                     </div>
                                 </div>
                             </div>
