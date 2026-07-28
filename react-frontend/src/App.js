@@ -665,11 +665,11 @@ const PricingApp = () => {
   
   const [dailyReportFilters, setDailyReportFilters] = useState({ 
     date_filter: '', bu: '', branch: '', item_code: '', item_name: '', principal: '', brand: '', driver_name: '',
-    ctns: '', driver_total_ctns: '', additional_ctns: '', rate_cart_cost: '', additional_amount: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
+    ctns: '', driver_total_ctns: '', override_ctns: '', rate_cart_cost: '', override_amount: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
   });
   
   const [townshipFilters, setTownshipFilters] = useState({ 
-    date_filter: '', branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', driver_total_ctns: '', additional_ctns: '', rate_cart_cost: '', additional_amount: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
+    date_filter: '', branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', driver_total_ctns: '', override_ctns: '', rate_cart_cost: '', override_amount: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
   });
 
   const [submittedAllocationData, setSubmittedAllocationData] = useState([]);
@@ -725,8 +725,8 @@ const [overrideDate, setOverrideDate] = useState('');
               body: JSON.stringify({
                   target_date: overrideDate,
                   driver_name: overrideDriver,
-                  additional_amount: parseFloat(overrideAmount),
-                  additional_ctns: parseFloat(overrideCtns || 0)
+                  override_amount: parseFloat(overrideAmount),
+                  override_ctns: parseFloat(overrideCtns || 0)
               })
           });
           if (res.ok) {
@@ -756,8 +756,8 @@ const [overrideDate, setOverrideDate] = useState('');
 
   const handleEditOverride = (ov) => {
       setOverrideDriver(ov.driver_name);
-      setOverrideAmount(ov.additional_amount);
-      setOverrideCtns(ov.additional_ctns);
+      setOverrideAmount(ov.override_amount);
+      setOverrideCtns(ov.override_ctns);
       // Auto scrolls up to form if far away
       window.scrollTo({ top: 0, behavior: 'smooth' }); 
   };
@@ -3479,9 +3479,9 @@ const [overrideDate, setOverrideDate] = useState('');
         const matchDriverName = (row.driver_name || '').toLowerCase().includes(dailyReportFilters.driver_name.toLowerCase());
         const matchCtns = String(row.ctns || '').toLowerCase().includes(dailyReportFilters.ctns.toLowerCase());
         const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(dailyReportFilters.driver_total_ctns.toLowerCase());
-        const matchAdditionalCtns = String(row.additional_ctns || '').toLowerCase().includes((dailyReportFilters.additional_ctns || '').toLowerCase());
+        const matchAdditionalCtns = String(row.override_ctns || '').toLowerCase().includes((dailyReportFilters.override_ctns || '').toLowerCase());
         const matchBranchCost = String(row.rate_cart_cost || '').toLowerCase().includes(dailyReportFilters.rate_cart_cost.toLowerCase());
-        const matchAdditionalAmount = String(row.additional_amount || '').toLowerCase().includes(dailyReportFilters.additional_amount.toLowerCase());
+        const matchAdditionalAmount = String(row.override_amount || '').toLowerCase().includes(dailyReportFilters.override_amount.toLowerCase());
         const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(dailyReportFilters.cost_per_carton.toLowerCase());
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(dailyReportFilters.allocated_cost.toLowerCase());
         const matchSalesAmount = String(row.sales_amount || '').toLowerCase().includes(dailyReportFilters.sales_amount.toLowerCase());
@@ -3498,9 +3498,9 @@ const [overrideDate, setOverrideDate] = useState('');
         const matchContactPerson = (row.contact_person || '').toLowerCase().includes(townshipFilters.contact_person.toLowerCase());
         const matchCtns = String(row.ctns || '').toLowerCase().includes(townshipFilters.ctns.toLowerCase());
         const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(townshipFilters.driver_total_ctns.toLowerCase());
-        const matchAdditionalCtns = String(row.additional_ctns || '').toLowerCase().includes((townshipFilters.additional_ctns || '').toLowerCase());
+        const matchAdditionalCtns = String(row.override_ctns || '').toLowerCase().includes((townshipFilters.override_ctns || '').toLowerCase());
         const matchBranchCost = String(row.rate_cart_cost || '').toLowerCase().includes(townshipFilters.rate_cart_cost.toLowerCase());
-        const matchAdditionalAmount = String(row.additional_amount || '').toLowerCase().includes(townshipFilters.additional_amount.toLowerCase());
+        const matchAdditionalAmount = String(row.override_amount || '').toLowerCase().includes(townshipFilters.override_amount.toLowerCase());
         const matchTotalDropPoints = String(row.total_drop_points || '').toLowerCase().includes(townshipFilters.total_drop_points.toLowerCase());
         const matchCostPerDropPoint = String(row.cost_per_drop_point || '').toLowerCase().includes(townshipFilters.cost_per_drop_point.toLowerCase());
         const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(townshipFilters.cost_per_carton.toLowerCase());
@@ -3657,11 +3657,11 @@ const [overrideDate, setOverrideDate] = useState('');
                                       </select>
                                   </div>
                                   <div className="flex-1 min-w-[150px]">
-                                      <label className="block text-sm font-semibold mb-1 text-gray-700">Additional Amount {!overrideCtns && <span className="text-red-500">*</span>}</label>
+                                      <label className="block text-sm font-semibold mb-1 text-gray-700">Override Amount {!overrideCtns && <span className="text-red-500">*</span>}</label>
                                       <input type="number" step="any" value={overrideAmount} onChange={e => setOverrideAmount(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" placeholder="e.g. 5000" required={!overrideCtns} />
                                   </div>
                                   <div className="flex-1 min-w-[150px]">
-                                      <label className="block text-sm font-semibold mb-1 text-gray-700">Additional Ctns {!overrideAmount && <span className="text-red-500">*</span>}</label>
+                                      <label className="block text-sm font-semibold mb-1 text-gray-700">Override Ctns {!overrideAmount && <span className="text-red-500">*</span>}</label>
                                       <input type="number" step="any" value={overrideCtns} onChange={e => setOverrideCtns(e.target.value)} className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500" placeholder="e.g. 10" required={!overrideAmount} />
                                   </div>
                                   <button type="submit" disabled={isSubmittingOverride || !overrideDate || !overrideDriver || (!overrideAmount && !overrideCtns)} className="bg-blue-600 text-white px-6 py-2 rounded font-semibold hover:bg-blue-700 disabled:opacity-50 transition">
@@ -3678,8 +3678,8 @@ const [overrideDate, setOverrideDate] = useState('');
                                               <thead className="bg-gray-100">
                                                   <tr>
                                                       <th className="border p-2 text-left">Driver Name</th>
-                                                      <th className="border p-2 text-left">Amount (MMK)</th>
-                                                      <th className="border p-2 text-left">Additional Ctns</th>
+                                                      <th className="border p-2 text-left">Override Amount (MMK)</th>
+                                                      <th className="border p-2 text-left">Override Ctns</th>
                                                       <th className="border p-2 text-center w-24">Actions</th>
                                                   </tr>
                                               </thead>
@@ -3687,8 +3687,8 @@ const [overrideDate, setOverrideDate] = useState('');
                                                   {overridesList.map(ov => (
                                                       <tr key={ov.id} className="hover:bg-gray-50">
                                                           <td className="border p-2 font-semibold text-gray-700">{ov.driver_name}</td>
-                                                          <td className="border p-2 text-blue-600 font-bold">{formatNumber(ov.additional_amount)}</td>
-                                                          <td className="border p-2 text-green-600 font-bold">{formatNumber(ov.additional_ctns)}</td>
+                                                          <td className="border p-2 text-blue-600 font-bold">{formatNumber(ov.override_amount)}</td>
+                                                          <td className="border p-2 text-green-600 font-bold">{formatNumber(ov.override_ctns)}</td>
                                                           <td className="border p-2 text-center">
                                                               <div className="flex justify-center gap-2">
                                                                   <button type="button" onClick={() => fetchOverrideLogs(ov)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs">
@@ -3799,16 +3799,16 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.driver_total_ctns} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_total_ctns: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right text-green-700">
-                                                <div>Additional Ctns</div>
-                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.additional_ctns || ''} onChange={(e) => setDailyReportFilters({...dailyReportFilters, additional_ctns: e.target.value})} />
+                                                <div>Override Ctns</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.override_ctns || ''} onChange={(e) => setDailyReportFilters({...dailyReportFilters, override_ctns: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right">
                                                 <div>Rate Cart Cost</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.rate_cart_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, rate_cart_cost: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right text-indigo-700">
-                                                <div>Additional Amount</div>
-                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.additional_amount} onChange={(e) => setDailyReportFilters({...dailyReportFilters, additional_amount: e.target.value})} />
+                                                <div>Override Amount</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.override_amount} onChange={(e) => setDailyReportFilters({...dailyReportFilters, override_amount: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right text-purple-700">
                                                 <div>Cost per Carton</div>
@@ -3840,9 +3840,9 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2">{row.item_name}</td>
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
-                                                    <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.additional_ctns)}</td>
+                                                    <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.override_ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.rate_cart_cost)}</td>
-                                                    <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.additional_amount)}</td>
+                                                    <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.override_amount)}</td>
                                                     <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
                                                     <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
                                                     <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.sales_amount)}</td>
@@ -3904,16 +3904,16 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.driver_total_ctns} onChange={(e) => setTownshipFilters({...townshipFilters, driver_total_ctns: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right text-green-700">
-                                                <div>Additional Ctns</div>
-                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.additional_ctns || ''} onChange={(e) => setTownshipFilters({...townshipFilters, additional_ctns: e.target.value})} />
+                                                <div>Override Ctns</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.override_ctns || ''} onChange={(e) => setTownshipFilters({...townshipFilters, override_ctns: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right">
                                                 <div>Rate Cart Cost</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.rate_cart_cost} onChange={(e) => setTownshipFilters({...townshipFilters, rate_cart_cost: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right text-indigo-700">
-                                                <div>Additional Amount</div>
-                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.additional_amount} onChange={(e) => setTownshipFilters({...townshipFilters, additional_amount: e.target.value})} />
+                                                <div>Override Amount</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.override_amount} onChange={(e) => setTownshipFilters({...townshipFilters, override_amount: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right">
                                                 <div>Total Drop Points</div>
@@ -3951,9 +3951,9 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2">{row.contact_person}</td>
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
-                                                    <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.additional_ctns)}</td>
+                                                    <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.override_ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.rate_cart_cost)}</td>
-                                                    <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.additional_amount)}</td>
+                                                    <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.override_amount)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.total_drop_points)}</td>
                                                     <td className="border p-2 text-right font-bold text-orange-600">{formatNumber(row.cost_per_drop_point)}</td>
                                                     <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
