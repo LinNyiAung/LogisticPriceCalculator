@@ -3297,6 +3297,9 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
                      "FromWhsCode", "ToWhsCode", "original_ctns", "original_weight"]
         products = [dict(zip(prod_cols, r)) for r in prod_rows]
         
+        # Filter out items where cartons have been reduced to 0
+        products = [p for p in products if Decimal(str(p.get('ctns', 0))) > 0]
+        
         # Location -> Branch code mapping (e.g. "Yangon" -> "YGN"), used for description fields below
         await cursor.execute("SELECT to_location, branch_code FROM Location_Mapping")
         loc_mapping_rows = await cursor.fetchall()
