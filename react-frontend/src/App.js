@@ -622,7 +622,7 @@ const PricingApp = () => {
   const [gateData, setGateData] = useState([]);
   const [selectedGateForPricing, setSelectedGateForPricing] = useState('');
   
-  const [gateFilters, setGateFilters] = useState({ gate_name: '', from_loc: '', to_loc: '', uom: '', unit: '', cost: '' });
+  const [gateFilters, setGateFilters] = useState({ gate_name: '', from_loc: '', to_loc: '', destination: '', uom: '', unit: '', cost: '' });
   const [itemPricingData, setItemPricingData] = useState([]);
   const [itemFilters, setItemFilters] = useState({ bu: '', item_code: '', item_name: '', principal: '', brand: '', transportation_cost: '' });
 
@@ -2134,7 +2134,7 @@ const [overrideDate, setOverrideDate] = useState('');
 
   // Modals with loading constraints applied
   const GateModal = ({ gate, onSave, onClose, isSaving }) => {
-    const [formData, setFormData] = useState(gate || { gate_name: '', from_loc: '', to_loc: '', uom: '', unit: '', cost: '' });
+    const [formData, setFormData] = useState(gate || { gate_name: '', from_loc: '', to_loc: '', destination: '', uom: '', unit: '', cost: '' });
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -2143,6 +2143,7 @@ const [overrideDate, setOverrideDate] = useState('');
             <div><label className="block text-sm font-semibold mb-1">Gate Name <span className="text-red-500">*</span></label><input disabled={isSaving} type="text" value={formData.gate_name ?? ''} onChange={(e) => setFormData({...formData, gate_name: e.target.value})} className="w-full p-2 border rounded" /></div>
             <div><label className="block text-sm font-semibold mb-1">From <span className="text-red-500">*</span></label><select disabled={isSaving} value={formData.from_loc ?? ''} onChange={(e) => setFormData({...formData, from_loc: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refLocations.map((loc) => (<option key={loc.id} value={loc.name}>{loc.name}</option>))}</select></div>
             <div><label className="block text-sm font-semibold mb-1">To <span className="text-red-500">*</span></label><select disabled={isSaving} value={formData.to_loc ?? ''} onChange={(e) => setFormData({...formData, to_loc: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refLocations.map((loc) => (<option key={loc.id} value={loc.name}>{loc.name}</option>))}</select></div>
+            <div><label className="block text-sm font-semibold mb-1">Destination (Optional)</label><input disabled={isSaving} type="text" value={formData.destination ?? ''} onChange={(e) => setFormData({...formData, destination: e.target.value})} className="w-full p-2 border rounded" placeholder="Enter destination..." /></div>
             <div className="grid grid-cols-2 gap-4">
                 <div><label className="block text-sm font-semibold mb-1">UOM</label><select disabled={isSaving} value={formData.uom ?? ''} onChange={(e) => setFormData({...formData, uom: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refUOMs.map((u) => (<option key={u.id} value={u.name}>{u.name}</option>))}</select></div>
                 <div><label className="block text-sm font-semibold mb-1">Unit</label><input disabled={isSaving} type="number" value={formData.unit ?? ''} onChange={(e) => setFormData({...formData, unit: e.target.value})} className="w-full p-2 border rounded" placeholder="1" /></div>
@@ -4547,6 +4548,7 @@ const [overrideDate, setOverrideDate] = useState('');
               return (gate.gate_name || '').toLowerCase().includes(gateFilters.gate_name.toLowerCase()) &&
                      (gate.from_loc || '').toLowerCase().includes(gateFilters.from_loc.toLowerCase()) &&
                      (gate.to_loc || '').toLowerCase().includes(gateFilters.to_loc.toLowerCase()) &&
+                     (gate.destination || '').toLowerCase().includes(gateFilters.destination.toLowerCase()) &&
                      (gate.uom || '').toLowerCase().includes(gateFilters.uom.toLowerCase()) &&
                      String(gate.unit || '').toLowerCase().includes(gateFilters.unit.toLowerCase()) &&
                      String(gate.cost || '').toLowerCase().includes(gateFilters.cost.toLowerCase());
@@ -4625,6 +4627,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                             <th className="border p-2 text-left"><div>Gate Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.gate_name} onChange={(e) => setGateFilters({...gateFilters, gate_name: e.target.value})} /></th>
                                             <th className="border p-2 text-left"><div>From</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.from_loc} onChange={(e) => setGateFilters({...gateFilters, from_loc: e.target.value})} /></th>
                                             <th className="border p-2 text-left"><div>To</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.to_loc} onChange={(e) => setGateFilters({...gateFilters, to_loc: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Destination</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.destination} onChange={(e) => setGateFilters({...gateFilters, destination: e.target.value})} /></th>
                                             <th className="border p-2 text-left"><div>UOM</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.uom} onChange={(e) => setGateFilters({...gateFilters, uom: e.target.value})} /></th>
                                             <th className="border p-2 text-left"><div>Unit</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.unit} onChange={(e) => setGateFilters({...gateFilters, unit: e.target.value})} /></th>
                                             <th className="border p-2 text-left"><div>Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateFilters.cost} onChange={(e) => setGateFilters({...gateFilters, cost: e.target.value})} /></th>
@@ -4637,7 +4640,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                         ) : (
                                             tabData.filteredGates.map((gate, index) => (
                                             <tr key={index} className="hover:bg-gray-50">
-                                                <td className="border p-2">{gate.gate_name}</td><td className="border p-2">{gate.from_loc}</td><td className="border p-2">{gate.to_loc}</td><td className="border p-2">{gate.uom || '-'}</td><td className="border p-2">{gate.unit || '-'}</td><td className="border p-2">{formatNumber(gate.cost)}</td>
+                                                <td className="border p-2">{gate.gate_name}</td><td className="border p-2">{gate.from_loc}</td><td className="border p-2">{gate.to_loc}</td><td className="border p-2">{gate.destination || '-'}</td><td className="border p-2">{gate.uom || '-'}</td><td className="border p-2">{gate.unit || '-'}</td><td className="border p-2">{formatNumber(gate.cost)}</td>
                                                 <td className="border p-2 text-center">
                                                     <div className="flex items-center justify-center gap-2">
                                                         <button onClick={() => fetchGateLogs(gate)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={14} /></button>
@@ -4648,6 +4651,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                             </tr>
                                             ))
                                         )}
+                                        {tabData.filteredGates.length === 0 && (<tr><td colSpan="8" className="text-center p-4 text-gray-500 italic">No records found.</td></tr>)}
                                     </tbody>
                                 </table>
                             </div>
@@ -5022,6 +5026,7 @@ const [overrideDate, setOverrideDate] = useState('');
               const displayCost = isHistoricalRecord ? historicalGate.cost : (liveGate?.cost || null);
               const displayUom = isHistoricalRecord ? historicalGate.uom : (liveGate?.uom || null);
               const displayUnit = isHistoricalRecord ? historicalGate.unit : (liveGate?.unit || 1);
+              const displayDestination = liveGate?.destination;
 
               return (
                 <div className="bg-blue-50 rounded-lg border-2 border-blue-300 p-6 mb-6">
@@ -5045,6 +5050,7 @@ const [overrideDate, setOverrideDate] = useState('');
                     <div className="text-right">
                       <p className="text-sm text-gray-600">Route</p>
                       <p className="text-xl font-bold text-blue-600">{selectedFrom} &rarr; {selectedTo}</p>
+                      {displayDestination && <p className="text-sm font-medium text-gray-500 mt-1">Destination: {displayDestination}</p>}
                     </div>
                   </div>
                 </div>

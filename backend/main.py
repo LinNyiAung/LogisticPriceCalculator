@@ -108,6 +108,14 @@ async def startup_db():
         """)
         
         
+        # Add destination to Gate table if it doesn't exist
+        await cursor.execute("""
+            IF COL_LENGTH('Gate', 'destination') IS NULL
+            BEGIN
+                ALTER TABLE Gate ADD destination NVARCHAR(255);
+            END
+        """)
+
         # Add historical gate snapshot columns if they don't exist
         await cursor.execute("""
             IF COL_LENGTH('Calculation_History', 'gate_cost') IS NULL
@@ -755,6 +763,7 @@ class GateData(BaseModel):
     gate_name: str
     from_loc: str  
     to_loc: str
+    destination: Optional[str] = None
     uom: Optional[str] = None       
     unit: Optional[int] = None      
     cost: Optional[Decimal] = None 
@@ -3709,7 +3718,7 @@ async def get_all_gates(
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         
-        query = "SELECT id, gate_name, from_loc, to_loc, uom, unit, cost FROM Gate WHERE 1=1"
+        query = "SELECT id, gate_name, from_loc, to_loc, destination, uom, unit, cost FROM Gate WHERE 1=1"
         params = []
         
         if gate_name:
@@ -3739,10 +3748,11 @@ async def get_all_gates(
                 "gate_id": gate_id, 
                 "gate_name": row[1], 
                 "from_loc": row[2], 
-                "to_loc": row[3], 
-                "uom": row[4],         
-                "unit": row[5], 
-                "cost": float(row[6]) if row[6] is not None else None, 
+                "to_loc": row[3],
+                "destination": row[4],
+                "uom": row[5],         
+                "unit": row[6], 
+                "cost": float(row[7]) if row[7] is not None else None, 
                 "calculation_type": calc_type
             })
         await conn.close()
@@ -3800,8 +3810,8 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
                     await cursor.executemany("INSERT INTO Gate_Change_Log (gate_id, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
 
             await cursor.execute("""
-                UPDATE Gate SET gate_name = ?, from_loc = ?, to_loc = ?, uom = ?, unit = ?, cost = ?, edited_at = ?, edited_by = ? WHERE id = ?
-            """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, change_date, username, gate_data.gate_id))
+                UPDATE Gate SET gate_name = ?, from_loc = ?, to_loc = ?, destination = ?, uom = ?, unit = ?, cost = ?, edited_at = ?, edited_by = ? WHERE id = ?
+            """, (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.destination, gate_data.uom, gate_data.unit, gate_data.cost, change_date, username, gate_data.gate_id))
             await log_user_activity(user['id'], "UPDATE_GATE", f"Updated gate ID {gate_data.gate_id}: {gate_data.gate_name}")
         else:
             if "add_gate" not in perms:
@@ -3811,8 +3821,8 @@ async def save_gate(gate_data: GateData, user: dict = Depends(get_current_user))
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             username = user['id']
 
-            await cursor.execute("INSERT INTO Gate (gate_name, from_loc, to_loc, uom, unit, cost, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
-                  (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.uom, gate_data.unit, gate_data.cost, now_str, username))
+            await cursor.execute("INSERT INTO Gate (gate_name, from_loc, to_loc, destination, uom, unit, cost, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                  (gate_data.gate_name, gate_data.from_loc, gate_data.to_loc, gate_data.destination, gate_data.uom, gate_data.unit, gate_data.cost, now_str, username))
             await log_user_activity(user['id'], "CREATE_GATE", f"Created gate: {gate_data.gate_name}")
         
         await conn.commit()
