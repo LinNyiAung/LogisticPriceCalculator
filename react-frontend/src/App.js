@@ -716,7 +716,7 @@ const [overrideDate, setOverrideDate] = useState('');
 
   const handleOverrideSubmit = async (e) => {
       e.preventDefault();
-      if (!overrideDate || !overrideDriver || (!overrideAmount && !overrideCtns)) return;
+      if (!overrideDate || !overrideDriver || ((overrideAmount === '' || overrideAmount === null) && (overrideCtns === '' || overrideCtns === null))) return;
       setIsSubmittingOverride(true);
       try {
           const res = await authFetch(`${API_URL}/account/daily-override`, {
@@ -725,8 +725,8 @@ const [overrideDate, setOverrideDate] = useState('');
               body: JSON.stringify({
                   target_date: overrideDate,
                   driver_name: overrideDriver,
-                  override_amount: parseFloat(overrideAmount),
-                  override_ctns: parseFloat(overrideCtns || 0)
+                  override_amount: overrideAmount !== '' && overrideAmount !== null ? parseFloat(overrideAmount) : null,
+                  override_ctns: overrideCtns !== '' && overrideCtns !== null ? parseFloat(overrideCtns) : null
               })
           });
           if (res.ok) {
@@ -756,8 +756,8 @@ const [overrideDate, setOverrideDate] = useState('');
 
   const handleEditOverride = (ov) => {
       setOverrideDriver(ov.driver_name);
-      setOverrideAmount(ov.override_amount);
-      setOverrideCtns(ov.override_ctns);
+      setOverrideAmount(ov.override_amount ?? '');
+      setOverrideCtns(ov.override_ctns ?? '');
       // Auto scrolls up to form if far away
       window.scrollTo({ top: 0, behavior: 'smooth' }); 
   };
@@ -3478,9 +3478,15 @@ const [overrideDate, setOverrideDate] = useState('');
         const matchBrand = (row.brand || '').toLowerCase().includes(dailyReportFilters.brand.toLowerCase());
         const matchDriverName = (row.driver_name || '').toLowerCase().includes(dailyReportFilters.driver_name.toLowerCase());
         const matchCtns = String(row.ctns || '').toLowerCase().includes(dailyReportFilters.ctns.toLowerCase());
-        const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(dailyReportFilters.driver_total_ctns.toLowerCase());
+        
+        const displayDriverTotal = row.override_driver_total_ctns != null ? row.override_driver_total_ctns : row.driver_total_ctns;
+        const matchDriverTotal = String(displayDriverTotal || '').toLowerCase().includes(dailyReportFilters.driver_total_ctns.toLowerCase());
+        
         const matchAdditionalCtns = String(row.override_ctns || '').toLowerCase().includes((dailyReportFilters.override_ctns || '').toLowerCase());
-        const matchBranchCost = String(row.rate_cart_cost || '').toLowerCase().includes(dailyReportFilters.rate_cart_cost.toLowerCase());
+        
+        const displayBranchCost = row.override_rate_cart_cost != null ? row.override_rate_cart_cost : row.rate_cart_cost;
+        const matchBranchCost = String(displayBranchCost || '').toLowerCase().includes(dailyReportFilters.rate_cart_cost.toLowerCase());
+        
         const matchAdditionalAmount = String(row.override_amount || '').toLowerCase().includes(dailyReportFilters.override_amount.toLowerCase());
         const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(dailyReportFilters.cost_per_carton.toLowerCase());
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(dailyReportFilters.allocated_cost.toLowerCase());
@@ -3497,9 +3503,15 @@ const [overrideDate, setOverrideDate] = useState('');
         const matchCustomer = (row.customer_code || '').toLowerCase().includes(townshipFilters.customer_code.toLowerCase());
         const matchContactPerson = (row.contact_person || '').toLowerCase().includes(townshipFilters.contact_person.toLowerCase());
         const matchCtns = String(row.ctns || '').toLowerCase().includes(townshipFilters.ctns.toLowerCase());
-        const matchDriverTotal = String(row.driver_total_ctns || '').toLowerCase().includes(townshipFilters.driver_total_ctns.toLowerCase());
+        
+        const displayDriverTotal = row.override_driver_total_ctns != null ? row.override_driver_total_ctns : row.driver_total_ctns;
+        const matchDriverTotal = String(displayDriverTotal || '').toLowerCase().includes(townshipFilters.driver_total_ctns.toLowerCase());
+        
         const matchAdditionalCtns = String(row.override_ctns || '').toLowerCase().includes((townshipFilters.override_ctns || '').toLowerCase());
-        const matchBranchCost = String(row.rate_cart_cost || '').toLowerCase().includes(townshipFilters.rate_cart_cost.toLowerCase());
+        
+        const displayBranchCost = row.override_rate_cart_cost != null ? row.override_rate_cart_cost : row.rate_cart_cost;
+        const matchBranchCost = String(displayBranchCost || '').toLowerCase().includes(townshipFilters.rate_cart_cost.toLowerCase());
+        
         const matchAdditionalAmount = String(row.override_amount || '').toLowerCase().includes(townshipFilters.override_amount.toLowerCase());
         const matchTotalDropPoints = String(row.total_drop_points || '').toLowerCase().includes(townshipFilters.total_drop_points.toLowerCase());
         const matchCostPerDropPoint = String(row.cost_per_drop_point || '').toLowerCase().includes(townshipFilters.cost_per_drop_point.toLowerCase());
@@ -3839,9 +3851,9 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2">{row.item_code}</td>
                                                     <td className="border p-2">{row.item_name}</td>
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
-                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
+                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_driver_total_ctns != null ? row.override_driver_total_ctns : row.driver_total_ctns)}</td>
                                                     <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.override_ctns)}</td>
-                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.rate_cart_cost)}</td>
+                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_rate_cart_cost != null ? row.override_rate_cart_cost : row.rate_cart_cost)}</td>
                                                     <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.override_amount)}</td>
                                                     <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
                                                     <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
@@ -3950,9 +3962,9 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2">{row.customer_code}</td>
                                                     <td className="border p-2">{row.contact_person}</td>
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
-                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
+                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_driver_total_ctns != null ? row.override_driver_total_ctns : row.driver_total_ctns)}</td>
                                                     <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.override_ctns)}</td>
-                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.rate_cart_cost)}</td>
+                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_rate_cart_cost != null ? row.override_rate_cart_cost : row.rate_cart_cost)}</td>
                                                     <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.override_amount)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.total_drop_points)}</td>
                                                     <td className="border p-2 text-right font-bold text-orange-600">{formatNumber(row.cost_per_drop_point)}</td>

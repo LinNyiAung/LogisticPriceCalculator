@@ -240,8 +240,8 @@ async def startup_db():
                 id                INT IDENTITY(1,1) PRIMARY KEY,
                 target_date       NVARCHAR(10) NOT NULL,
                 driver_name       NVARCHAR(255) NOT NULL,
-                override_amount   DECIMAL(18,6) NOT NULL,
-                override_ctns     DECIMAL(18,6) DEFAULT 0,
+                override_amount   DECIMAL(18,6) NULL,
+                override_ctns     DECIMAL(18,6) NULL,
                 created_at        NVARCHAR(30),
                 created_by        INT,
                 edited_at         NVARCHAR(30),
@@ -254,7 +254,25 @@ async def startup_db():
         await cursor.execute("""
             IF COL_LENGTH('Daily_Driver_Override', 'override_ctns') IS NULL
             BEGIN
-                ALTER TABLE Daily_Driver_Override ADD override_ctns DECIMAL(18,6) DEFAULT 0;
+                ALTER TABLE Daily_Driver_Override ADD override_ctns DECIMAL(18,6) NULL;
+            END
+        """)
+        
+        # Add new override columns to Daily_Item_Report if they don't exist
+        await cursor.execute("""
+            IF COL_LENGTH('Daily_Item_Report', 'override_rate_cart_cost') IS NULL
+            BEGIN
+                ALTER TABLE Daily_Item_Report ADD override_rate_cart_cost DECIMAL(18,6);
+                ALTER TABLE Daily_Item_Report ADD override_driver_total_ctns DECIMAL(18,6);
+            END
+        """)
+
+        # Add new override columns to Daily_Township_Report if they don't exist
+        await cursor.execute("""
+            IF COL_LENGTH('Daily_Township_Report', 'override_rate_cart_cost') IS NULL
+            BEGIN
+                ALTER TABLE Daily_Township_Report ADD override_rate_cart_cost DECIMAL(18,6);
+                ALTER TABLE Daily_Township_Report ADD override_driver_total_ctns DECIMAL(18,6);
             END
         """)
 
@@ -742,8 +760,8 @@ class LocationMappingItem(BaseModel):
 class DriverOverrideData(BaseModel):
     target_date: str
     driver_name: str
-    override_amount: Optional[Decimal] = Decimal("0.0")
-    override_ctns: Optional[Decimal] = Decimal("0.0")
+    override_amount: Optional[Decimal] = None
+    override_ctns: Optional[Decimal] = None
 
 class RateCartData(BaseModel):
     location: str
@@ -1883,7 +1901,12 @@ async def _get_daily_report_data(target_date: str):
     conn_log = await get_logistic_connection()
     cursor_log = await conn_log.cursor()
     await cursor_log.execute("SELECT driver_name, override_amount, override_ctns FROM Daily_Driver_Override WHERE target_date = ?", (target_date,))
-    overrides = {row[0].strip(): {'amount': Decimal(str(row[1])), 'ctns': Decimal(str(row[2] or 0))} for row in await cursor_log.fetchall()}
+    overrides = {
+        row[0].strip(): {
+            'amount': Decimal(str(row[1])) if row[1] is not None else None,
+            'ctns': Decimal(str(row[2])) if row[2] is not None else None
+        } for row in await cursor_log.fetchall()
+    }
     await conn_log.close()
 
     conn_dwbi = await get_dwbi_connection()
@@ -1947,12 +1970,19 @@ async def _get_daily_report_data(target_date: str):
         d_total = driver_totals.get((b, d), Decimal("0.0"))
         b_cost = rate_carts.get(b, Decimal("0.0"))
         
-        driver_override = overrides.get(d, {'amount': Decimal("0.0"), 'ctns': Decimal("0.0")})
+        driver_override = overrides.get(d, {'amount': None, 'ctns': None})
         driver_extra = driver_override['amount']
         driver_extra_ctns = driver_override['ctns']
         
-        effective_rate_cart_cost = b_cost + driver_extra
-        effective_driver_total_ctns = d_total + driver_extra_ctns
+        # Use 0.0 for the actual math calculations so it doesn't crash
+        math_extra_amount = driver_extra if driver_extra is not None else Decimal("0.0")
+        math_extra_ctns = driver_extra_ctns if driver_extra_ctns is not None else Decimal("0.0")
+        
+        effective_rate_cart_cost = b_cost + math_extra_amount
+        effective_driver_total_ctns = d_total + math_extra_ctns
+        
+        store_override_cost = effective_rate_cart_cost if driver_extra is not None else None
+        store_override_ctns = effective_driver_total_ctns if driver_extra_ctns is not None else None
         
         cost_per_ctn = (effective_rate_cart_cost / effective_driver_total_ctns) if effective_driver_total_ctns > Decimal("0.0") else Decimal("0.0")
         allocated_cost = g["ctns"] * cost_per_ctn
@@ -1967,8 +1997,9 @@ async def _get_daily_report_data(target_date: str):
                 "bu": g["bu"], "branch": b, "driver_name": d, "item_code": g["item_code"],
                 "item_name": g["item_name"], "principal": g["principal"], "brand": g["brand"],
                 "ctns": Decimal("0.0"), "allocated_cost": Decimal("0.0"), "cost_per_carton": cost_per_ctn,
-                "driver_total_ctns": effective_driver_total_ctns, "rate_cart_cost": effective_rate_cart_cost, "override_amount": driver_extra,
-                "sales_amount": Decimal("0.0")
+                "driver_total_ctns": d_total, "rate_cart_cost": b_cost, 
+                "override_driver_total_ctns": store_override_ctns, "override_rate_cart_cost": store_override_cost, 
+                "override_amount": driver_extra, "sales_amount": Decimal("0.0")
             }
         item_report_dict[i_key]["ctns"] += g["ctns"]
         item_report_dict[i_key]["allocated_cost"] += allocated_cost
@@ -1980,7 +2011,8 @@ async def _get_daily_report_data(target_date: str):
                 "target_date": target_date, 
                 "branch": b, "driver_name": g["driver_name"], "township": g["township"], 
                 "customer_code": g["customer_code"], "contact_person": g["contact_person"], 
-                "ctns": Decimal("0.0"), "driver_total_ctns": effective_driver_total_ctns, "rate_cart_cost": effective_rate_cart_cost,
+                "ctns": Decimal("0.0"), "driver_total_ctns": d_total, "rate_cart_cost": b_cost,
+                "override_driver_total_ctns": store_override_ctns, "override_rate_cart_cost": store_override_cost,
                 "override_amount": driver_extra,
                 "cost_per_carton": cost_per_ctn, "allocated_cost": Decimal("0.0"),
                 "total_drop_points": d_total_customers, "cost_per_drop_point": cost_per_drop_point,
@@ -2024,13 +2056,15 @@ async def generate_and_save_daily_report(target_date: str):
             await cursor.execute("""
                 INSERT INTO Daily_Item_Report
                 (target_date, bu, branch, driver_name, item_code, item_name, principal, brand,
-                 ctns, allocated_cost, cost_per_carton, driver_total_ctns, rate_cart_cost, sales_amount)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 ctns, allocated_cost, cost_per_carton, driver_total_ctns, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, sales_amount)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 target_date, it.get("bu",""), it.get("branch",""), it.get("driver_name",""),
                 it.get("item_code",""), it.get("item_name",""), it.get("principal",""), it.get("brand",""),
                 it.get("ctns", Decimal("0.0")), it.get("allocated_cost", Decimal("0.0")), it.get("cost_per_carton", Decimal("0.0")),
-                it.get("driver_total_ctns", Decimal("0.0")), it.get("rate_cart_cost", Decimal("0.0")), it.get("sales_amount", Decimal("0.0"))
+                it.get("driver_total_ctns", Decimal("0.0")), it.get("rate_cart_cost", Decimal("0.0")), 
+                it.get("override_driver_total_ctns"), it.get("override_rate_cart_cost"), 
+                it.get("sales_amount", Decimal("0.0"))
             ))
 
         await cursor.execute("DELETE FROM Daily_Township_Report WHERE target_date = ?", (target_date,))
@@ -2038,13 +2072,14 @@ async def generate_and_save_daily_report(target_date: str):
             await cursor.execute("""
                 INSERT INTO Daily_Township_Report
                 (target_date, branch, driver_name, township, customer_code, contact_person,
-                 ctns, driver_total_ctns, rate_cart_cost, cost_per_carton, allocated_cost,
+                 ctns, driver_total_ctns, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, cost_per_carton, allocated_cost,
                  total_drop_points, cost_per_drop_point, sales_amount)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 target_date, tw.get("branch",""), tw.get("driver_name",""), tw.get("township",""),
                 tw.get("customer_code",""), tw.get("contact_person",""),
                 tw.get("ctns", Decimal("0.0")), tw.get("driver_total_ctns", Decimal("0.0")), tw.get("rate_cart_cost", Decimal("0.0")),
+                tw.get("override_driver_total_ctns"), tw.get("override_rate_cart_cost"),
                 tw.get("cost_per_carton", Decimal("0.0")), tw.get("allocated_cost", Decimal("0.0")),
                 tw.get("total_drop_points", Decimal("0.0")), tw.get("cost_per_drop_point", Decimal("0.0")), tw.get("sales_amount", Decimal("0.0"))
             ))
@@ -2071,40 +2106,49 @@ async def get_or_generate_daily_report(target_date: str):
     if row:
         await cursor.execute("""
             SELECT bu, branch, driver_name, item_code, item_name, principal, brand,
-                   ctns, allocated_cost, cost_per_carton, driver_total_ctns, rate_cart_cost, sales_amount
+                   ctns, allocated_cost, cost_per_carton, driver_total_ctns, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, sales_amount
             FROM Daily_Item_Report WHERE target_date = ?
         """, (target_date,))
         ir_cols = ["bu","branch","driver_name","item_code","item_name","principal","brand",
-                   "ctns","allocated_cost","cost_per_carton","driver_total_ctns","rate_cart_cost","sales_amount"]
+                   "ctns","allocated_cost","cost_per_carton","driver_total_ctns","rate_cart_cost", "override_driver_total_ctns", "override_rate_cart_cost", "sales_amount"]
         item_report = [dict(zip(ir_cols, r)) for r in await cursor.fetchall()]
         for it in item_report:
             it["target_date"] = target_date
-            for k in ["ctns","allocated_cost","cost_per_carton","driver_total_ctns","rate_cart_cost","sales_amount"]:
+            for k in ["ctns","allocated_cost","cost_per_carton","driver_total_ctns","rate_cart_cost", "sales_amount"]:
                 it[k] = Decimal(str(it[k])) if it[k] is not None else Decimal("0.0")
+            for k in ["override_driver_total_ctns", "override_rate_cart_cost"]:
+                it[k] = Decimal(str(it[k])) if it[k] is not None else None
 
         await cursor.execute("""
             SELECT branch, driver_name, township, customer_code, contact_person,
-                   ctns, driver_total_ctns, rate_cart_cost, cost_per_carton, allocated_cost,
+                   ctns, driver_total_ctns, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, cost_per_carton, allocated_cost,
                    total_drop_points, cost_per_drop_point, sales_amount
             FROM Daily_Township_Report WHERE target_date = ?
         """, (target_date,))
         tr_cols = ["branch","driver_name","township","customer_code","contact_person",
-                   "ctns","driver_total_ctns","rate_cart_cost","cost_per_carton","allocated_cost",
+                   "ctns","driver_total_ctns","rate_cart_cost", "override_driver_total_ctns", "override_rate_cart_cost", "cost_per_carton","allocated_cost",
                    "total_drop_points","cost_per_drop_point","sales_amount"]
         township_report = [dict(zip(tr_cols, r)) for r in await cursor.fetchall()]
         for tw in township_report:
             tw["target_date"] = target_date
-            for k in ["ctns","driver_total_ctns","rate_cart_cost","cost_per_carton","allocated_cost","total_drop_points","cost_per_drop_point","sales_amount"]:
+            for k in ["ctns","driver_total_ctns","rate_cart_cost", "cost_per_carton","allocated_cost","total_drop_points","cost_per_drop_point","sales_amount"]:
                 tw[k] = Decimal(str(tw[k])) if tw[k] is not None else Decimal("0.0")
+            for k in ["override_driver_total_ctns", "override_rate_cart_cost"]:
+                tw[k] = Decimal(str(tw[k])) if tw[k] is not None else None
 
         await cursor.execute("SELECT driver_name, override_amount, override_ctns FROM Daily_Driver_Override WHERE target_date = ?", (target_date,))
-        overrides = {r[0].strip(): {'amount': Decimal(str(r[1])), 'ctns': Decimal(str(r[2] or 0))} for r in await cursor.fetchall()}
+        overrides = {
+            r[0].strip(): {
+                'amount': Decimal(str(r[1])) if r[1] is not None else None,
+                'ctns': Decimal(str(r[2])) if r[2] is not None else None
+            } for r in await cursor.fetchall()
+        }
         for it in item_report:
-            ov = overrides.get((it.get("driver_name") or "").strip(), {'amount': Decimal("0.0"), 'ctns': Decimal("0.0")})
+            ov = overrides.get((it.get("driver_name") or "").strip(), {'amount': None, 'ctns': None})
             it["override_amount"] = ov['amount']
             it["override_ctns"] = ov['ctns']
         for tw in township_report:
-            ov = overrides.get((tw.get("driver_name") or "").strip(), {'amount': Decimal("0.0"), 'ctns': Decimal("0.0")})
+            ov = overrides.get((tw.get("driver_name") or "").strip(), {'amount': None, 'ctns': None})
             tw["override_amount"] = ov['amount']
             tw["override_ctns"] = ov['ctns']
 
@@ -2129,12 +2173,18 @@ def _aggregate_reports(daily_datas: List[dict]):
                     "item_code": item.get("item_code", ""), "item_name": item.get("item_name", ""), 
                     "principal": item.get("principal", ""), "brand": item.get("brand", ""),
                     "ctns": Decimal("0.0"), "allocated_cost": Decimal("0.0"), "driver_total_ctns": Decimal("0.0"), 
+                    "override_driver_total_ctns": Decimal(str(item.get("override_driver_total_ctns"))) if item.get("override_driver_total_ctns") is not None else None, 
                     "rate_cart_cost": Decimal(str(item.get("rate_cart_cost", Decimal("0.0")))), 
-                    "override_amount": Decimal(str(item.get("override_amount", Decimal("0.0")))), "sales_amount": Decimal("0.0")
+                    "override_rate_cart_cost": Decimal(str(item.get("override_rate_cart_cost"))) if item.get("override_rate_cart_cost") is not None else None, 
+                    "override_amount": Decimal(str(item.get("override_amount"))) if item.get("override_amount") is not None else None,
+                    "override_ctns": Decimal(str(item.get("override_ctns"))) if item.get("override_ctns") is not None else None,
+                    "sales_amount": Decimal("0.0")
                 }
             else:
                 item_report_dict[i_key]["rate_cart_cost"] = Decimal(str(item.get("rate_cart_cost", item_report_dict[i_key]["rate_cart_cost"])))
-                item_report_dict[i_key]["override_amount"] = Decimal(str(item.get("override_amount", item_report_dict[i_key]["override_amount"])))
+                item_report_dict[i_key]["override_rate_cart_cost"] = Decimal(str(item.get("override_rate_cart_cost"))) if item.get("override_rate_cart_cost") is not None else None
+                item_report_dict[i_key]["override_amount"] = Decimal(str(item.get("override_amount"))) if item.get("override_amount") is not None else item_report_dict[i_key]["override_amount"]
+                item_report_dict[i_key]["override_ctns"] = Decimal(str(item.get("override_ctns"))) if item.get("override_ctns") is not None else item_report_dict[i_key]["override_ctns"]
 
             item_report_dict[i_key]["ctns"] += Decimal(str(item.get("ctns", Decimal("0.0"))))
             item_report_dict[i_key]["allocated_cost"] += Decimal(str(item.get("allocated_cost", Decimal("0.0"))))
@@ -2150,13 +2200,19 @@ def _aggregate_reports(daily_datas: List[dict]):
                     "branch": tw.get("branch", ""), "driver_name": tw.get("driver_name", ""), 
                     "township": tw.get("township", ""), "customer_code": tw.get("customer_code", ""), 
                     "contact_person": tw.get("contact_person", ""), "ctns": Decimal("0.0"), "allocated_cost": Decimal("0.0"), 
-                    "driver_total_ctns": Decimal("0.0"), "rate_cart_cost": Decimal(str(tw.get("rate_cart_cost", Decimal("0.0")))), 
-                    "override_amount": Decimal(str(tw.get("override_amount", Decimal("0.0")))),
+                    "driver_total_ctns": Decimal("0.0"), 
+                    "override_driver_total_ctns": Decimal(str(tw.get("override_driver_total_ctns"))) if tw.get("override_driver_total_ctns") is not None else None, 
+                    "rate_cart_cost": Decimal(str(tw.get("rate_cart_cost", Decimal("0.0")))), 
+                    "override_rate_cart_cost": Decimal(str(tw.get("override_rate_cart_cost"))) if tw.get("override_rate_cart_cost") is not None else None, 
+                    "override_amount": Decimal(str(tw.get("override_amount"))) if tw.get("override_amount") is not None else None,
+                    "override_ctns": Decimal(str(tw.get("override_ctns"))) if tw.get("override_ctns") is not None else None,
                     "total_drop_points": Decimal("0.0"), "sales_amount": Decimal("0.0")
                 }
             else:
                 township_report_dict[t_key]["rate_cart_cost"] = Decimal(str(tw.get("rate_cart_cost", township_report_dict[t_key]["rate_cart_cost"])))
-                township_report_dict[t_key]["override_amount"] = Decimal(str(tw.get("override_amount", township_report_dict[t_key]["override_amount"])))
+                township_report_dict[t_key]["override_rate_cart_cost"] = Decimal(str(tw.get("override_rate_cart_cost"))) if tw.get("override_rate_cart_cost") is not None else None
+                township_report_dict[t_key]["override_amount"] = Decimal(str(tw.get("override_amount"))) if tw.get("override_amount") is not None else township_report_dict[t_key]["override_amount"]
+                township_report_dict[t_key]["override_ctns"] = Decimal(str(tw.get("override_ctns"))) if tw.get("override_ctns") is not None else township_report_dict[t_key]["override_ctns"]
 
             township_report_dict[t_key]["ctns"] += Decimal(str(tw.get("ctns", Decimal("0.0"))))
             township_report_dict[t_key]["allocated_cost"] += Decimal(str(tw.get("allocated_cost", Decimal("0.0"))))
@@ -2183,10 +2239,7 @@ def _aggregate_reports(daily_datas: List[dict]):
 @app.post("/account/daily-override")
 async def save_daily_override(data: DriverOverrideData, user: dict = Depends(require_permission("view_daily_report"))):
     try:
-        data.override_amount = data.override_amount if data.override_amount is not None else Decimal("0.0")
-        data.override_ctns = data.override_ctns if data.override_ctns is not None else Decimal("0.0")
-        
-        if data.override_amount == Decimal("0.0") and data.override_ctns == Decimal("0.0"):
+        if data.override_amount is None and data.override_ctns is None:
             raise HTTPException(status_code=400, detail="Either Override Amount or Override Ctns must be provided.")
 
         conn = await get_logistic_connection()
@@ -2201,10 +2254,10 @@ async def save_daily_override(data: DriverOverrideData, user: dict = Depends(req
 
         if existing:
             old_amount = existing[0]
-            old_ctns = existing[1] or 0
+            old_ctns = existing[1]
             
-            old_cost_str = str(old_amount)
-            new_cost_str = str(data.override_amount)
+            old_cost_str = str(old_amount) if old_amount is not None else ""
+            new_cost_str = str(data.override_amount) if data.override_amount is not None else ""
             
             if old_cost_str != new_cost_str:
                 await cursor.execute("""
@@ -2212,16 +2265,20 @@ async def save_daily_override(data: DriverOverrideData, user: dict = Depends(req
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (data.target_date, data.driver_name, user_id, change_date, 'Override Amount', old_cost_str, new_cost_str))
 
-            if str(old_ctns) != str(data.override_ctns):
+            old_ctns_str = str(old_ctns) if old_ctns is not None else ""
+            new_ctns_str = str(data.override_ctns) if data.override_ctns is not None else ""
+
+            if old_ctns_str != new_ctns_str:
                 await cursor.execute("""
                     INSERT INTO Driver_Override_Change_Log (target_date, driver_name, changed_by, change_date, field_name, old_value, new_value)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (data.target_date, data.driver_name, user_id, change_date, 'Override Ctns', str(old_ctns), str(data.override_ctns)))
+                """, (data.target_date, data.driver_name, user_id, change_date, 'Override Ctns', old_ctns_str, new_ctns_str))
         else:
+            new_cost_str = str(data.override_amount) if data.override_amount is not None else ""
             await cursor.execute("""
                 INSERT INTO Driver_Override_Change_Log (target_date, driver_name, changed_by, change_date, field_name, old_value, new_value)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (data.target_date, data.driver_name, user_id, change_date, 'Record Created', None, str(data.override_amount)))
+            """, (data.target_date, data.driver_name, user_id, change_date, 'Record Created', None, new_cost_str))
 
         await cursor.execute("""
             MERGE Daily_Driver_Override AS target
@@ -2296,7 +2353,7 @@ async def get_daily_overrides(target_date: str, user: dict = Depends(require_per
         await cursor.execute("SELECT id, target_date, driver_name, override_amount, override_ctns FROM Daily_Driver_Override WHERE target_date = ?", (target_date,))
         rows = await cursor.fetchall()
         await conn.close()
-        return [{"id": r[0], "target_date": r[1], "driver_name": r[2], "override_amount": r[3], "override_ctns": r[4] or 0} for r in rows]
+        return [{"id": r[0], "target_date": r[1], "driver_name": r[2], "override_amount": r[3], "override_ctns": r[4]} for r in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching overrides: {str(e)}")
 
@@ -5451,19 +5508,30 @@ async def export_daily_rate_cut_report(
             cell.border = border
 
         for idx, row in enumerate(report_data, 2):
+            driver_total = float(row.get("override_driver_total_ctns")) if row.get("override_driver_total_ctns") is not None else float(row.get("driver_total_ctns", 0))
+            branch_cost = float(row.get("override_rate_cart_cost")) if row.get("override_rate_cart_cost") is not None else float(row.get("rate_cart_cost", 0))
+            
             if report_type == 'item':
                 row_data = [
                     row.get("bu", "-"), row.get("target_date", ""), row.get("branch", ""), row.get("driver_name", ""),
                     row.get("principal", ""), row.get("brand", ""), row.get("item_code", ""),
-                    row.get("item_name", ""), float(row.get("ctns", 0)), float(row.get("driver_total_ctns", 0)), float(row.get("override_ctns", 0)),
-                    float(row.get("rate_cart_cost", 0)), float(row.get("override_amount", 0)), float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
+                    row.get("item_name", ""), float(row.get("ctns", 0)), 
+                    driver_total, 
+                    float(row.get("override_ctns")) if row.get("override_ctns") is not None else None,
+                    branch_cost, 
+                    float(row.get("override_amount")) if row.get("override_amount") is not None else None, 
+                    float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
                     float(row.get("sales_amount", 0))
                 ]
             else:
                 row_data = [
                     row.get("branch", ""), row.get("target_date", ""), row.get("driver_name", ""), row.get("township", ""),
                     row.get("customer_code", ""), row.get("contact_person", ""), float(row.get("ctns", 0)),
-                    float(row.get("driver_total_ctns", 0)), float(row.get("override_ctns", 0)), float(row.get("rate_cart_cost", 0)), float(row.get("override_amount", 0)), float(row.get("total_drop_points", 0)),
+                    driver_total, 
+                    float(row.get("override_ctns")) if row.get("override_ctns") is not None else None, 
+                    branch_cost, 
+                    float(row.get("override_amount")) if row.get("override_amount") is not None else None, 
+                    float(row.get("total_drop_points", 0)),
                     float(row.get("cost_per_drop_point", 0)), float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
                     float(row.get("sales_amount", 0))
                 ]
