@@ -5490,13 +5490,13 @@ async def export_daily_rate_cut_report(
         if report_type == 'item':
             headers = [
                 "BU", "Date", "Branch", "Driver Name", "Principal", "Brand", "Item Code", "Item Name", 
-                "Cartons", "Driver Total (Ctns)", "Override Ctns", "Branch Rate Cost", "Override Amount", "Cost per Carton",
+                "Cartons", "Driver Total (Ctns)", "Original Driver Total (Ctns)", "Override Ctns", "Total Rate Cart Cost", "Original Rate Cart Cost", "Override Amount", "Cost per Carton",
                 "Allocated Cost", "Sales Amount"
             ]
         else:
             headers = [
                 "Branch", "Date", "Driver Name", "Township", "Customer Code", "Contact Person", 
-                "Customer Total (Ctns)", "Driver Total (Ctns)", "Override Ctns", "Branch Rate Cost", "Override Amount", "Total Drop Points",
+                "Customer Total (Ctns)", "Driver Total (Ctns)", "Original Driver Total (Ctns)", "Override Ctns", "Total Rate Cart Cost", "Original Rate Cart Cost", "Override Amount", "Total Drop Points",
                 "Cost per Drop Point", "Cost per Carton", "Allocated Cost", "Sales Amount"
             ]
 
@@ -5511,14 +5511,17 @@ async def export_daily_rate_cut_report(
             driver_total = float(row.get("override_driver_total_ctns")) if row.get("override_driver_total_ctns") is not None else float(row.get("driver_total_ctns", 0))
             branch_cost = float(row.get("override_rate_cart_cost")) if row.get("override_rate_cart_cost") is not None else float(row.get("rate_cart_cost", 0))
             
+            original_driver_total = float(row.get("driver_total_ctns", 0))
+            original_branch_cost = float(row.get("rate_cart_cost", 0))
+            
             if report_type == 'item':
                 row_data = [
                     row.get("bu", "-"), row.get("target_date", ""), row.get("branch", ""), row.get("driver_name", ""),
                     row.get("principal", ""), row.get("brand", ""), row.get("item_code", ""),
                     row.get("item_name", ""), float(row.get("ctns", 0)), 
-                    driver_total, 
+                    driver_total, original_driver_total,
                     float(row.get("override_ctns")) if row.get("override_ctns") is not None else None,
-                    branch_cost, 
+                    branch_cost, original_branch_cost,
                     float(row.get("override_amount")) if row.get("override_amount") is not None else None, 
                     float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
                     float(row.get("sales_amount", 0))
@@ -5527,9 +5530,9 @@ async def export_daily_rate_cut_report(
                 row_data = [
                     row.get("branch", ""), row.get("target_date", ""), row.get("driver_name", ""), row.get("township", ""),
                     row.get("customer_code", ""), row.get("contact_person", ""), float(row.get("ctns", 0)),
-                    driver_total, 
+                    driver_total, original_driver_total,
                     float(row.get("override_ctns")) if row.get("override_ctns") is not None else None, 
-                    branch_cost, 
+                    branch_cost, original_branch_cost,
                     float(row.get("override_amount")) if row.get("override_amount") is not None else None, 
                     float(row.get("total_drop_points", 0)),
                     float(row.get("cost_per_drop_point", 0)), float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),

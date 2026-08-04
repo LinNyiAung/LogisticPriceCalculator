@@ -3810,13 +3810,21 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <div>Driver Total (Ctns)</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.driver_total_ctns} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_total_ctns: e.target.value})} />
                                             </th>
+                                            <th className="border p-2 text-right">
+                                                <div>Original Driver Total (Ctns)</div>
+                                                <input type="text" disabled className="w-full mt-1 p-1 border rounded text-xs font-normal text-left bg-gray-50 cursor-not-allowed" />
+                                            </th>
                                             <th className="border p-2 text-right text-green-700">
                                                 <div>Override Ctns</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.override_ctns || ''} onChange={(e) => setDailyReportFilters({...dailyReportFilters, override_ctns: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right">
-                                                <div>Rate Cart Cost</div>
+                                                <div>Total Rate Cart Cost</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.rate_cart_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, rate_cart_cost: e.target.value})} />
+                                            </th>
+                                            <th className="border p-2 text-right">
+                                                <div>Original Rate Cart Cost</div>
+                                                <input type="text" disabled className="w-full mt-1 p-1 border rounded text-xs font-normal text-left bg-gray-50 cursor-not-allowed" />
                                             </th>
                                             <th className="border p-2 text-right text-indigo-700">
                                                 <div>Override Amount</div>
@@ -3838,7 +3846,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                     </thead>
                                     <tbody>
                                         {displayedDailyItem.length === 0 ? (
-                                            <tr><td colSpan="15" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date/range or matching filters.</td></tr>
+                                            <tr><td colSpan="17" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date/range or matching filters.</td></tr>
                                         ) : (
                                             displayedDailyItem.map((row, idx) => (
                                                 <tr key={idx} className="hover:bg-gray-50 text-sm">
@@ -3852,8 +3860,10 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2">{row.item_name}</td>
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_driver_total_ctns != null ? row.override_driver_total_ctns : row.driver_total_ctns)}</td>
+                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
                                                     <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.override_ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_rate_cart_cost != null ? row.override_rate_cart_cost : row.rate_cart_cost)}</td>
+                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.rate_cart_cost)}</td>
                                                     <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.override_amount)}</td>
                                                     <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
                                                     <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
@@ -3915,13 +3925,21 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <div>Driver Total (Ctns)</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.driver_total_ctns} onChange={(e) => setTownshipFilters({...townshipFilters, driver_total_ctns: e.target.value})} />
                                             </th>
+                                            <th className="border p-2 text-right">
+                                                <div>Original Driver Total (Ctns)</div>
+                                                <input type="text" disabled className="w-full mt-1 p-1 border rounded text-xs font-normal text-left bg-gray-50 cursor-not-allowed" />
+                                            </th>
                                             <th className="border p-2 text-right text-green-700">
                                                 <div>Override Ctns</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.override_ctns || ''} onChange={(e) => setTownshipFilters({...townshipFilters, override_ctns: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right">
-                                                <div>Rate Cart Cost</div>
+                                                <div>Total Rate Cart Cost</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.rate_cart_cost} onChange={(e) => setTownshipFilters({...townshipFilters, rate_cart_cost: e.target.value})} />
+                                            </th>
+                                            <th className="border p-2 text-right">
+                                                <div>Original Rate Cart Cost</div>
+                                                <input type="text" disabled className="w-full mt-1 p-1 border rounded text-xs font-normal text-left bg-gray-50 cursor-not-allowed" />
                                             </th>
                                             <th className="border p-2 text-right text-indigo-700">
                                                 <div>Override Amount</div>
@@ -3951,7 +3969,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                     </thead>
                                     <tbody>
                                         {displayedDailyTownship.length === 0 ? (
-                                            <tr><td colSpan="15" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
+                                            <tr><td colSpan="17" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
                                         ) : (
                                             displayedDailyTownship.map((row, idx) => (
                                                 <tr key={idx} className="hover:bg-gray-50 text-sm">
@@ -3963,8 +3981,10 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2">{row.contact_person}</td>
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_driver_total_ctns != null ? row.override_driver_total_ctns : row.driver_total_ctns)}</td>
+                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
                                                     <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.override_ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_rate_cart_cost != null ? row.override_rate_cart_cost : row.rate_cart_cost)}</td>
+                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.rate_cart_cost)}</td>
                                                     <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.override_amount)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.total_drop_points)}</td>
                                                     <td className="border p-2 text-right font-bold text-orange-600">{formatNumber(row.cost_per_drop_point)}</td>
