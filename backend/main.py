@@ -2046,15 +2046,15 @@ async def generate_and_save_daily_report(target_date: str):
             await cursor.execute("""
                 INSERT INTO Daily_Item_Report
                 (target_date, bu, branch, driver_name, item_code, item_name, principal, brand,
-                 ctns, allocated_cost, cost_per_carton, driver_total_ctns, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, sales_amount, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 ctns, allocated_cost, cost_per_carton, driver_total_ctns, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, sales_amount, created_at, created_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 target_date, it.get("bu",""), it.get("branch",""), it.get("driver_name",""),
                 it.get("item_code",""), it.get("item_name",""), it.get("principal",""), it.get("brand",""),
                 it.get("ctns", Decimal("0.0")), it.get("allocated_cost", Decimal("0.0")), it.get("cost_per_carton", Decimal("0.0")),
                 it.get("driver_total_ctns", Decimal("0.0")), it.get("rate_cart_cost", Decimal("0.0")), 
                 it.get("override_driver_total_ctns"), it.get("override_rate_cart_cost"), 
-                it.get("sales_amount", Decimal("0.0")), now_str
+                it.get("sales_amount", Decimal("0.0")), now_str, 30
             ))
 
         await cursor.execute("DELETE FROM Daily_Township_Report WHERE target_date = ?", (target_date,))
@@ -2063,15 +2063,15 @@ async def generate_and_save_daily_report(target_date: str):
                 INSERT INTO Daily_Township_Report
                 (target_date, branch, driver_name, township, customer_code, contact_person,
                  ctns, driver_total_ctns, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, cost_per_carton, allocated_cost,
-                 total_drop_points, cost_per_drop_point, sales_amount, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 total_drop_points, cost_per_drop_point, sales_amount, created_at, created_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 target_date, tw.get("branch",""), tw.get("driver_name",""), tw.get("township",""),
                 tw.get("customer_code",""), tw.get("contact_person",""),
                 tw.get("ctns", Decimal("0.0")), tw.get("driver_total_ctns", Decimal("0.0")), tw.get("rate_cart_cost", Decimal("0.0")),
                 tw.get("override_driver_total_ctns"), tw.get("override_rate_cart_cost"),
                 tw.get("cost_per_carton", Decimal("0.0")), tw.get("allocated_cost", Decimal("0.0")),
-                tw.get("total_drop_points", Decimal("0.0")), tw.get("cost_per_drop_point", Decimal("0.0")), tw.get("sales_amount", Decimal("0.0")), now_str
+                tw.get("total_drop_points", Decimal("0.0")), tw.get("cost_per_drop_point", Decimal("0.0")), tw.get("sales_amount", Decimal("0.0")), now_str, 30
             ))
 
         await conn.commit()
