@@ -1,4 +1,5 @@
 import logging
+import logging.handlers
 import aioodbc
 import json
 import datetime
@@ -25,6 +26,48 @@ from fastapi import Request
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# --- Logging Configuration ---
+# Previously NSSM captured stdout/stderr to files (AppStdout/AppStderr).
+# Now the app manages its own log files, independent of how it's launched.
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+log_formatter = logging.Formatter(LOG_FORMAT)
+
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+
+# General log: INFO and above, rotates daily at midnight, keeps 14 days
+info_file_handler = logging.handlers.TimedRotatingFileHandler(
+    filename=os.path.join(LOG_DIR, "app.log"),
+    when="midnight",
+    backupCount=14,
+    encoding="utf-8",
+)
+info_file_handler.setLevel(logging.INFO)
+info_file_handler.setFormatter(log_formatter)
+root_logger.addHandler(info_file_handler)
+
+# Dedicated error log: ERROR and above only, rotates at 5MB, keeps 10 backups
+error_file_handler = logging.handlers.RotatingFileHandler(
+    filename=os.path.join(LOG_DIR, "error.log"),
+    maxBytes=5 * 1024 * 1024,
+    backupCount=10,
+    encoding="utf-8",
+)
+error_file_handler.setLevel(logging.ERROR)
+error_file_handler.setFormatter(log_formatter)
+root_logger.addHandler(error_file_handler)
+
+# Console output too, useful when running interactively (e.g. `python main.py`)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(log_formatter)
+root_logger.addHandler(console_handler)
+
+logger = logging.getLogger(__name__)
 
 # --- Auth Configuration ---
 SECRET_KEY = "CHANGE_THIS_TO_A_SUPER_SECRET_KEY"  # IMPORTANT: Change this!
@@ -640,10 +683,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # --- Database Connections ---
 
@@ -5666,4 +5705,12 @@ async def export_submitted_allocation_report(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    # Attach the same file handlers to uvicorn's loggers so server-level
+    # logs (startup, access, errors) land in the same files as app logs.
+    for uv_logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        uv_logger = logging.getLogger(uv_logger_name)
+        uv_logger.handlers = []
+        uv_logger.propagate = True  # bubble up to root_logger's handlers
+
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_config=None)
