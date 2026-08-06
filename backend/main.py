@@ -67,6 +67,18 @@ console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(log_formatter)
 root_logger.addHandler(console_handler)
 
+# Route uvicorn's own loggers into the same handlers as above.
+# This must run at import time (not just inside `if __name__ == "__main__"`),
+# because when the app is launched as `uvicorn main:app ...` (e.g. from NSSM),
+# this module is imported rather than executed as a script, so the
+# `__main__` guard never runs. Uvicorn otherwise installs its own handlers
+# on these loggers with propagate=False, which is why uvicorn.access /
+# uvicorn.error lines were missing from app.log in production.
+for uv_logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    uv_logger = logging.getLogger(uv_logger_name)
+    uv_logger.handlers = []
+    uv_logger.propagate = True
+
 logger = logging.getLogger(__name__)
 
 # --- Auth Configuration ---
@@ -668,8 +680,23 @@ async def startup_db():
     scheduler.start()
     logger.info("Schedulers started.")
 
+def _route_uvicorn_logs_to_file():
+    """Ensure uvicorn's loggers feed into our file handlers.
+
+    Uvicorn applies its own logging config (handlers + propagate=False)
+    when the server starts. Depending on whether the process was launched
+    via `python main.py` or `uvicorn main:app ...` (as NSSM does), that
+    can happen after our module-level setup runs. Re-applying here, inside
+    the lifespan startup, guarantees it takes effect last either way.
+    """
+    for uv_logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        uv_logger = logging.getLogger(uv_logger_name)
+        uv_logger.handlers = []
+        uv_logger.propagate = True
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _route_uvicorn_logs_to_file()
     await startup_db()
     yield
 
