@@ -2097,7 +2097,7 @@ async def _get_daily_report_data(target_date: str):
         "township_report": township_report_list
     }
 
-async def generate_and_save_daily_report(target_date: str):
+async def generate_and_save_daily_report(target_date: str, user_id: int = 30):
     try:
         data = await _get_daily_report_data(target_date)
         if not data["item_report"] and not data["township_report"]:
@@ -2107,20 +2107,35 @@ async def generate_and_save_daily_report(target_date: str):
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        # Check if a report for this date already exists to track edit status
+        await cursor.execute("SELECT TOP 1 created_at, created_by FROM Daily_Item_Report WHERE target_date = ?", (target_date,))
+        existing_report = await cursor.fetchone()
+        
+        if existing_report:
+            orig_created_at = existing_report[0] if existing_report[0] else now_str
+            orig_created_by = existing_report[1] if existing_report[1] else user_id
+            edited_at = now_str
+            edited_by = user_id 
+        else:
+            orig_created_at = now_str
+            orig_created_by = user_id
+            edited_at = None
+            edited_by = None
+
         await cursor.execute("DELETE FROM Daily_Item_Report WHERE target_date = ?", (target_date,))
         for it in data["item_report"]:
             await cursor.execute("""
                 INSERT INTO Daily_Item_Report
                 (target_date, bu, branch, driver_name, item_code, item_name, principal, brand,
-                 ctns, allocated_cost, cost_per_carton, driver_total_ctns, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, sales_amount, created_at, created_by)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 ctns, allocated_cost, cost_per_carton, driver_total_ctns, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, sales_amount, created_at, created_by, edited_at, edited_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 target_date, it.get("bu",""), it.get("branch",""), it.get("driver_name",""),
                 it.get("item_code",""), it.get("item_name",""), it.get("principal",""), it.get("brand",""),
                 it.get("ctns", Decimal("0.0")), it.get("allocated_cost", Decimal("0.0")), it.get("cost_per_carton", Decimal("0.0")),
                 it.get("driver_total_ctns", Decimal("0.0")), it.get("rate_cart_cost", Decimal("0.0")), 
                 it.get("override_driver_total_ctns"), it.get("override_rate_cart_cost"), 
-                it.get("sales_amount", Decimal("0.0")), now_str, 30
+                it.get("sales_amount", Decimal("0.0")), orig_created_at, orig_created_by, edited_at, edited_by
             ))
 
         await cursor.execute("DELETE FROM Daily_Township_Report WHERE target_date = ?", (target_date,))
@@ -2129,15 +2144,15 @@ async def generate_and_save_daily_report(target_date: str):
                 INSERT INTO Daily_Township_Report
                 (target_date, branch, driver_name, township, customer_code, contact_person,
                  ctns, driver_total_ctns, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, cost_per_carton, allocated_cost,
-                 total_drop_points, cost_per_drop_point, sales_amount, created_at, created_by)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 total_drop_points, cost_per_drop_point, sales_amount, created_at, created_by, edited_at, edited_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 target_date, tw.get("branch",""), tw.get("driver_name",""), tw.get("township",""),
                 tw.get("customer_code",""), tw.get("contact_person",""),
                 tw.get("ctns", Decimal("0.0")), tw.get("driver_total_ctns", Decimal("0.0")), tw.get("rate_cart_cost", Decimal("0.0")),
                 tw.get("override_driver_total_ctns"), tw.get("override_rate_cart_cost"),
                 tw.get("cost_per_carton", Decimal("0.0")), tw.get("allocated_cost", Decimal("0.0")),
-                tw.get("total_drop_points", Decimal("0.0")), tw.get("cost_per_drop_point", Decimal("0.0")), tw.get("sales_amount", Decimal("0.0")), now_str, 30
+                tw.get("total_drop_points", Decimal("0.0")), tw.get("cost_per_drop_point", Decimal("0.0")), tw.get("sales_amount", Decimal("0.0")), orig_created_at, orig_created_by, edited_at, edited_by
             ))
 
         await conn.commit()
@@ -2350,7 +2365,7 @@ async def save_daily_override(data: DriverOverrideData, user: dict = Depends(req
         await log_user_activity(user_id, "ADD_EDIT_DRIVER_OVERRIDE", f"Set override {data.override_amount} for {data.driver_name} on {data.target_date}")
         
         # Trigger an automatic recalculation for this date
-        await generate_and_save_daily_report(data.target_date)
+        await generate_and_save_daily_report(data.target_date, user_id=user['id'])
         
         return {"message": "Override saved and report recalculated successfully"}
     except Exception as e:
@@ -2441,7 +2456,7 @@ async def delete_daily_override(override_id: int, target_date: str, user: dict =
         await conn.close()
         
         await log_user_activity(user['id'], "DELETE_DRIVER_OVERRIDE", f"Deleted override ID {override_id}")
-        await generate_and_save_daily_report(target_date)
+        await generate_and_save_daily_report(target_date, user_id=user['id'])
         
         return {"message": "Override deleted and report recalculated successfully"}
     except Exception as e:
