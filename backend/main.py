@@ -711,6 +711,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+async def health_check():
+    """Lightweight liveness endpoint for the external watchdog.
+    Deliberately does not touch the database - it only needs to prove
+    the HTTP listener is alive and accepting connections."""
+    return {"status": "ok"}
+
 # --- Database Connections ---
 
 async def get_dwbi_connection():
