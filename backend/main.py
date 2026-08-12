@@ -3079,15 +3079,41 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
         doc_nums_json = json.dumps(data.doc_nums)
         created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        await cursor.execute("SELECT log_pric, code, name FROM SD_Code")
+        sd_code_db_map = {str(row[0]).strip().lower(): {"code": row[1], "name": row[2]} for row in await cursor.fetchall() if row[0]}
+        
+        channel_name = data.channel or ""
+        is_sd_channel = channel_name in ["SD", "Telecom SD"]
+        is_branch_channel = channel_name in ["Branch", "Outlet", "Telecom Branch"]
+
         async def _upsert_products(calc_id, products):
             await cursor.execute("DELETE FROM Calculation_Products WHERE calc_id = ?", (calc_id,))
             for p in products:
-                # If original values exist, it was edited. Store original in base columns, edited in edited columns
                 db_ctns = p.get("original_ctns") if p.get("original_ctns") is not None else p.get("ctns", 0)
                 db_weight = p.get("original_weight") if p.get("original_weight") is not None else p.get("weight", 0)
                 
                 db_edited_ctns = p.get("ctns") if p.get("original_ctns") is not None else None
                 db_edited_weight = p.get("weight") if p.get("original_weight") is not None else None
+
+                b_code_val = p.get("b_code", "")
+                b_name_val = p.get("b_name", "")
+                b_desc_val = p.get("b_desc", "")
+                b_dept_val = p.get("b_dept", "")
+                b_principal_val = p.get("b_principal", "")
+                s_dept_val = p.get("s_dept", "")
+                s_principal_val = p.get("s_principal", "")
+
+                if is_sd_channel:
+                    principal_val = str(p.get("principal", "")).strip().lower()
+                    sd_info = sd_code_db_map.get(principal_val, {})
+                    b_code_val = sd_info.get("code", b_code_val)
+                    b_name_val = sd_info.get("name", b_name_val)
+                    b_desc_val = sd_info.get("name", b_desc_val)
+                    b_dept_val = None
+                    b_principal_val = None
+                elif is_branch_channel:
+                    s_dept_val = None
+                    s_principal_val = None
 
                 await cursor.execute("""
                     INSERT INTO Calculation_Products
@@ -3101,9 +3127,9 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
                     p.get("code", ""), p.get("name", ""),
                     Decimal(str(db_weight)), p.get("doc_date", ""), p.get("sin_no", ""),
                     p.get("principal", ""), p.get("brand", ""), Decimal(str(db_ctns)),
-                    p.get("bu", ""), p.get("b_code", ""), p.get("b_name", ""),
-                    p.get("b_dept", ""), p.get("b_principal", ""), p.get("b_desc", ""),
-                    p.get("s_dept", ""), p.get("s_principal", ""),
+                    p.get("bu", ""), b_code_val, b_name_val,
+                    b_dept_val, b_principal_val, b_desc_val,
+                    s_dept_val, s_principal_val,
                     p.get("calculation_type", ""), p.get("system_rate"),
                     Decimal(str(p.get("unit_cost", 0))), Decimal(str(p.get("total_cost", 0))),
                     p.get("standard_unit_cost"),
@@ -3115,6 +3141,25 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
         async def _upsert_posm_products(calc_id, posm_products):
             await cursor.execute("DELETE FROM Calculation_POSM_Products WHERE calc_id = ?", (calc_id,))
             for p in posm_products:
+                b_code_val = p.get("b_code", "")
+                b_name_val = p.get("b_name", "")
+                b_desc_val = p.get("b_desc", "")
+                b_dept_val = p.get("b_dept", "")
+                b_principal_val = p.get("b_principal", "")
+                s_dept_val = p.get("s_dept", "")
+                s_principal_val = p.get("s_principal", "")
+
+                if is_sd_channel:
+                    sd_info = sd_code_db_map.get("posm", {})
+                    b_code_val = sd_info.get("code", b_code_val)
+                    b_name_val = sd_info.get("name", b_name_val)
+                    b_desc_val = sd_info.get("name", b_desc_val)
+                    b_dept_val = None
+                    b_principal_val = None
+                elif is_branch_channel:
+                    s_dept_val = None
+                    s_principal_val = None
+
                 await cursor.execute("""
                     INSERT INTO Calculation_POSM_Products
                     (calc_id, department, item_name, uom, quantity, unit_cost, total_cost,
@@ -3125,9 +3170,9 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
                     p.get("department", ""), p.get("item_name", ""), p.get("uom", ""),
                     Decimal(str(p.get("quantity", 0))), Decimal(str(p.get("unit_cost", 0))),
                     Decimal(str(p.get("total_cost", 0))),
-                    p.get("b_code", ""), p.get("b_name", ""), p.get("b_dept", ""),
-                    p.get("b_principal", ""), p.get("b_desc", ""),
-                    p.get("s_dept", ""), p.get("s_principal", "")
+                    b_code_val, b_name_val, b_dept_val,
+                    b_principal_val, b_desc_val,
+                    s_dept_val, s_principal_val
                 ))
 
         if data.id:
@@ -3169,6 +3214,7 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
         return {"message": message}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error saving history: {str(e)}")
+    
 
 @app.put("/history/{record_id}/submit")
 async def submit_history_item(record_id: int, user: dict = Depends(require_permission("submit_calculation"))):
@@ -3439,7 +3485,14 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
         await cursor.execute("SELECT to_location, branch_code FROM Location_Mapping")
         loc_mapping_rows = await cursor.fetchall()
 
+        await cursor.execute("SELECT log_pric, code, name FROM SD_Code")
+        sd_code_excel_map = {str(row[0]).strip().lower(): {"code": row[1], "name": row[2]} for row in await cursor.fetchall() if row[0]}
+
         await conn.close()
+
+        channel_name = record.get('channel', '')
+        is_sd_channel = channel_name in ["SD", "Telecom SD"]
+        is_branch_channel = channel_name in ["Branch", "Outlet", "Telecom Branch"]
 
         LOCATION_CODE_MAP = {}
         for loc_row in loc_mapping_rows:
@@ -3458,8 +3511,15 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
         headers = [
             "No", "Claim Date", "Delivery Date", "SIN No", "Area", "Code", "Name", "Principal", "Brand", "Item Code", "Item", "Ctns", 
             "Price", "Total Amount", "Weight", "UOM", "Gate", "Channel", "Month", "Year", "Description for Account", 
-            "Description with cnts and price", "Branch", "B-Dept", "B-Principal", "S-Dept", "S-Principal", "BU", "Calculation ID"
+            "Description with cnts and price", "Branch"
         ]
+        
+        if not is_sd_channel:
+            headers.extend(["B-Dept", "B-Principal"])
+        if not is_branch_channel:
+            headers.extend(["S-Dept", "S-Principal"])
+            
+        headers.extend(["BU", "Calculation ID"])
         
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
         header_font = Font(bold=True, color='FFFFFF')
@@ -3500,10 +3560,24 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
                 except ValueError: doc_date_str = doc_date_val
             else: doc_date_str = str(doc_date_val) if doc_date_val else ""
 
+            b_code_val = item.get('b_code', '')
+            b_name_val = item.get('b_name', '')
             b_desc = item.get('b_desc', '')
+            
+            display_code = b_code_val
+            display_name = b_name_val
+            base_desc = b_desc.strip() if b_desc else ""
+
+            principal_val = str(item.get('principal', '')).strip().lower()
+            if is_sd_channel:
+                sd_info = sd_code_excel_map.get(principal_val, {})
+                display_code = sd_info.get('code', display_code)
+                display_name = sd_info.get('name', display_name)
+                base_desc = sd_info.get('name', base_desc)
+
             from_loc_code = _to_loc_code(record['from_loc'])
             to_loc_code = _to_loc_code(record['to_loc'])
-            desc_for_account = f"{b_desc.strip()}-{from_loc_code} to {to_loc_code}"
+            desc_for_account = f"{base_desc}-{from_loc_code} to {to_loc_code}"
 
             ctns_val = Decimal(str(item.get('ctns', 0)))
             total_cost_val = Decimal(str(item.get('total_cost', 0)))
@@ -3516,52 +3590,38 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
             raw_sin_no = str(item.get('sin_no', ''))
             clean_sin_no = raw_sin_no.replace('PDG - ', '').replace('PDG-', '').replace('PG - ', '').replace('PG-', '').strip()
 
-            # Capture the first row's Delivery Date / SIN No so the POSM Details sheet can reuse them
             if idx == 1:
                 cost_details_delivery_date = doc_date_str
                 cost_details_sin_no = clean_sin_no
 
-            ws.cell(row=row_num, column=1, value=idx).border = border
-            ws.cell(row=row_num, column=2, value=claim_date_str).border = border
-            ws.cell(row=row_num, column=3, value=doc_date_str).border = border
-            ws.cell(row=row_num, column=4, value=clean_sin_no).border = border
-            ws.cell(row=row_num, column=5, value=record['to_loc']).border = border
-            ws.cell(row=row_num, column=6, value=item.get('b_code', '')).border = border
-            ws.cell(row=row_num, column=7, value=item.get('b_name', '')).border = border
-            ws.cell(row=row_num, column=8, value=item.get('principal', '')).border = border
-            ws.cell(row=row_num, column=9, value=item.get('brand', '')).border = border
-            ws.cell(row=row_num, column=10, value=item.get('code', '')).border = border
-            ws.cell(row=row_num, column=11, value=item.get('name', '')).border = border
-            ws.cell(row=row_num, column=12, value=ctns_formatted).border = border
-            
-            ctn_price_cell = ws.cell(row=row_num, column=13, value=float(price_per_ctn)) 
-            ctn_price_cell.number_format = '#,##0.00'
-            ctn_price_cell.border = border
+            b_dept_val = item.get('b_dept', '')
+            b_principal_val = item.get('b_principal', '')
+            s_dept_val = item.get('s_dept', '')
+            s_principal_val = item.get('s_principal', '')
 
-            amt_cell = ws.cell(row=row_num, column=14, value=float(total_cost_val)) 
-            amt_cell.number_format = '#,##0.00'
-            amt_cell.border = border
+            row_vals = [
+                idx, claim_date_str, doc_date_str, clean_sin_no, record['to_loc'],
+                display_code, display_name, item.get('principal', ''), item.get('brand', ''),
+                item.get('code', ''), item.get('name', ''), ctns_formatted,
+                float(price_per_ctn), float(total_cost_val), float(item.get('weight', 0)),
+                "Kg", record['gate_name'], record.get('channel', ''), claim_month, claim_year,
+                desc_for_account, concat_desc, record['to_loc']
+            ]
 
-            weight_cell = ws.cell(row=row_num, column=15, value=float(item.get('weight', 0))) 
-            weight_cell.number_format = '#,##0.00'
-            weight_cell.border = border
+            if not is_sd_channel:
+                row_vals.extend([b_dept_val, b_principal_val])
+            if not is_branch_channel:
+                row_vals.extend([s_dept_val, s_principal_val])
 
-            ws.cell(row=row_num, column=16, value="Kg").border = border
-            ws.cell(row=row_num, column=17, value=record['gate_name']).border = border
-            ws.cell(row=row_num, column=18, value=record.get('channel', '')).border = border
-            ws.cell(row=row_num, column=19, value=claim_month).border = border
-            ws.cell(row=row_num, column=20, value=claim_year).border = border
-            ws.cell(row=row_num, column=21, value=desc_for_account).border = border
-            ws.cell(row=row_num, column=22, value=concat_desc).border = border
-            ws.cell(row=row_num, column=23, value=record['to_loc']).border = border
-            ws.cell(row=row_num, column=24, value=item.get('b_dept', '')).border = border
-            ws.cell(row=row_num, column=25, value=item.get('b_principal', '')).border = border
-            ws.cell(row=row_num, column=26, value=item.get('s_dept', '')).border = border
-            ws.cell(row=row_num, column=27, value=item.get('s_principal', '')).border = border
-            ws.cell(row=row_num, column=28, value=item.get('bu', '')).border = border 
-            ws.cell(row=row_num, column=29, value=record['id']).border = border
+            row_vals.extend([item.get('bu', ''), record['id']])
 
-        for col in ws.columns:
+            for col_num, val in enumerate(row_vals, 1):
+                cell = ws.cell(row=row_num, column=col_num, value=val)
+                cell.border = border
+                if isinstance(val, (int, float, Decimal)) and col_num in (13, 14, 15):
+                    cell.number_format = '#,##0.00'
+        
+        for col in ws.columns:    
             max_length = 0
             col_letter = col[0].column_letter
             for cell in col:
@@ -3586,9 +3646,16 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
             posm_headers = [
                 "No", "Claim Date", "Delivery Date", "SIN No", "Area", "Name", "Department", "Principal", "Brand",
                 "Item", "Quantity", "Unit Cost", "Total cost", "Uom", "Gate", "Channel", "Month", "Year",
-                "Description for Account", "Description with pcs and price", "Branch", "B-Dept", "B-Principal",
-                "S-Dept", "S-Principal", "Calculation ID"
+                "Description for Account", "Description with pcs and price", "Branch"
             ]
+            
+            if not is_sd_channel:
+                posm_headers.extend(["B-Dept", "B-Principal"])
+            if not is_branch_channel:
+                posm_headers.extend(["S-Dept", "S-Principal"])
+                
+            posm_headers.append("Calculation ID")
+
             for col_num, header in enumerate(posm_headers, 1):
                 cell = ws2.cell(row=1, column=col_num, value=header)
                 cell.fill = header_fill
@@ -3601,7 +3668,6 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
 
             for idx, r in enumerate(posm_rows, 1):
                 row_num = idx + 1
-                # Unpack the new mapped columns
                 department, item_name, uom, quantity, unit_cost, total_cost, b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal = r
 
                 qty_val = Decimal(str(quantity or 0))
@@ -3609,25 +3675,43 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
                 unit_cost_val = Decimal(str(unit_cost or 0))
                 unit_cost_formatted = int(unit_cost_val) if float(unit_cost_val).is_integer() else round(unit_cost_val, 2)
 
-                # Dynamic POSM Description from Branch Code mapping (falls back if mapping is missing)
+                display_name = b_name or "Transport Charges-POSM"
                 b_desc_clean = b_desc.strip() if b_desc else "POSM-Transport Charges"
+
+                if is_sd_channel:
+                    sd_info = sd_code_excel_map.get("posm", {})
+                    display_name = sd_info.get('name', display_name)
+                    b_desc_clean = sd_info.get('name', b_desc_clean)
+
                 posm_desc_account = f"{b_desc_clean}-{from_loc_code} to {to_loc_code}"
                 posm_desc_with_price = f"{posm_desc_account} - {qty_formatted} pcs @{unit_cost_formatted} kyats"
 
+                b_dept_val = b_dept or "Logistics"
+                b_principal_val = b_principal or "POSM"
+                s_dept_val = s_dept or "Logistics"
+                s_principal_val = s_principal or "POSM"
+
                 row_vals = [
                     idx, claim_date_str, cost_details_delivery_date, cost_details_sin_no, record['to_loc'],
-                    b_name or "Transport Charges-POSM", department or "", b_principal or "POSM", b_principal or "POSM", item_name or "", float(qty_val),
+                    display_name, department or "", b_principal or "POSM", b_principal or "POSM", item_name or "", float(qty_val),
                     float(unit_cost_val), float(total_cost or 0), uom or "", record['gate_name'],
                     record.get('channel', ''), claim_month, claim_year, posm_desc_account, posm_desc_with_price,
-                    record['to_loc'], b_dept or "Logistics", b_principal or "POSM", s_dept or "Logistics", s_principal or "POSM", record_id
+                    record['to_loc']
                 ]
+                
+                if not is_sd_channel:
+                    row_vals.extend([b_dept_val, b_principal_val])
+                if not is_branch_channel:
+                    row_vals.extend([s_dept_val, s_principal_val])
+                
+                row_vals.append(record_id)
+
                 for col_num, val in enumerate(row_vals, 1):
                     cell = ws2.cell(row=row_num, column=col_num, value=val)
                     cell.border = border
                     if isinstance(val, (int, float, Decimal)) and col_num in (11, 12, 13):
                         cell.number_format = '#,##0.00'
-
-            for col in ws2.columns:
+            for col in ws2.columns:    
                 max_length = 0
                 col_letter = col[0].column_letter
                 for cell in col:
