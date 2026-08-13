@@ -66,7 +66,7 @@ Write-Log "App unresponsive. Consecutive failures: $failCount / $FailureThreshol
 if ($failCount -ge $FailureThreshold) {
     Write-Log "Threshold reached - restarting NSSM service '$ServiceName'."
     try {
-        & nssm restart $ServiceName
+        & "C:\nssm-2.24\win64\nssm.exe" restart $ServiceName
         Write-Log "Restart command issued for '$ServiceName'."
     } catch {
         Write-Log "ERROR: Failed to restart service - $($_.Exception.Message)"
