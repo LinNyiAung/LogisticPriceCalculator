@@ -906,6 +906,10 @@ const [overrideDate, setOverrideDate] = useState('');
   const [itemLogsData, setItemLogsData] = useState([]);
   const [currentLogItemName, setCurrentLogItemName] = useState('');
 
+  const [costReportData, setCostReportData] = useState({ gate_cost_changes: [], item_cost_changes: [] });
+  const [isLoadingCostReport, setIsLoadingCostReport] = useState(false);
+  const [costReportSubTab, setCostReportSubTab] = useState('gates');
+
   const [showRateCartLogModal, setShowRateCartLogModal] = useState(false);
   const [rateCartLogsData, setRateCartLogsData] = useState([]);
   const [currentLogRateCartLocation, setCurrentLogRateCartLocation] = useState('');
@@ -929,7 +933,9 @@ const [overrideDate, setOverrideDate] = useState('');
     items: INITIAL_LOAD_COUNT,
     dailyItem: INITIAL_LOAD_COUNT,
     dailyTownship: INITIAL_LOAD_COUNT,
-    comparison: INITIAL_LOAD_COUNT // <-- Add this
+    comparison: INITIAL_LOAD_COUNT, // <-- Add this
+    gateCostReport: INITIAL_LOAD_COUNT,
+    itemCostReport: INITIAL_LOAD_COUNT
   });
 
   // Add the reset effect for the new filters
@@ -943,6 +949,7 @@ const [overrideDate, setOverrideDate] = useState('');
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, allocation: INITIAL_LOAD_COUNT })); }, [allocationFilters]);
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, items: INITIAL_LOAD_COUNT })); }, [itemFilters]);
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, dailyItem: INITIAL_LOAD_COUNT })); }, [dailyReportFilters]);
+  useEffect(() => { setVisibleCounts(prev => ({ ...prev, gateCostReport: INITIAL_LOAD_COUNT, itemCostReport: INITIAL_LOAD_COUNT })); }, [costReportData]);
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, dailyTownship: INITIAL_LOAD_COUNT })); }, [townshipFilters]);
 
   const formatNumber = (num) => {
@@ -1858,6 +1865,7 @@ const [overrideDate, setOverrideDate] = useState('');
         if (activeDataTab === 'rate_carts' && permissions.includes('view_rate_carts')) { loadRateCarts(); loadReferenceData(); }
         if (activeDataTab === 'branch_codes' && permissions.includes('view_branch_codes')) loadBranchCodes();
         if (activeDataTab === 'sd_codes' && permissions.includes('view_sd_codes')) loadSDCodes();
+        if (activeDataTab === 'cost_reports' && (permissions.includes('view_gates') || permissions.includes('view_items'))) fetchCostChangeReport();
     }
   }, [currentPage, activeDataTab, token, permissions, activeDailyTab]);
 
@@ -2105,6 +2113,16 @@ const [overrideDate, setOverrideDate] = useState('');
         if (response.ok) { setItemLogsData(await response.json()); setCurrentLogItemName(item.item_name); setShowItemLogModal(true); } 
         else showNotification('Failed to fetch logs', 'error');
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+  };
+
+  const fetchCostChangeReport = async () => {
+    setIsLoadingCostReport(true);
+    try {
+        const response = await authFetch(`${API_URL}/account/reports/cost-changes`);
+        if (response.ok) { setCostReportData(await response.json()); }
+        else showNotification('Failed to fetch cost change report', 'error');
+    } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsLoadingCostReport(false); }
   };
 
   const fetchRateCartLogs = async (rc) => {
@@ -4613,6 +4631,9 @@ const [overrideDate, setOverrideDate] = useState('');
                      (s.principal || '').toLowerCase().includes(sdCodeFilters.principal.toLowerCase()) &&
                      (s.log_pric || '').toLowerCase().includes(sdCodeFilters.log_pric.toLowerCase());
           });
+      } else if (activeDataTab === 'cost_reports') {
+          tabData.displayedGateCostChanges = costReportData.gate_cost_changes.slice(0, visibleCounts.gateCostReport);
+          tabData.displayedItemCostChanges = costReportData.item_cost_changes.slice(0, visibleCounts.itemCostReport);
       }
 
       return (
@@ -4642,6 +4663,9 @@ const [overrideDate, setOverrideDate] = useState('');
                         )}
                         {permissions.includes('view_rate_carts') && (
                             <button className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${activeDataTab === 'rate_carts' ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`} onClick={() => setActiveDataTab('rate_carts')}>Rate Carts</button>
+                        )}
+                        {(permissions.includes('view_gates') || permissions.includes('view_items')) && (
+                            <button className={`py-3 px-6 font-semibold text-lg transition-colors border-b-2 ${activeDataTab === 'cost_reports' ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`} onClick={() => setActiveDataTab('cost_reports')}>Cost Reports</button>
                         )}
                     </div>
 
@@ -4876,6 +4900,118 @@ const [overrideDate, setOverrideDate] = useState('');
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+                    )}
+
+                    {/* Content: Cost Reports */}
+                    {activeDataTab === 'cost_reports' && (permissions.includes('view_gates') || permissions.includes('view_items')) && (
+                        <div className="animation-fade-in">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-2xl font-bold text-gray-800">Cost Change Reports</h2>
+                            </div>
+
+                            <div className="flex gap-2 mb-6">
+                                {permissions.includes('view_gates') && (
+                                    <button onClick={() => setCostReportSubTab('gates')} className={`px-4 py-2 rounded-lg font-medium transition ${costReportSubTab === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>Gate Cost Changes</button>
+                                )}
+                                {permissions.includes('view_items') && (
+                                    <button onClick={() => setCostReportSubTab('items')} className={`px-4 py-2 rounded-lg font-medium transition ${costReportSubTab === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>Item Transport Cost Changes</button>
+                                )}
+                            </div>
+
+                            {isLoadingCostReport ? (
+                                <div className="text-center p-8 text-gray-500">Loading cost change report...</div>
+                            ) : (
+                                <>
+                                    {costReportSubTab === 'gates' && permissions.includes('view_gates') && (
+                                        <>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full border-collapse border text-sm">
+                                                <thead className="bg-gray-100">
+                                                    <tr>
+                                                        <th className="border p-2 text-left">Date</th>
+                                                        <th className="border p-2 text-left">Gate Name</th>
+                                                        <th className="border p-2 text-left">From</th>
+                                                        <th className="border p-2 text-left">To</th>
+                                                        <th className="border p-2 text-left">Changed By</th>
+                                                        <th className="border p-2 text-left">Old Cost</th>
+                                                        <th className="border p-2 text-left">New Cost</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {tabData.displayedGateCostChanges.length === 0 ? (
+                                                        <tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No gate cost changes recorded.</td></tr>
+                                                    ) : (
+                                                        tabData.displayedGateCostChanges.map((log) => (
+                                                            <tr key={log.id} className="hover:bg-gray-50">
+                                                                <td className="border p-2 whitespace-nowrap">{log.change_date}</td>
+                                                                <td className="border p-2 font-semibold">{log.gate_name}</td>
+                                                                <td className="border p-2">{log.from_loc}</td>
+                                                                <td className="border p-2">{log.to_loc}</td>
+                                                                <td className="border p-2">{log.changed_by}</td>
+                                                                <td className="border p-2 text-red-600 bg-red-50">{log.old_value || '(empty)'}</td>
+                                                                <td className="border p-2 text-green-600 bg-green-50">{log.new_value || '(empty)'}</td>
+                                                            </tr>
+                                                        ))
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {visibleCounts.gateCostReport < costReportData.gate_cost_changes.length && (
+                                            <div className="flex justify-center mb-2">
+                                                <button onClick={() => loadMore('gateCostReport')} className="px-6 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
+                                                    Load More ({costReportData.gate_cost_changes.length - visibleCounts.gateCostReport} remaining)
+                                                </button>
+                                            </div>
+                                        )}
+                                        </>
+                                    )}
+
+                                    {costReportSubTab === 'items' && permissions.includes('view_items') && (
+                                        <>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full border-collapse border text-sm">
+                                                <thead className="bg-gray-100">
+                                                    <tr>
+                                                        <th className="border p-2 text-left">Date</th>
+                                                        <th className="border p-2 text-left">Item Code</th>
+                                                        <th className="border p-2 text-left">Item Name</th>
+                                                        <th className="border p-2 text-left">Gate</th>
+                                                        <th className="border p-2 text-left">Changed By</th>
+                                                        <th className="border p-2 text-left">Old Cost</th>
+                                                        <th className="border p-2 text-left">New Cost</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {tabData.displayedItemCostChanges.length === 0 ? (
+                                                        <tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No item transport cost changes recorded.</td></tr>
+                                                    ) : (
+                                                        tabData.displayedItemCostChanges.map((log) => (
+                                                            <tr key={log.id} className="hover:bg-gray-50">
+                                                                <td className="border p-2 whitespace-nowrap">{log.change_date}</td>
+                                                                <td className="border p-2 font-semibold">{log.item_code}</td>
+                                                                <td className="border p-2">{log.item_name}</td>
+                                                                <td className="border p-2">{log.gate_name || '-'}</td>
+                                                                <td className="border p-2">{log.changed_by}</td>
+                                                                <td className="border p-2 text-red-600 bg-red-50">{log.old_value || '(empty)'}</td>
+                                                                <td className="border p-2 text-green-600 bg-green-50">{log.new_value || '(empty)'}</td>
+                                                            </tr>
+                                                        ))
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {visibleCounts.itemCostReport < costReportData.item_cost_changes.length && (
+                                            <div className="flex justify-center mb-2">
+                                                <button onClick={() => loadMore('itemCostReport')} className="px-6 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
+                                                    Load More ({costReportData.item_cost_changes.length - visibleCounts.itemCostReport} remaining)
+                                                </button>
+                                            </div>
+                                        )}
+                                        </>
+                                    )}
+                                </>
+                            )}
                         </div>
                     )}
                 </div>

@@ -4194,6 +4194,54 @@ async def get_item_logs(pricing_id: int, user: dict = Depends(get_current_user))
         return logs
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching logs: {str(e)}")
 
+@app.get("/account/reports/cost-changes")
+async def get_cost_change_report(user: dict = Depends(get_current_user)):
+    perms = user.get("permissions", [])
+    if "view_gates" not in perms and "view_items" not in perms:
+        raise HTTPException(status_code=403, detail="Requires 'view_gates' or 'view_items' permission")
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+
+        gate_cost_changes = []
+        if "view_gates" in perms:
+            await cursor.execute("""
+                SELECT l.id, l.gate_id, g.gate_name, g.from_loc, g.to_loc, u.username, l.change_date, l.old_value, l.new_value
+                FROM Gate_Change_Log l
+                LEFT JOIN Gate g ON l.gate_id = g.id
+                LEFT JOIN Users u ON l.changed_by = u.id
+                WHERE l.field_name = 'Cost'
+                ORDER BY l.change_date DESC
+            """)
+            rows = await cursor.fetchall()
+            gate_cost_changes = [{
+                "id": r[0], "gate_id": r[1], "gate_name": r[2] or 'Deleted Gate',
+                "from_loc": r[3], "to_loc": r[4], "changed_by": r[5],
+                "change_date": r[6], "old_value": r[7], "new_value": r[8]
+            } for r in rows]
+
+        item_cost_changes = []
+        if "view_items" in perms:
+            await cursor.execute("""
+                SELECT l.id, l.pricing_id, ip.item_id, ip.item_name, ip.gate_id, g.gate_name, u.username, l.change_date, l.old_value, l.new_value
+                FROM Item_Change_Log l
+                LEFT JOIN Item_Pricing ip ON l.pricing_id = ip.id
+                LEFT JOIN Gate g ON ip.gate_id = g.id
+                LEFT JOIN Users u ON l.changed_by = u.id
+                WHERE l.field_name = 'Transportation Cost'
+                ORDER BY l.change_date DESC
+            """)
+            rows = await cursor.fetchall()
+            item_cost_changes = [{
+                "id": r[0], "pricing_id": r[1], "item_code": r[2] or 'Deleted Item',
+                "item_name": r[3], "gate_id": r[4], "gate_name": r[5],
+                "changed_by": r[6], "change_date": r[7], "old_value": r[8], "new_value": r[9]
+            } for r in rows]
+
+        await conn.close()
+        return {"gate_cost_changes": gate_cost_changes, "item_cost_changes": item_cost_changes}
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching cost change report: {str(e)}")
+
 @app.delete("/account/item-pricing/{gate_id}/{item_code}")
 async def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(require_permission("delete_item"))): 
     try:
