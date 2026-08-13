@@ -909,6 +909,14 @@ const [overrideDate, setOverrideDate] = useState('');
   const [costReportData, setCostReportData] = useState({ gate_cost_changes: [], item_cost_changes: [] });
   const [isLoadingCostReport, setIsLoadingCostReport] = useState(false);
   const [costReportSubTab, setCostReportSubTab] = useState('gates');
+  const [isExportingGateCostReport, setIsExportingGateCostReport] = useState(false);
+  const [isExportingItemCostReport, setIsExportingItemCostReport] = useState(false);
+  const [isDownloadingDailyReport, setIsDownloadingDailyReport] = useState(false);
+  const [isDownloadingAllocation, setIsDownloadingAllocation] = useState(false);
+  const [isDownloadingOverview, setIsDownloadingOverview] = useState(false);
+  const [isDownloadingComparison, setIsDownloadingComparison] = useState(false);
+  const [isDownloadingItemPricing, setIsDownloadingItemPricing] = useState(false);
+  const [downloadingHistoryIds, setDownloadingHistoryIds] = useState([]);
   const [gateCostReportFilters, setGateCostReportFilters] = useState({ change_date: '', gate_name: '', from_loc: '', to_loc: '', changed_by: '', old_value: '', new_value: '' });
   const [itemCostReportFilters, setItemCostReportFilters] = useState({ change_date: '', item_code: '', item_name: '', principal: '', brand: '', gate_name: '', from_loc: '', to_loc: '', changed_by: '', old_value: '', new_value: '' });
 
@@ -1171,6 +1179,8 @@ const [overrideDate, setOverrideDate] = useState('');
   };
 
   const handleDownloadDailyReportExcel = async (reportType) => {
+    if (isDownloadingDailyReport) return;
+    setIsDownloadingDailyReport(true);
     try {
         showNotification('Generating Excel file...', 'info');
         
@@ -1212,10 +1222,12 @@ const [overrideDate, setOverrideDate] = useState('');
         }
     } catch (error) {
         showNotification(`Error downloading file: ${error.message}`, 'error');
-    }
+    } finally { setIsDownloadingDailyReport(false); }
   };
 
   const handleDownloadSubmittedAllocationExcel = async () => {
+    if (isDownloadingAllocation) return;
+    setIsDownloadingAllocation(true);
     try {
         showNotification('Generating Excel file...', 'info');
         
@@ -1252,12 +1264,14 @@ const [overrideDate, setOverrideDate] = useState('');
         }
     } catch (error) {
         showNotification(`Error downloading file: ${error.message}`, 'error');
-    }
+    } finally { setIsDownloadingAllocation(false); }
   };
 
   // Downloads the "Allocation Overview" tree table — works for both
   // Rate Cart (Branch Allocation) and Third Party (Calculated Cost) tabs
   const handleDownloadAllocationOverviewExcel = async () => {
+    if (isDownloadingOverview) return;
+    setIsDownloadingOverview(true);
     try {
         showNotification('Generating Excel file...', 'info');
 
@@ -1293,11 +1307,13 @@ const [overrideDate, setOverrideDate] = useState('');
         }
     } catch (error) {
         showNotification(`Error downloading file: ${error.message}`, 'error');
-    }
+    } finally { setIsDownloadingOverview(false); }
   };
 
   // Downloads the Cost Comparison table
   const handleDownloadCostComparisonExcel = async () => {
+    if (isDownloadingComparison) return;
+    setIsDownloadingComparison(true);
     try {
         showNotification('Generating Excel file...', 'info');
 
@@ -1328,7 +1344,7 @@ const [overrideDate, setOverrideDate] = useState('');
         }
     } catch (error) {
         showNotification(`Error downloading file: ${error.message}`, 'error');
-    }
+    } finally { setIsDownloadingComparison(false); }
   };
 
   const loadUsers = async () => {
@@ -2055,6 +2071,8 @@ const [overrideDate, setOverrideDate] = useState('');
   };
 
   const handleDownloadHistoryExcel = async (record) => {
+    if (downloadingHistoryIds.includes(record.id)) return;
+    setDownloadingHistoryIds(prev => [...prev, record.id]);
     try {
       showNotification('Generating Excel file...', 'info');
       const response = await authFetch(`${API_URL}/history/${record.id}/download`);
@@ -2066,10 +2084,13 @@ const [overrideDate, setOverrideDate] = useState('');
         showNotification('History Excel file downloaded', 'success');
       } else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
     } catch (error) { showNotification(`Error downloading file: ${error.message}`, 'error'); }
+    finally { setDownloadingHistoryIds(prev => prev.filter(id => id !== record.id)); }
   };
 
   const handleExportExcel = async () => {
     if (!selectedGateForPricing) { showNotification('Please select a gate first', 'error'); return; }
+    if (isDownloadingItemPricing) return;
+    setIsDownloadingItemPricing(true);
     try {
       const response = await authFetch(`${API_URL}/account/item-pricing/export/${selectedGateForPricing}`);
       if (response.ok) {
@@ -2080,9 +2101,12 @@ const [overrideDate, setOverrideDate] = useState('');
         showNotification('Excel file downloaded successfully', 'success');
       } else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsDownloadingItemPricing(false); }
   };
 
   const handleExportGateCostReport = async () => {
+    if (isExportingGateCostReport) return;
+    setIsExportingGateCostReport(true);
     try {
       const response = await authFetch(`${API_URL}/account/reports/cost-changes/export/gates`);
       if (response.ok) {
@@ -2093,9 +2117,12 @@ const [overrideDate, setOverrideDate] = useState('');
         showNotification('Excel file downloaded successfully', 'success');
       } else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsExportingGateCostReport(false); }
   };
 
   const handleExportItemCostReport = async () => {
+    if (isExportingItemCostReport) return;
+    setIsExportingItemCostReport(true);
     try {
       const response = await authFetch(`${API_URL}/account/reports/cost-changes/export/items`);
       if (response.ok) {
@@ -2106,6 +2133,7 @@ const [overrideDate, setOverrideDate] = useState('');
         showNotification('Excel file downloaded successfully', 'success');
       } else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+    finally { setIsExportingItemCostReport(false); }
   };
 
   const handleImportExcel = async (event) => {
@@ -2799,9 +2827,10 @@ const [overrideDate, setOverrideDate] = useState('');
               <div className="flex items-center gap-2 shrink-0">
                   <button 
                       onClick={handleDownloadAllocationOverviewExcel}
-                      className="text-sm px-4 py-2 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap"
+                      disabled={isDownloadingOverview}
+                      className="text-sm px-4 py-2 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap disabled:opacity-70 disabled:cursor-not-allowed"
                   >
-                      <Download size={16} /> Download Excel
+                      <Download size={16} /> {isDownloadingOverview ? 'Downloading...' : 'Download Excel'}
                   </button>
                   <button 
                       onClick={() => fetchPrincipalAllocation(overviewStartDate, overviewEndDate, activeDashboardTab)} 
@@ -3343,9 +3372,10 @@ const [overrideDate, setOverrideDate] = useState('');
                         <div className="flex items-center gap-2 shrink-0">
                             <button 
                                 onClick={handleDownloadCostComparisonExcel}
-                                className="text-sm px-4 py-2 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap"
+                                disabled={isDownloadingComparison}
+                                className="text-sm px-4 py-2 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap disabled:opacity-70 disabled:cursor-not-allowed"
                             >
-                                <Download size={16} /> Download Excel
+                                <Download size={16} /> {isDownloadingComparison ? 'Downloading...' : 'Download Excel'}
                             </button>
                             <button 
                                 onClick={() => fetchCostComparison(comparisonStartDate, comparisonEndDate)} 
@@ -3654,10 +3684,10 @@ const [overrideDate, setOverrideDate] = useState('');
 
                                       <button 
                                           onClick={() => handleDownloadDailyReportExcel(activeDailyTab)} 
-                                          disabled={isDailyReportLoading || (activeDailyTab === 'item' ? dailyReportData.length === 0 : dailyTownshipReportData.length === 0)} 
+                                          disabled={isDailyReportLoading || isDownloadingDailyReport || (activeDailyTab === 'item' ? dailyReportData.length === 0 : dailyTownshipReportData.length === 0)} 
                                           className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed font-semibold"
                                       >
-                                          <Download size={18} /> Download Excel
+                                          <Download size={18} /> {isDownloadingDailyReport ? 'Downloading...' : 'Download Excel'}
                                       </button>
                                   </div>
                               </div>
@@ -3691,10 +3721,10 @@ const [overrideDate, setOverrideDate] = useState('');
 
                                       <button 
                                           onClick={handleDownloadSubmittedAllocationExcel} 
-                                          disabled={isAllocationLoading || submittedAllocationData.length === 0} 
+                                          disabled={isAllocationLoading || isDownloadingAllocation || submittedAllocationData.length === 0} 
                                           className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed font-semibold"
                                       >
-                                          <Download size={18} /> Download Excel
+                                          <Download size={18} /> {isDownloadingAllocation ? 'Downloading...' : 'Download Excel'}
                                       </button>
                                   </div>
                               </div>
@@ -4593,7 +4623,7 @@ const [overrideDate, setOverrideDate] = useState('');
                             </td>
                             <td className="border p-3 text-center">
                                 <div className="flex justify-center gap-2">
-                                    <button onClick={() => handleDownloadHistoryExcel(record)} className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1"><FileDown size={16} /></button>
+                                    <button onClick={() => handleDownloadHistoryExcel(record)} disabled={downloadingHistoryIds.includes(record.id)} className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-semibold flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"><FileDown size={16} /></button>
                                     <button onClick={() => loadSavedCalculation(record)} className="px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm font-semibold">Load</button>
                                     {canSubmit && record.status === 'saved' && (<button disabled={isSaving} onClick={() => handleSubmitHistory(record.id)} className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold flex items-center gap-1 disabled:opacity-70 disabled:cursor-not-allowed" title="Submit"><CheckCircle size={16} /> Submit</button>)}
                                     {canClaim && record.status === 'submitted' && (<button disabled={isSaving} onClick={() => handleClaimHistory(record.id)} className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-sm font-semibold flex items-center gap-1 disabled:opacity-70 disabled:cursor-not-allowed" title="Claim"><CheckCircle size={16} /> Claim</button>)}
@@ -4781,7 +4811,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                 <div className="flex gap-2">
                                     {selectedGateForPricing && (
                                     <>
-                                        <button onClick={handleExportExcel} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"><Download size={20} /> Download Excel</button>
+                                        <button onClick={handleExportExcel} disabled={isDownloadingItemPricing} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-70 disabled:cursor-not-allowed"><Download size={20} /> {isDownloadingItemPricing ? 'Downloading...' : 'Download Excel'}</button>
                                         {(permissions.includes('add_item') && permissions.includes('edit_item')) && <label className={`flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition ${isSaving ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}><Upload size={20} /> Upload Excel <input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} disabled={isSaving} className="hidden" /></label>}
                                         {permissions.includes('add_item') && <button onClick={() => setShowAddItemModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><Plus size={20} /> Add Item</button>}
                                     </>
@@ -4972,10 +5002,10 @@ const [overrideDate, setOverrideDate] = useState('');
                                     )}
                                 </div>
                                 {costReportSubTab === 'gates' && permissions.includes('view_gates') && (
-                                    <button onClick={handleExportGateCostReport} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"><Download size={20} /> Download Excel</button>
+                                    <button onClick={handleExportGateCostReport} disabled={isExportingGateCostReport} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-70 disabled:cursor-not-allowed"><Download size={20} /> {isExportingGateCostReport ? 'Downloading...' : 'Download Excel'}</button>
                                 )}
                                 {costReportSubTab === 'items' && permissions.includes('view_items') && (
-                                    <button onClick={handleExportItemCostReport} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"><Download size={20} /> Download Excel</button>
+                                    <button onClick={handleExportItemCostReport} disabled={isExportingItemCostReport} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-70 disabled:cursor-not-allowed"><Download size={20} /> {isExportingItemCostReport ? 'Downloading...' : 'Download Excel'}</button>
                                 )}
                             </div>
 
