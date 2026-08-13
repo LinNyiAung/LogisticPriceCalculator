@@ -909,6 +909,8 @@ const [overrideDate, setOverrideDate] = useState('');
   const [costReportData, setCostReportData] = useState({ gate_cost_changes: [], item_cost_changes: [] });
   const [isLoadingCostReport, setIsLoadingCostReport] = useState(false);
   const [costReportSubTab, setCostReportSubTab] = useState('gates');
+  const [gateCostReportFilters, setGateCostReportFilters] = useState({ change_date: '', gate_name: '', from_loc: '', to_loc: '', changed_by: '', old_value: '', new_value: '' });
+  const [itemCostReportFilters, setItemCostReportFilters] = useState({ change_date: '', item_code: '', item_name: '', gate_name: '', changed_by: '', old_value: '', new_value: '' });
 
   const [showRateCartLogModal, setShowRateCartLogModal] = useState(false);
   const [rateCartLogsData, setRateCartLogsData] = useState([]);
@@ -950,6 +952,8 @@ const [overrideDate, setOverrideDate] = useState('');
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, items: INITIAL_LOAD_COUNT })); }, [itemFilters]);
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, dailyItem: INITIAL_LOAD_COUNT })); }, [dailyReportFilters]);
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, gateCostReport: INITIAL_LOAD_COUNT, itemCostReport: INITIAL_LOAD_COUNT })); }, [costReportData]);
+  useEffect(() => { setVisibleCounts(prev => ({ ...prev, gateCostReport: INITIAL_LOAD_COUNT })); }, [gateCostReportFilters]);
+  useEffect(() => { setVisibleCounts(prev => ({ ...prev, itemCostReport: INITIAL_LOAD_COUNT })); }, [itemCostReportFilters]);
   useEffect(() => { setVisibleCounts(prev => ({ ...prev, dailyTownship: INITIAL_LOAD_COUNT })); }, [townshipFilters]);
 
   const formatNumber = (num) => {
@@ -4632,8 +4636,26 @@ const [overrideDate, setOverrideDate] = useState('');
                      (s.log_pric || '').toLowerCase().includes(sdCodeFilters.log_pric.toLowerCase());
           });
       } else if (activeDataTab === 'cost_reports') {
-          tabData.displayedGateCostChanges = costReportData.gate_cost_changes.slice(0, visibleCounts.gateCostReport);
-          tabData.displayedItemCostChanges = costReportData.item_cost_changes.slice(0, visibleCounts.itemCostReport);
+          tabData.filteredGateCostChanges = costReportData.gate_cost_changes.filter(log => {
+              return (log.change_date || '').toLowerCase().includes(gateCostReportFilters.change_date.toLowerCase()) &&
+                     (log.gate_name || '').toLowerCase().includes(gateCostReportFilters.gate_name.toLowerCase()) &&
+                     (log.from_loc || '').toLowerCase().includes(gateCostReportFilters.from_loc.toLowerCase()) &&
+                     (log.to_loc || '').toLowerCase().includes(gateCostReportFilters.to_loc.toLowerCase()) &&
+                     (log.changed_by || '').toLowerCase().includes(gateCostReportFilters.changed_by.toLowerCase()) &&
+                     (log.old_value || '').toLowerCase().includes(gateCostReportFilters.old_value.toLowerCase()) &&
+                     (log.new_value || '').toLowerCase().includes(gateCostReportFilters.new_value.toLowerCase());
+          });
+          tabData.filteredItemCostChanges = costReportData.item_cost_changes.filter(log => {
+              return (log.change_date || '').toLowerCase().includes(itemCostReportFilters.change_date.toLowerCase()) &&
+                     (log.item_code || '').toLowerCase().includes(itemCostReportFilters.item_code.toLowerCase()) &&
+                     (log.item_name || '').toLowerCase().includes(itemCostReportFilters.item_name.toLowerCase()) &&
+                     (log.gate_name || '').toLowerCase().includes(itemCostReportFilters.gate_name.toLowerCase()) &&
+                     (log.changed_by || '').toLowerCase().includes(itemCostReportFilters.changed_by.toLowerCase()) &&
+                     (log.old_value || '').toLowerCase().includes(itemCostReportFilters.old_value.toLowerCase()) &&
+                     (log.new_value || '').toLowerCase().includes(itemCostReportFilters.new_value.toLowerCase());
+          });
+          tabData.displayedGateCostChanges = tabData.filteredGateCostChanges.slice(0, visibleCounts.gateCostReport);
+          tabData.displayedItemCostChanges = tabData.filteredItemCostChanges.slice(0, visibleCounts.itemCostReport);
       }
 
       return (
@@ -4929,13 +4951,13 @@ const [overrideDate, setOverrideDate] = useState('');
                                             <table className="w-full border-collapse border text-sm">
                                                 <thead className="bg-gray-100">
                                                     <tr>
-                                                        <th className="border p-2 text-left">Date</th>
-                                                        <th className="border p-2 text-left">Gate Name</th>
-                                                        <th className="border p-2 text-left">From</th>
-                                                        <th className="border p-2 text-left">To</th>
-                                                        <th className="border p-2 text-left">Changed By</th>
-                                                        <th className="border p-2 text-left">Old Cost</th>
-                                                        <th className="border p-2 text-left">New Cost</th>
+                                                        <th className="border p-2 text-left"><div>Date</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateCostReportFilters.change_date} onChange={(e) => setGateCostReportFilters({...gateCostReportFilters, change_date: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>Gate Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateCostReportFilters.gate_name} onChange={(e) => setGateCostReportFilters({...gateCostReportFilters, gate_name: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>From</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateCostReportFilters.from_loc} onChange={(e) => setGateCostReportFilters({...gateCostReportFilters, from_loc: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>To</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateCostReportFilters.to_loc} onChange={(e) => setGateCostReportFilters({...gateCostReportFilters, to_loc: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>Changed By</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateCostReportFilters.changed_by} onChange={(e) => setGateCostReportFilters({...gateCostReportFilters, changed_by: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>Old Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateCostReportFilters.old_value} onChange={(e) => setGateCostReportFilters({...gateCostReportFilters, old_value: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>New Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={gateCostReportFilters.new_value} onChange={(e) => setGateCostReportFilters({...gateCostReportFilters, new_value: e.target.value})} /></th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -4957,10 +4979,10 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 </tbody>
                                             </table>
                                         </div>
-                                        {visibleCounts.gateCostReport < costReportData.gate_cost_changes.length && (
+                                        {visibleCounts.gateCostReport < tabData.filteredGateCostChanges.length && (
                                             <div className="flex justify-center mb-2">
                                                 <button onClick={() => loadMore('gateCostReport')} className="px-6 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
-                                                    Load More ({costReportData.gate_cost_changes.length - visibleCounts.gateCostReport} remaining)
+                                                    Load More ({tabData.filteredGateCostChanges.length - visibleCounts.gateCostReport} remaining)
                                                 </button>
                                             </div>
                                         )}
@@ -4973,13 +4995,13 @@ const [overrideDate, setOverrideDate] = useState('');
                                             <table className="w-full border-collapse border text-sm">
                                                 <thead className="bg-gray-100">
                                                     <tr>
-                                                        <th className="border p-2 text-left">Date</th>
-                                                        <th className="border p-2 text-left">Item Code</th>
-                                                        <th className="border p-2 text-left">Item Name</th>
-                                                        <th className="border p-2 text-left">Gate</th>
-                                                        <th className="border p-2 text-left">Changed By</th>
-                                                        <th className="border p-2 text-left">Old Cost</th>
-                                                        <th className="border p-2 text-left">New Cost</th>
+                                                        <th className="border p-2 text-left"><div>Date</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.change_date} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, change_date: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>Item Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.item_code} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, item_code: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>Item Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.item_name} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, item_name: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>Gate</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.gate_name} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, gate_name: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>Changed By</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.changed_by} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, changed_by: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>Old Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.old_value} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, old_value: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>New Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.new_value} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, new_value: e.target.value})} /></th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -5001,10 +5023,10 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 </tbody>
                                             </table>
                                         </div>
-                                        {visibleCounts.itemCostReport < costReportData.item_cost_changes.length && (
+                                        {visibleCounts.itemCostReport < tabData.filteredItemCostChanges.length && (
                                             <div className="flex justify-center mb-2">
                                                 <button onClick={() => loadMore('itemCostReport')} className="px-6 py-2 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition">
-                                                    Load More ({costReportData.item_cost_changes.length - visibleCounts.itemCostReport} remaining)
+                                                    Load More ({tabData.filteredItemCostChanges.length - visibleCounts.itemCostReport} remaining)
                                                 </button>
                                             </div>
                                         )}
