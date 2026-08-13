@@ -910,7 +910,7 @@ const [overrideDate, setOverrideDate] = useState('');
   const [isLoadingCostReport, setIsLoadingCostReport] = useState(false);
   const [costReportSubTab, setCostReportSubTab] = useState('gates');
   const [gateCostReportFilters, setGateCostReportFilters] = useState({ change_date: '', gate_name: '', from_loc: '', to_loc: '', changed_by: '', old_value: '', new_value: '' });
-  const [itemCostReportFilters, setItemCostReportFilters] = useState({ change_date: '', item_code: '', item_name: '', gate_name: '', changed_by: '', old_value: '', new_value: '' });
+  const [itemCostReportFilters, setItemCostReportFilters] = useState({ change_date: '', item_code: '', item_name: '', principal: '', brand: '', gate_name: '', from_loc: '', to_loc: '', changed_by: '', old_value: '', new_value: '' });
 
   const [showRateCartLogModal, setShowRateCartLogModal] = useState(false);
   const [rateCartLogsData, setRateCartLogsData] = useState([]);
@@ -4649,7 +4649,11 @@ const [overrideDate, setOverrideDate] = useState('');
               return (log.change_date || '').toLowerCase().includes(itemCostReportFilters.change_date.toLowerCase()) &&
                      (log.item_code || '').toLowerCase().includes(itemCostReportFilters.item_code.toLowerCase()) &&
                      (log.item_name || '').toLowerCase().includes(itemCostReportFilters.item_name.toLowerCase()) &&
+                     (log.principal || '').toLowerCase().includes(itemCostReportFilters.principal.toLowerCase()) &&
+                     (log.brand || '').toLowerCase().includes(itemCostReportFilters.brand.toLowerCase()) &&
                      (log.gate_name || '').toLowerCase().includes(itemCostReportFilters.gate_name.toLowerCase()) &&
+                     (log.from_loc || '').toLowerCase().includes(itemCostReportFilters.from_loc.toLowerCase()) &&
+                     (log.to_loc || '').toLowerCase().includes(itemCostReportFilters.to_loc.toLowerCase()) &&
                      (log.changed_by || '').toLowerCase().includes(itemCostReportFilters.changed_by.toLowerCase()) &&
                      (log.old_value || '').toLowerCase().includes(itemCostReportFilters.old_value.toLowerCase()) &&
                      (log.new_value || '').toLowerCase().includes(itemCostReportFilters.new_value.toLowerCase());
@@ -4998,7 +5002,11 @@ const [overrideDate, setOverrideDate] = useState('');
                                                         <th className="border p-2 text-left"><div>Date</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.change_date} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, change_date: e.target.value})} /></th>
                                                         <th className="border p-2 text-left"><div>Item Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.item_code} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, item_code: e.target.value})} /></th>
                                                         <th className="border p-2 text-left"><div>Item Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.item_name} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, item_name: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.principal} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, principal: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>Brand</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.brand} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, brand: e.target.value})} /></th>
                                                         <th className="border p-2 text-left"><div>Gate</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.gate_name} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, gate_name: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>From</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.from_loc} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, from_loc: e.target.value})} /></th>
+                                                        <th className="border p-2 text-left"><div>To</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.to_loc} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, to_loc: e.target.value})} /></th>
                                                         <th className="border p-2 text-left"><div>Changed By</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.changed_by} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, changed_by: e.target.value})} /></th>
                                                         <th className="border p-2 text-left"><div>Old Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.old_value} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, old_value: e.target.value})} /></th>
                                                         <th className="border p-2 text-left"><div>New Cost</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={itemCostReportFilters.new_value} onChange={(e) => setItemCostReportFilters({...itemCostReportFilters, new_value: e.target.value})} /></th>
@@ -5006,14 +5014,18 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 </thead>
                                                 <tbody>
                                                     {tabData.displayedItemCostChanges.length === 0 ? (
-                                                        <tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No item transport cost changes recorded.</td></tr>
+                                                        <tr><td colSpan="11" className="text-center p-4 text-gray-500 italic">No item transport cost changes recorded.</td></tr>
                                                     ) : (
                                                         tabData.displayedItemCostChanges.map((log) => (
                                                             <tr key={log.id} className="hover:bg-gray-50">
                                                                 <td className="border p-2 whitespace-nowrap">{log.change_date}</td>
                                                                 <td className="border p-2 font-semibold">{log.item_code}</td>
                                                                 <td className="border p-2">{log.item_name}</td>
+                                                                <td className="border p-2">{log.principal}</td>
+                                                                <td className="border p-2">{log.brand}</td>
                                                                 <td className="border p-2">{log.gate_name || '-'}</td>
+                                                                <td className="border p-2">{log.from_loc || '-'}</td>
+                                                                <td className="border p-2">{log.to_loc || '-'}</td>
                                                                 <td className="border p-2">{log.changed_by}</td>
                                                                 <td className="border p-2 text-red-600 bg-red-50">{log.old_value || '(empty)'}</td>
                                                                 <td className="border p-2 text-green-600 bg-green-50">{log.new_value || '(empty)'}</td>

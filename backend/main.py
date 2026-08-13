@@ -4223,7 +4223,7 @@ async def get_cost_change_report(user: dict = Depends(get_current_user)):
         item_cost_changes = []
         if "view_items" in perms:
             await cursor.execute("""
-                SELECT l.id, l.pricing_id, ip.item_id, ip.item_name, ip.gate_id, g.gate_name, u.username, l.change_date, l.old_value, l.new_value
+                SELECT l.id, l.pricing_id, ip.item_id, ip.item_name, ip.gate_id, g.gate_name, u.username, l.change_date, l.old_value, l.new_value, ip.principal, ip.brand, g.from_loc, g.to_loc
                 FROM Item_Change_Log l
                 LEFT JOIN Item_Pricing ip ON l.pricing_id = ip.id
                 LEFT JOIN Gate g ON ip.gate_id = g.id
@@ -4235,7 +4235,8 @@ async def get_cost_change_report(user: dict = Depends(get_current_user)):
             item_cost_changes = [{
                 "id": r[0], "pricing_id": r[1], "item_code": r[2] or 'Deleted Item',
                 "item_name": r[3], "gate_id": r[4], "gate_name": r[5],
-                "changed_by": r[6], "change_date": r[7], "old_value": r[8], "new_value": r[9]
+                "changed_by": r[6], "change_date": r[7], "old_value": r[8], "new_value": r[9],
+                "principal": r[10], "brand": r[11], "from_loc": r[12], "to_loc": r[13]
             } for r in rows]
 
         await conn.close()
