@@ -4243,6 +4243,111 @@ async def get_cost_change_report(user: dict = Depends(get_current_user)):
         return {"gate_cost_changes": gate_cost_changes, "item_cost_changes": item_cost_changes}
     except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching cost change report: {str(e)}")
 
+@app.get("/account/reports/cost-changes/export/gates")
+async def export_gate_cost_report(user: dict = Depends(get_current_user)):
+    perms = user.get("permissions", [])
+    if "view_gates" not in perms:
+        raise HTTPException(status_code=403, detail="Requires 'view_gates' permission")
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("""
+            SELECT l.change_date, g.gate_name, g.from_loc, g.to_loc, u.username, l.old_value, l.new_value
+            FROM Gate_Change_Log l
+            LEFT JOIN Gate g ON l.gate_id = g.id
+            LEFT JOIN Users u ON l.changed_by = u.id
+            WHERE l.field_name = 'Cost'
+            ORDER BY l.change_date DESC
+        """)
+        rows = await cursor.fetchall()
+        await conn.close()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Gate Cost Changes"
+        headers = ['Date', 'Gate Name', 'From', 'To', 'Changed By', 'Old Cost', 'New Cost']
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+        for row_num, row_data in enumerate(rows, 2):
+            for col_num, value in enumerate(row_data, 1):
+                ws.cell(row=row_num, column=col_num, value=value)
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
+                except: pass
+            ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return StreamingResponse(
+            output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=gate_cost_changes.xlsx"}
+        )
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error exporting: {str(e)}")
+
+@app.get("/account/reports/cost-changes/export/items")
+async def export_item_cost_report(user: dict = Depends(get_current_user)):
+    perms = user.get("permissions", [])
+    if "view_items" not in perms:
+        raise HTTPException(status_code=403, detail="Requires 'view_items' permission")
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("""
+            SELECT l.change_date, ip.item_id, ip.item_name, ip.principal, ip.brand, g.gate_name, g.from_loc, g.to_loc, u.username, l.old_value, l.new_value
+            FROM Item_Change_Log l
+            LEFT JOIN Item_Pricing ip ON l.pricing_id = ip.id
+            LEFT JOIN Gate g ON ip.gate_id = g.id
+            LEFT JOIN Users u ON l.changed_by = u.id
+            WHERE l.field_name = 'Transportation Cost'
+            ORDER BY l.change_date DESC
+        """)
+        rows = await cursor.fetchall()
+        await conn.close()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Item Transport Cost Changes"
+        headers = ['Date', 'Item Code', 'Item Name', 'Principal', 'Brand', 'Gate', 'From', 'To', 'Changed By', 'Old Cost', 'New Cost']
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+        for row_num, row_data in enumerate(rows, 2):
+            for col_num, value in enumerate(row_data, 1):
+                ws.cell(row=row_num, column=col_num, value=value)
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
+                except: pass
+            ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return StreamingResponse(
+            output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=item_transport_cost_changes.xlsx"}
+        )
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error exporting: {str(e)}")
+
 @app.delete("/account/item-pricing/{gate_id}/{item_code}")
 async def delete_item_pricing(gate_id: int, item_code: str, user: dict = Depends(require_permission("delete_item"))): 
     try:

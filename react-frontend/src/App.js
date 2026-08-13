@@ -2082,6 +2082,32 @@ const [overrideDate, setOverrideDate] = useState('');
     } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
   };
 
+  const handleExportGateCostReport = async () => {
+    try {
+      const response = await authFetch(`${API_URL}/account/reports/cost-changes/export/gates`);
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'gate_cost_changes.xlsx';
+        document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); document.body.removeChild(a);
+        showNotification('Excel file downloaded successfully', 'success');
+      } else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
+    } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+  };
+
+  const handleExportItemCostReport = async () => {
+    try {
+      const response = await authFetch(`${API_URL}/account/reports/cost-changes/export/items`);
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'item_transport_cost_changes.xlsx';
+        document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); document.body.removeChild(a);
+        showNotification('Excel file downloaded successfully', 'success');
+      } else { const error = await response.json(); showNotification(getErrorMessage(error), 'error'); }
+    } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+  };
+
   const handleImportExcel = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -4936,12 +4962,20 @@ const [overrideDate, setOverrideDate] = useState('');
                                 <h2 className="text-2xl font-bold text-gray-800">Cost Change Reports</h2>
                             </div>
 
-                            <div className="flex gap-2 mb-6">
-                                {permissions.includes('view_gates') && (
-                                    <button onClick={() => setCostReportSubTab('gates')} className={`px-4 py-2 rounded-lg font-medium transition ${costReportSubTab === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>Gate Cost Changes</button>
+                            <div className="flex gap-2 mb-6 justify-between">
+                                <div className="flex gap-2">
+                                    {permissions.includes('view_gates') && (
+                                        <button onClick={() => setCostReportSubTab('gates')} className={`px-4 py-2 rounded-lg font-medium transition ${costReportSubTab === 'gates' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>Gate Cost Changes</button>
+                                    )}
+                                    {permissions.includes('view_items') && (
+                                        <button onClick={() => setCostReportSubTab('items')} className={`px-4 py-2 rounded-lg font-medium transition ${costReportSubTab === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>Item Transport Cost Changes</button>
+                                    )}
+                                </div>
+                                {costReportSubTab === 'gates' && permissions.includes('view_gates') && (
+                                    <button onClick={handleExportGateCostReport} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"><Download size={20} /> Download Excel</button>
                                 )}
-                                {permissions.includes('view_items') && (
-                                    <button onClick={() => setCostReportSubTab('items')} className={`px-4 py-2 rounded-lg font-medium transition ${costReportSubTab === 'items' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>Item Transport Cost Changes</button>
+                                {costReportSubTab === 'items' && permissions.includes('view_items') && (
+                                    <button onClick={handleExportItemCostReport} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"><Download size={20} /> Download Excel</button>
                                 )}
                             </div>
 
