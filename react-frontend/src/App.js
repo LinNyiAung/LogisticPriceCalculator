@@ -1706,6 +1706,13 @@ const [overrideDate, setOverrideDate] = useState('');
 
   const saveGate = async (gateData) => {
     if (!gateData.gate_name?.trim() || !gateData.from_loc || !gateData.to_loc) { showNotification('Required fields missing.', 'error'); return; }
+    
+    const hasUom = Boolean(gateData.uom);
+    const hasUnit = gateData.unit !== '' && gateData.unit !== null && gateData.unit !== undefined;
+    
+    if (hasUom && !hasUnit) { showNotification('Unit is required if UOM is selected.', 'error'); return; }
+    if (!hasUom && hasUnit) { showNotification('UOM is required if Unit is provided.', 'error'); return; }
+
     setIsSaving(true);
     try {
       const payload = { 
@@ -2221,8 +2228,8 @@ const [overrideDate, setOverrideDate] = useState('');
             <div><label className="block text-sm font-semibold mb-1">To <span className="text-red-500">*</span></label><select disabled={isSaving} value={formData.to_loc ?? ''} onChange={(e) => setFormData({...formData, to_loc: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refLocations.map((loc) => (<option key={loc.id} value={loc.name}>{loc.name}</option>))}</select></div>
             <div><label className="block text-sm font-semibold mb-1">Destination (Optional)</label><input disabled={isSaving} type="text" value={formData.destination ?? ''} onChange={(e) => setFormData({...formData, destination: e.target.value})} className="w-full p-2 border rounded" placeholder="Enter destination..." /></div>
             <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-sm font-semibold mb-1">UOM</label><select disabled={isSaving} value={formData.uom ?? ''} onChange={(e) => setFormData({...formData, uom: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refUOMs.map((u) => (<option key={u.id} value={u.name}>{u.name}</option>))}</select></div>
-                <div><label className="block text-sm font-semibold mb-1">Unit</label><input disabled={isSaving} type="number" value={formData.unit ?? ''} onChange={(e) => setFormData({...formData, unit: e.target.value})} className="w-full p-2 border rounded" placeholder="1" /></div>
+                <div><label className="block text-sm font-semibold mb-1">UOM {(formData.unit !== '' && formData.unit !== null && formData.unit !== undefined) && <span className="text-red-500">*</span>}</label><select disabled={isSaving} value={formData.uom ?? ''} onChange={(e) => setFormData({...formData, uom: e.target.value})} className="w-full p-2 border rounded"><option value="">-- Select --</option>{refUOMs.map((u) => (<option key={u.id} value={u.name}>{u.name}</option>))}</select></div>
+                <div><label className="block text-sm font-semibold mb-1">Unit {formData.uom && <span className="text-red-500">*</span>}</label><input disabled={isSaving} type="number" value={formData.unit ?? ''} onChange={(e) => setFormData({...formData, unit: e.target.value})} className="w-full p-2 border rounded" placeholder="1" /></div>
             </div>
             <div><label className="block text-sm font-semibold mb-1">Cost</label><input disabled={isSaving} type="number" value={formData.cost ?? ''} onChange={(e) => setFormData({...formData, cost: e.target.value})} className="w-full p-2 border rounded" /></div>
           </div>
