@@ -675,7 +675,7 @@ async def startup_db():
         raise  # or handle explicitly — don't let this hide scheduler failures
 
     # Scheduler setup outside the DB migration try block
-    scheduler.add_job(daily_job_generator, 'cron', hour=23, minute=55)
+    scheduler.add_job(daily_job_generator, 'cron', hour=23, minute=55, misfire_grace_time=600, coalesce=True)
     scheduler.add_job(cleanup_old_activity_logs, 'cron', hour=1, minute=0)
     scheduler.start()
     logger.info("Schedulers started.")
