@@ -4520,8 +4520,8 @@ const [overrideDate, setOverrideDate] = useState('');
                                     <h4 className="font-semibold text-gray-800 mb-1">4. Additional Charges Allocation</h4>
                                     <p className="text-xs text-gray-500 mb-2 italic">If extra fees are added to the route.</p>
                                     <div className="bg-white p-3 rounded-lg border border-blue-100 font-mono text-xs space-y-1 shadow-sm">
-                                        <div><span className="text-blue-600 font-bold">Item Proportion</span> = Item Cartons ÷ Total Cartons in Shipment</div>
-                                        <div><span className="text-blue-600 font-bold">Item Extra Fee</span> = Total Additional Charges × Item Proportion</div>
+                                        <div><span className="text-blue-600 font-bold">Item Proportion</span> = Total Additional Charges ÷ Total Cartons in Shipment</div>
+                                        <div><span className="text-blue-600 font-bold">Item Extra Fee</span> = Item Proportion × Item Cartons</div>
                                     </div>
                                 </div>
 
