@@ -1680,7 +1680,7 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
             final_unit_cost = direct_unit_cost if manual_total_cost is not None else item['standard_unit_cost']
             final_item_cost = item['ctns'] * final_unit_cost
             calculated_products.append({
-                **item, "calculation_type": "direct_split" if manual_total_cost else "direct",
+                **item, "calculation_type": "override" if manual_total_cost else "direct",
                 "system_rate": item['standard_unit_cost'], "unit_cost": final_unit_cost, "total_cost": final_item_cost
             })
 
