@@ -1656,6 +1656,12 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
         direct_unit_cost = Decimal("0.0")
         if manual_total_cost is not None:
             manual_total_cost_dec = Decimal(str(manual_total_cost))
+            
+            # --- NEW VALIDATION: Prevent negative values ---
+            if manual_total_cost_dec < ton_cost_total:
+                raise Exception(f"Total Cost (Manual Override) cannot be less than the total weight-based cost ({ton_cost_total:,.2f} MMK).")
+            # -----------------------------------------------
+            
             remainder = manual_total_cost_dec - ton_cost_total
             total_direct_ctns = sum(item['ctns'] for item in direct_items)
             if total_direct_ctns > Decimal("0"): direct_unit_cost = remainder / total_direct_ctns
