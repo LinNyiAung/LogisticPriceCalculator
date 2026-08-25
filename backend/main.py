@@ -482,6 +482,34 @@ async def startup_db():
             )
         """)
 
+        # Branch Code Change Log Table
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Branch_Code_Change_Log' AND xtype='U')
+            CREATE TABLE Branch_Code_Change_Log (
+                id          INT IDENTITY(1,1) PRIMARY KEY,
+                log_pric    NVARCHAR(255),
+                changed_by  INT,  
+                change_date NVARCHAR(30),
+                field_name  NVARCHAR(255),
+                old_value   NVARCHAR(MAX),
+                new_value   NVARCHAR(MAX)
+            )
+        """)
+
+        # SD Code Change Log Table
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='SD_Code_Change_Log' AND xtype='U')
+            CREATE TABLE SD_Code_Change_Log (
+                id          INT IDENTITY(1,1) PRIMARY KEY,
+                log_pric    NVARCHAR(255),
+                changed_by  INT,  
+                change_date NVARCHAR(30),
+                field_name  NVARCHAR(255),
+                old_value   NVARCHAR(MAX),
+                new_value   NVARCHAR(MAX)
+            )
+        """)
+
         # --- SD Code Mapping Table ---
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='SD_Code' AND xtype='U')
@@ -827,6 +855,24 @@ class SDCodeData(BaseModel):
 class LocationMappingItem(BaseModel):
     to_location: str
     branch_code: str
+
+class BranchCodeLogItem(BaseModel):
+    id: int
+    log_pric: str
+    changed_by: str
+    change_date: str
+    field_name: str
+    old_value: Optional[str]
+    new_value: Optional[str]
+
+class SDCodeLogItem(BaseModel):
+    id: int
+    log_pric: str
+    changed_by: str
+    change_date: str
+    field_name: str
+    old_value: Optional[str]
+    new_value: Optional[str]
 
 class DriverOverrideData(BaseModel):
     target_date: str
@@ -2962,6 +3008,23 @@ async def save_branch_code(data: BranchCodeData, user: dict = Depends(get_curren
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             username = user['id']
             
+            await cursor.execute("SELECT log_pric, code, name, dept, principal, description FROM Branch_Code WHERE log_pric = ?", (data.original_log_pric,))
+            existing = await cursor.fetchone()
+            if existing:
+                changes = []
+                fields = [('log_pric', data.log_pric), ('code', data.code), ('name', data.name), ('dept', data.dept), ('principal', data.principal), ('description', data.description)]
+                for idx, (field_name, new_val) in enumerate(fields):
+                    old_str = str(existing[idx]).strip() if existing[idx] else ""
+                    new_str = str(new_val).strip() if new_val else ""
+                    if old_str != new_str:
+                        changes.append((data.log_pric, username, now_str, field_name, old_str, new_str))
+                
+                if data.original_log_pric != data.log_pric:
+                    await cursor.execute("UPDATE Branch_Code_Change_Log SET log_pric = ? WHERE log_pric = ?", (data.log_pric, data.original_log_pric))
+                
+                if changes:
+                    await cursor.executemany("INSERT INTO Branch_Code_Change_Log (log_pric, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
+
             await cursor.execute("""
                 UPDATE Branch_Code 
                 SET log_pric = ?, code = ?, name = ?, dept = ?, principal = ?, description = ?, edited_at = ?, edited_by = ?
@@ -2988,11 +3051,29 @@ async def save_branch_code(data: BranchCodeData, user: dict = Depends(get_curren
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error saving branch code: {str(e)}")
 
+@app.get("/account/branch-codes/{log_pric}/logs", response_model=List[BranchCodeLogItem])
+async def get_branch_code_logs(log_pric: str, user: dict = Depends(get_current_user)):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("""
+            SELECT l.id, l.log_pric, u.username, l.change_date, l.field_name, l.old_value, l.new_value 
+            FROM Branch_Code_Change_Log l
+            LEFT JOIN Users u ON l.changed_by = u.id
+            WHERE l.log_pric = ? ORDER BY l.change_date DESC
+        """, (log_pric,))
+        rows = await cursor.fetchall()
+        logs = [{"id": r[0], "log_pric": r[1], "changed_by": r[2], "change_date": r[3], "field_name": r[4], "old_value": r[5], "new_value": r[6]} for r in rows]
+        await conn.close()
+        return logs
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching logs: {str(e)}")
+
 @app.delete("/account/branch-codes/{log_pric}")
 async def delete_branch_code(log_pric: str, user: dict = Depends(require_permission("delete_branch_code"))):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
+        await cursor.execute("DELETE FROM Branch_Code_Change_Log WHERE log_pric = ?", (log_pric,))
         await cursor.execute("DELETE FROM Branch_Code WHERE log_pric = ?", (log_pric,))
         if cursor.rowcount == 0:
             await conn.close()
@@ -3033,6 +3114,23 @@ async def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user))
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             username = user['id']
 
+            await cursor.execute("SELECT log_pric, channel, code, name, dept, principal FROM SD_Code WHERE log_pric = ?", (data.original_log_pric,))
+            existing = await cursor.fetchone()
+            if existing:
+                changes = []
+                fields = [('log_pric', data.log_pric), ('channel', data.channel), ('code', data.code), ('name', data.name), ('dept', data.dept), ('principal', data.principal)]
+                for idx, (field_name, new_val) in enumerate(fields):
+                    old_str = str(existing[idx]).strip() if existing[idx] else ""
+                    new_str = str(new_val).strip() if new_val else ""
+                    if old_str != new_str:
+                        changes.append((data.log_pric, username, now_str, field_name, old_str, new_str))
+                
+                if data.original_log_pric != data.log_pric:
+                    await cursor.execute("UPDATE SD_Code_Change_Log SET log_pric = ? WHERE log_pric = ?", (data.log_pric, data.original_log_pric))
+                
+                if changes:
+                    await cursor.executemany("INSERT INTO SD_Code_Change_Log (log_pric, changed_by, change_date, field_name, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)", changes)
+
             await cursor.execute("""
                 UPDATE SD_Code 
                 SET channel = ?, code = ?, name = ?, dept = ?, principal = ?, log_pric = ?, edited_at = ?, edited_by = ?
@@ -3059,11 +3157,29 @@ async def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error saving SD code: {str(e)}")
 
+@app.get("/account/sd-codes/{log_pric}/logs", response_model=List[SDCodeLogItem])
+async def get_sd_code_logs(log_pric: str, user: dict = Depends(get_current_user)):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("""
+            SELECT l.id, l.log_pric, u.username, l.change_date, l.field_name, l.old_value, l.new_value 
+            FROM SD_Code_Change_Log l
+            LEFT JOIN Users u ON l.changed_by = u.id
+            WHERE l.log_pric = ? ORDER BY l.change_date DESC
+        """, (log_pric,))
+        rows = await cursor.fetchall()
+        logs = [{"id": r[0], "log_pric": r[1], "changed_by": r[2], "change_date": r[3], "field_name": r[4], "old_value": r[5], "new_value": r[6]} for r in rows]
+        await conn.close()
+        return logs
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error fetching logs: {str(e)}")
+
 @app.delete("/account/sd-codes/{log_pric}")
 async def delete_sd_code(log_pric: str, user: dict = Depends(require_permission("delete_sd_code"))):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
+        await cursor.execute("DELETE FROM SD_Code_Change_Log WHERE log_pric = ?", (log_pric,))
         await cursor.execute("DELETE FROM SD_Code WHERE log_pric = ?", (log_pric,))
         if cursor.rowcount == 0:
             await conn.close()

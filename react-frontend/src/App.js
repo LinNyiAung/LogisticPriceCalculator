@@ -927,6 +927,30 @@ const [overrideDate, setOverrideDate] = useState('');
   const [overrideLogsData, setOverrideLogsData] = useState([]);
   const [currentLogOverrideName, setCurrentLogOverrideName] = useState('');
 
+  const [showBranchCodeLogModal, setShowBranchCodeLogModal] = useState(false);
+  const [branchCodeLogsData, setBranchCodeLogsData] = useState([]);
+  const [currentLogBranchPric, setCurrentLogBranchPric] = useState('');
+
+  const [showSDCodeLogModal, setShowSDCodeLogModal] = useState(false);
+  const [sdCodeLogsData, setSDCodeLogsData] = useState([]);
+  const [currentLogSDPric, setCurrentLogSDPric] = useState('');
+
+  const fetchBranchCodeLogs = async (b) => {
+      try {
+          const response = await authFetch(`${API_URL}/account/branch-codes/${encodeURIComponent(b.log_pric)}/logs`);
+          if(response.ok) { setBranchCodeLogsData(await response.json()); setCurrentLogBranchPric(b.log_pric); setShowBranchCodeLogModal(true); } 
+          else showNotification('Failed to fetch logs', 'error');
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+  };
+
+  const fetchSDCodeLogs = async (s) => {
+      try {
+          const response = await authFetch(`${API_URL}/account/sd-codes/${encodeURIComponent(s.log_pric)}/logs`);
+          if(response.ok) { setSDCodeLogsData(await response.json()); setCurrentLogSDPric(s.log_pric); setShowSDCodeLogModal(true); } 
+          else showNotification('Failed to fetch logs', 'error');
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+  };
+
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
 
   const [activityLogsData, setActivityLogsData] = useState([]);
@@ -4903,6 +4927,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <td className="border p-2 font-bold">{b.log_pric}</td><td className="border p-2">{b.code}</td><td className="border p-2">{b.name}</td><td className="border p-2">{b.dept}</td><td className="border p-2">{b.principal}</td><td className="border p-2 text-gray-500">{b.description}</td>
                                                 <td className="border p-2 text-center">
                                                     <div className="flex justify-center gap-2">
+                                                        <button onClick={() => fetchBranchCodeLogs(b)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={16} /></button>
                                                         {permissions.includes('edit_branch_code') && <button onClick={() => { setEditingBranchCode(b); setShowBranchCodeModal(true); }} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
                                                         {permissions.includes('delete_branch_code') && <button onClick={() => deleteBranchCode(b.log_pric)} disabled={isDeleting} className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>}
                                                     </div>
@@ -4942,6 +4967,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <td className="border p-2 font-bold">{s.log_pric}</td><td className="border p-2">{s.channel}</td><td className="border p-2">{s.code}</td><td className="border p-2">{s.name}</td><td className="border p-2">{s.dept}</td><td className="border p-2">{s.principal}</td>
                                                 <td className="border p-2 text-center">
                                                     <div className="flex justify-center gap-2">
+                                                        <button onClick={() => fetchSDCodeLogs(s)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={16} /></button>
                                                         {permissions.includes('edit_sd_code') && <button onClick={() => { setEditingSDCode(s); setShowSDCodeModal(true); }} className="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"><Edit2 size={16} /></button>}
                                                         {permissions.includes('delete_sd_code') && <button onClick={() => deleteSDCode(s.log_pric)} disabled={isDeleting} className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200 disabled:opacity-70 disabled:cursor-not-allowed"><Trash2 size={16} /></button>}
                                                     </div>
@@ -5130,6 +5156,8 @@ const [overrideDate, setOverrideDate] = useState('');
                 {showSDCodeModal && <SDCodeModal codeObj={editingSDCode} onSave={saveSDCode} isSaving={isSaving} onClose={() => setShowSDCodeModal(false)} />}
                 {showRateCartModal && <RateCartModal rateCart={editingRateCart} onSave={saveRateCart} onClose={() => setShowRateCartModal(false)} isSaving={isSaving} />}
                 {showRateCartLogModal && <LogTableModal logs={rateCartLogsData} title={currentLogRateCartLocation} onClose={() => setShowRateCartLogModal(false)} />}
+                {showBranchCodeLogModal && <LogTableModal logs={branchCodeLogsData} title={currentLogBranchPric} onClose={() => setShowBranchCodeLogModal(false)} />}
+                {showSDCodeLogModal && <LogTableModal logs={sdCodeLogsData} title={currentLogSDPric} onClose={() => setShowSDCodeLogModal(false)} />}
                 {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} isDeleting={isDeleting} />}
             </div>
         </div>
