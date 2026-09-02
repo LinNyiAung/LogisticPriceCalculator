@@ -3008,6 +3008,7 @@ async def update_volumetric_divisor(item: SettingUpdate, user: dict = Depends(re
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
+@app.get("/references/location-mappings")
 async def get_ref_location_mappings():
     try:
         conn = await get_logistic_connection()
