@@ -4019,7 +4019,8 @@ async def import_item_pricing_excel(gate_id: int, file: UploadFile = File(...), 
 
     try:
         contents = await file.read()
-        wb = openpyxl.load_workbook(io.BytesIO(contents))
+        file_bytes = io.BytesIO(contents)
+        wb = await run_in_threadpool(openpyxl.load_workbook, file_bytes)
         ws = wb.active
         
         excel_rows = []
