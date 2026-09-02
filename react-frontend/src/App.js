@@ -898,6 +898,10 @@ const [overrideDate, setOverrideDate] = useState('');
   const [newMapToLoc, setNewMapToLoc] = useState('');
   const [newMapBranch, setNewMapBranch] = useState('');
 
+  const [volumetricDivisor, setVolumetricDivisor] = useState('');
+  const [editingDivisor, setEditingDivisor] = useState(false);
+  const [newDivisorValue, setNewDivisorValue] = useState('');
+
   const [showLogModal, setShowLogModal] = useState(false);
   const [logsData, setLogsData] = useState([]);
   const [currentLogGateName, setCurrentLogGateName] = useState('');
@@ -1406,6 +1410,13 @@ const [overrideDate, setOverrideDate] = useState('');
           const mapResp = await authFetch(`${API_URL}/references/location-mappings`);
           if (mapResp.ok) setRefLocationMappings(await mapResp.json());
 
+          const divResp = await authFetch(`${API_URL}/references/settings/volumetric-divisor`);
+          if (divResp.ok) {
+              const data = await divResp.json();
+              setVolumetricDivisor(data.value);
+              setNewDivisorValue(data.value);
+          }
+
       } catch (error) { showNotification('Error loading reference data', 'error'); }
   }
 
@@ -1443,6 +1454,33 @@ const [overrideDate, setOverrideDate] = useState('');
       } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
       finally { setIsDeleting(false); }
   }
+
+  const saveVolumetricDivisor = async () => {
+      if (!newDivisorValue || isNaN(newDivisorValue) || Number(newDivisorValue) <= 0) {
+          showNotification('Please enter a valid positive number', 'error');
+          return;
+      }
+      setIsSaving(true);
+      try {
+          const response = await authFetch(`${API_URL}/references/settings/volumetric-divisor`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ value: String(newDivisorValue) })
+          });
+          if (response.ok) {
+              showNotification('Divisor updated successfully', 'success');
+              setVolumetricDivisor(newDivisorValue);
+              setEditingDivisor(false);
+          } else {
+              const err = await response.json();
+              showNotification(getErrorMessage(err), 'error');
+          }
+      } catch (error) {
+          showNotification(`Error: ${error.message}`, 'error');
+      } finally {
+          setIsSaving(false);
+      }
+  };
 
   const loadRateCarts = async () => {
       try {
@@ -4532,6 +4570,26 @@ const [overrideDate, setOverrideDate] = useState('');
                                     )}
                                 </div>
                             ))}
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h2 className="text-xl font-bold mb-4 text-indigo-700">System Settings</h2>
+                        <div className="border rounded p-4 flex flex-col gap-2 bg-gray-50/50">
+                            <span className="text-sm font-bold text-gray-700">Volumetric Weight Divisor</span>
+                            {editingDivisor ? (
+                                <div className="flex gap-2 items-center mt-1">
+                                    <input type="number" step="any" value={newDivisorValue} onChange={e => setNewDivisorValue(e.target.value)} className="border p-2 rounded flex-1 text-sm shadow-sm" />
+                                    <button disabled={isSaving} onClick={saveVolumetricDivisor} className="text-green-600 hover:text-green-800"><CheckCircle size={20} /></button>
+                                    <button disabled={isSaving} onClick={() => { setEditingDivisor(false); setNewDivisorValue(volumetricDivisor); }} className="text-gray-500 hover:text-gray-700"><X size={20} /></button>
+                                </div>
+                            ) : (
+                                <div className="flex justify-between items-center bg-white border p-3 rounded mt-1 shadow-sm">
+                                    <span className="text-lg font-bold text-gray-800">{volumetricDivisor}</span>
+                                    {permissions.includes('edit_reference') && <button onClick={() => setEditingDivisor(true)} className="text-blue-500 hover:text-blue-700"><Edit2 size={18} /></button>}
+                                </div>
+                            )}
+                            <p className="text-xs text-gray-500 mt-3 leading-relaxed">Used globally to calculate Volumetric Weight in Daily Reports (Volume in cm³ &divide; Divisor). Default is 5000.</p>
                         </div>
                     </div>
 

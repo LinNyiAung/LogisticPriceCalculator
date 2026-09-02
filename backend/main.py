@@ -435,6 +435,22 @@ async def startup_db():
             )
         """)
 
+        # --- System Settings Table ---
+        await cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='System_Settings' AND xtype='U')
+            CREATE TABLE System_Settings (
+                setting_key NVARCHAR(255) PRIMARY KEY,
+                setting_value NVARCHAR(255),
+                updated_at NVARCHAR(30),
+                updated_by INT
+            )
+        """)
+        
+        await cursor.execute("SELECT setting_value FROM System_Settings WHERE setting_key = 'volumetric_divisor'")
+        if not await cursor.fetchone():
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            await cursor.execute("INSERT INTO System_Settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)", ('volumetric_divisor', '5000', now_str))
+
         # --- Reference Tables ---
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Locations' AND xtype='U')
@@ -987,6 +1003,9 @@ class ReferenceItem(BaseModel):
 class ReferenceEditItem(BaseModel):
     id: int
     new_name: str
+
+class SettingUpdate(BaseModel):
+    value: str
 
 class LocationMappingEditItem(BaseModel):
     original_to_location: str
@@ -2050,6 +2069,13 @@ async def _get_daily_report_data(target_date: str):
             'ctns': Decimal(str(row[2])) if row[2] is not None else None
         } for row in await cursor_log.fetchall()
     }
+    
+    await cursor_log.execute("SELECT setting_value FROM System_Settings WHERE setting_key = 'volumetric_divisor'")
+    div_row = await cursor_log.fetchone()
+    volumetric_divisor = Decimal(div_row[0]) if div_row and div_row[0] else Decimal("5000.0")
+    if volumetric_divisor <= Decimal("0"):
+        volumetric_divisor = Decimal("5000.0")
+
     await conn_log.close()
 
     conn_dwbi = await get_dwbi_connection()
@@ -2100,9 +2126,9 @@ async def _get_daily_report_data(target_date: str):
         
         weight = ctns * bweight1
         
-        # BVolume is in mm³. Convert to cm³ by dividing by 1000, then divide by 5000 for volumetric weight
+        # BVolume is in mm³. Convert to cm³ by dividing by 1000, then divide by volumetric_divisor for volumetric weight
         bvolume_cm3 = bvolume / Decimal("1000.0")
-        volumetric_weight = (bvolume_cm3 / Decimal("5000.0")) * ctns
+        volumetric_weight = (bvolume_cm3 / volumetric_divisor) * ctns
 
         granular_data.append({
             "branch": branch, "item_code": item_code, "item_name": item_name,
@@ -2953,7 +2979,34 @@ async def edit_ref_department(item: ReferenceEditItem, user: dict = Depends(requ
             raise HTTPException(status_code=400, detail="Department already exists")
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-@app.get("/references/location-mappings")
+@app.get("/references/settings/volumetric-divisor")
+async def get_volumetric_divisor():
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT setting_value FROM System_Settings WHERE setting_key = 'volumetric_divisor'")
+        row = await cursor.fetchone()
+        await conn.close()
+        return {"value": row[0] if row else "5000"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/references/settings/volumetric-divisor")
+async def update_volumetric_divisor(item: SettingUpdate, user: dict = Depends(require_permission("edit_reference"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await cursor.execute("UPDATE System_Settings SET setting_value = ?, updated_at = ?, updated_by = ? WHERE setting_key = 'volumetric_divisor'", (item.value, now_str, user['id']))
+        if cursor.rowcount == 0:
+            await cursor.execute("INSERT INTO System_Settings (setting_key, setting_value, updated_at, updated_by) VALUES (?, ?, ?, ?)", ('volumetric_divisor', item.value, now_str, user['id']))
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Updated volumetric divisor to {item.value}")
+        return {"message": "Updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 async def get_ref_location_mappings():
     try:
         conn = await get_logistic_connection()
