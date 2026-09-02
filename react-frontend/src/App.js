@@ -898,9 +898,9 @@ const [overrideDate, setOverrideDate] = useState('');
   const [newMapToLoc, setNewMapToLoc] = useState('');
   const [newMapBranch, setNewMapBranch] = useState('');
 
-  const [volumetricDivisor, setVolumetricDivisor] = useState('');
-  const [editingDivisor, setEditingDivisor] = useState(false);
-  const [newDivisorValue, setNewDivisorValue] = useState('');
+  const [refGeneralSettings, setRefGeneralSettings] = useState([]);
+  const [newSettingKey, setNewSettingKey] = useState('');
+  const [newSettingValue, setNewSettingValue] = useState('');
 
   const [showLogModal, setShowLogModal] = useState(false);
   const [logsData, setLogsData] = useState([]);
@@ -1410,12 +1410,8 @@ const [overrideDate, setOverrideDate] = useState('');
           const mapResp = await authFetch(`${API_URL}/references/location-mappings`);
           if (mapResp.ok) setRefLocationMappings(await mapResp.json());
 
-          const divResp = await authFetch(`${API_URL}/references/settings/volumetric-divisor`);
-          if (divResp.ok) {
-              const data = await divResp.json();
-              setVolumetricDivisor(data.value);
-              setNewDivisorValue(data.value);
-          }
+          const gsResp = await authFetch(`${API_URL}/references/general-settings`);
+          if (gsResp.ok) setRefGeneralSettings(await gsResp.json());
 
       } catch (error) { showNotification('Error loading reference data', 'error'); }
   }
@@ -1455,31 +1451,48 @@ const [overrideDate, setOverrideDate] = useState('');
       finally { setIsDeleting(false); }
   }
 
-  const saveVolumetricDivisor = async () => {
-      if (!newDivisorValue || isNaN(newDivisorValue) || Number(newDivisorValue) <= 0) {
-          showNotification('Please enter a valid positive number', 'error');
-          return;
-      }
+  const addGeneralSetting = async () => {
+      const key = newSettingKey.trim();
+      const val = newSettingValue.trim();
+      if(!key || !val) return;
       setIsSaving(true);
       try {
-          const response = await authFetch(`${API_URL}/references/settings/volumetric-divisor`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ value: String(newDivisorValue) })
+          const response = await authFetch(`${API_URL}/references/general-settings`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ setting_key: key, setting_value: val })
           });
-          if (response.ok) {
-              showNotification('Divisor updated successfully', 'success');
-              setVolumetricDivisor(newDivisorValue);
-              setEditingDivisor(false);
-          } else {
-              const err = await response.json();
-              showNotification(getErrorMessage(err), 'error');
-          }
-      } catch (error) {
-          showNotification(`Error: ${error.message}`, 'error');
-      } finally {
-          setIsSaving(false);
-      }
+          if(response.ok) { showNotification('Added successfully', 'success'); setNewSettingKey(''); setNewSettingValue(''); loadReferenceData(); } 
+          else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+      finally { setIsSaving(false); }
+  };
+
+  const editGeneralSetting = async (key, newValue) => {
+      const trimmedNewValue = newValue.trim();
+      if(!trimmedNewValue) { setEditingRef({ type: null, id: null, originalValue: '', newValue: '' }); return; }
+      setIsSaving(true);
+      try {
+          const response = await authFetch(`${API_URL}/references/general-settings/${encodeURIComponent(key)}`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ new_value: trimmedNewValue })
+          });
+          if(response.ok) {
+              showNotification('Updated successfully', 'success');
+              setEditingRef({ type: null, id: null, originalValue: '', newValue: '' });
+              loadReferenceData();
+          } else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); } 
+      finally { setIsSaving(false); }
+  };
+
+  const deleteGeneralSetting = async (key) => {
+      if(!window.confirm(`Delete setting ${key}?`)) return;
+      setIsDeleting(true);
+      try {
+          const response = await authFetch(`${API_URL}/references/general-settings/${encodeURIComponent(key)}`, { method: 'DELETE' });
+          if(response.ok) { showNotification('Deleted successfully', 'success'); loadReferenceData(); }
+          else { const err = await response.json(); showNotification(getErrorMessage(err), 'error'); }
+      } catch (error) { showNotification(`Error: ${error.message}`, 'error'); }
+      finally { setIsDeleting(false); }
   };
 
   const loadRateCarts = async () => {
@@ -4573,23 +4586,53 @@ const [overrideDate, setOverrideDate] = useState('');
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-lg shadow-md p-6">
+                    <div className="bg-white rounded-lg shadow-md p-6 xl:col-span-2">
                         <h2 className="text-xl font-bold mb-4 text-indigo-700">General Settings</h2>
-                        <div className="border rounded p-4 flex flex-col gap-2 bg-gray-50/50">
-                            <span className="text-sm font-bold text-gray-700">Volumetric Weight Divisor</span>
-                            {editingDivisor ? (
-                                <div className="flex gap-2 items-center mt-1">
-                                    <input type="number" step="any" value={newDivisorValue} onChange={e => setNewDivisorValue(e.target.value)} className="border p-2 rounded flex-1 text-sm shadow-sm" />
-                                    <button disabled={isSaving} onClick={saveVolumetricDivisor} className="text-green-600 hover:text-green-800"><CheckCircle size={20} /></button>
-                                    <button disabled={isSaving} onClick={() => { setEditingDivisor(false); setNewDivisorValue(volumetricDivisor); }} className="text-gray-500 hover:text-gray-700"><X size={20} /></button>
-                                </div>
-                            ) : (
-                                <div className="flex justify-between items-center bg-white border p-3 rounded mt-1 shadow-sm">
-                                    <span className="text-lg font-bold text-gray-800">{volumetricDivisor}</span>
-                                    {permissions.includes('edit_reference') && <button onClick={() => setEditingDivisor(true)} className="text-blue-500 hover:text-blue-700"><Edit2 size={18} /></button>}
-                                </div>
-                            )}
-                            <p className="text-xs text-gray-500 mt-3 leading-relaxed">Used globally to calculate Volumetric Weight in Daily Reports (Volume in cm³ &divide; Divisor). Default is 5000.</p>
+                        {permissions.includes('add_reference') && (
+                            <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                                <input disabled={isSaving} type="text" placeholder="Setting Key..." value={newSettingKey} onChange={(e) => setNewSettingKey(e.target.value)} className="border p-2 rounded flex-1 bg-white" />
+                                <input disabled={isSaving} type="text" placeholder="Setting Value..." value={newSettingValue} onChange={(e) => setNewSettingValue(e.target.value)} className="border p-2 rounded flex-1 bg-white" />
+                                <button disabled={isSaving || !newSettingKey || !newSettingValue} onClick={addGeneralSetting} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap">Add</button>
+                            </div>
+                        )}
+                        <div className="border rounded max-h-96 overflow-y-auto">
+                            <table className="w-full text-left text-sm border-collapse">
+                                <thead className="bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th className="p-3 border-b">Key</th>
+                                        <th className="p-3 border-b">Value</th>
+                                        <th className="p-3 border-b w-16 text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {refGeneralSettings.length === 0 ? (<tr><td colSpan="3" className="p-4 text-center text-gray-500">No settings found.</td></tr>) : 
+                                    refGeneralSettings.map((setting, i) => (
+                                        <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                                            {editingRef.type === 'general-settings' && editingRef.id === setting.setting_key ? (
+                                                <>
+                                                    <td className="p-3 font-medium text-gray-700">{setting.setting_key}</td>
+                                                    <td className="p-2">
+                                                        <input type="text" value={editingRef.newValue} onChange={e => setEditingRef({...editingRef, newValue: e.target.value})} className="border p-2 rounded w-full bg-white text-sm" />
+                                                    </td>
+                                                    <td className="p-2 text-right whitespace-nowrap">
+                                                        <button onClick={() => editGeneralSetting(setting.setting_key, editingRef.newValue)} className="text-green-600 hover:text-green-800 mr-2"><CheckCircle size={18} /></button>
+                                                        <button onClick={() => setEditingRef({ type: null, id: null, originalValue: '', newValue: '' })} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
+                                                    </td>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <td className="p-3 font-medium text-gray-700">{setting.setting_key}</td>
+                                                    <td className="p-3 text-gray-600 font-mono">{setting.setting_value}</td>
+                                                    <td className="p-3 text-right whitespace-nowrap">
+                                                        {permissions.includes('edit_reference') && <button disabled={isDeleting || isSaving} onClick={() => setEditingRef({ type: 'general-settings', id: setting.setting_key, originalValue: setting.setting_value, newValue: setting.setting_value })} className="text-blue-500 hover:text-blue-700 mr-3"><Edit2 size={16} /></button>}
+                                                        {permissions.includes('delete_reference') && <button disabled={isDeleting || isSaving} onClick={() => deleteGeneralSetting(setting.setting_key)} className="text-red-500 hover:text-red-700 disabled:opacity-70 disabled:cursor-not-allowed"><X size={18} /></button>}
+                                                    </td>
+                                                </>
+                                            )}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 

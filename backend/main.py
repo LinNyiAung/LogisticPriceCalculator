@@ -442,15 +442,34 @@ async def startup_db():
             CREATE TABLE General_Settings (
                 setting_key NVARCHAR(255) PRIMARY KEY,
                 setting_value NVARCHAR(255),
-                updated_at NVARCHAR(30),
-                updated_by INT
+                created_at NVARCHAR(30),
+                created_by INT,
+                edited_at NVARCHAR(30),
+                edited_by INT
             )
+        """)
+
+        # Migrate existing updated_at/updated_by to edited_at/edited_by if they exist
+        await cursor.execute("""
+            IF COL_LENGTH('General_Settings', 'updated_at') IS NOT NULL
+            BEGIN
+                EXEC sp_rename 'General_Settings.updated_at', 'edited_at', 'COLUMN';
+                EXEC sp_rename 'General_Settings.updated_by', 'edited_by', 'COLUMN';
+            END
+        """)
+
+        # Ensure created_at and created_by exist for older databases
+        await cursor.execute("""
+            IF COL_LENGTH('General_Settings', 'created_at') IS NULL
+            BEGIN
+                ALTER TABLE General_Settings ADD created_at NVARCHAR(30), created_by INT;
+            END
         """)
         
         await cursor.execute("SELECT setting_value FROM General_Settings WHERE setting_key = 'volumetric_divisor'")
         if not await cursor.fetchone():
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            await cursor.execute("INSERT INTO General_Settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)", ('volumetric_divisor', '5000', now_str))
+            await cursor.execute("INSERT INTO General_Settings (setting_key, setting_value, created_at) VALUES (?, ?, ?)", ('volumetric_divisor', '5000', now_str))
 
         # --- Reference Tables ---
         await cursor.execute("""
@@ -1007,6 +1026,13 @@ class ReferenceEditItem(BaseModel):
 
 class SettingUpdate(BaseModel):
     value: str
+    
+class GeneralSettingItem(BaseModel):
+    setting_key: str
+    setting_value: str
+
+class GeneralSettingEditItem(BaseModel):
+    new_value: str
 
 class LocationMappingEditItem(BaseModel):
     original_to_location: str
@@ -2998,15 +3024,83 @@ async def update_volumetric_divisor(item: SettingUpdate, user: dict = Depends(re
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        await cursor.execute("UPDATE General_Settings SET setting_value = ?, updated_at = ?, updated_by = ? WHERE setting_key = 'volumetric_divisor'", (item.value, now_str, user['id']))
+        await cursor.execute("UPDATE General_Settings SET setting_value = ?, edited_at = ?, edited_by = ? WHERE setting_key = 'volumetric_divisor'", (item.value, now_str, user['id']))
         if cursor.rowcount == 0:
-            await cursor.execute("INSERT INTO General_Settings (setting_key, setting_value, updated_at, updated_by) VALUES (?, ?, ?, ?)", ('volumetric_divisor', item.value, now_str, user['id']))
+            await cursor.execute("INSERT INTO General_Settings (setting_key, setting_value, created_at, created_by) VALUES (?, ?, ?, ?)", ('volumetric_divisor', item.value, now_str, user['id']))
         await conn.commit()
         await conn.close()
         await log_user_activity(user['id'], "EDIT_REFERENCE", f"Updated volumetric divisor to {item.value}")
         return {"message": "Updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+    
+@app.get("/references/general-settings")
+async def get_general_settings():
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT setting_key, setting_value FROM General_Settings ORDER BY setting_key")
+        rows = await cursor.fetchall()
+        await conn.close()
+        return [{"setting_key": row[0], "setting_value": row[1]} for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.post("/references/general-settings")
+async def add_general_setting(item: GeneralSettingItem, user: dict = Depends(require_permission("add_reference"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        try:
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            await cursor.execute("INSERT INTO General_Settings (setting_key, setting_value, created_at, created_by) VALUES (?, ?, ?, ?)", (item.setting_key, item.setting_value, now_str, user['id']))
+            await conn.commit()
+        except Exception as e:
+            if "UNIQUE" in str(e).upper() or "duplicate" in str(e).lower() or "Violation" in str(e):
+                await conn.close()
+                raise HTTPException(status_code=400, detail="Setting key already exists")
+            raise
+        await conn.close()
+        await log_user_activity(user['id'], "ADD_REFERENCE", f"Added general setting: {item.setting_key}")
+        return {"message": "Added successfully"}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.put("/references/general-settings/{setting_key}")
+async def edit_general_setting(setting_key: str, item: GeneralSettingEditItem, user: dict = Depends(require_permission("edit_reference"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        await cursor.execute("UPDATE General_Settings SET setting_value = ?, edited_at = ?, edited_by = ? WHERE setting_key = ?", (item.new_value, now_str, user['id'], setting_key))
+        if cursor.rowcount == 0:
+            await conn.close()
+            raise HTTPException(status_code=404, detail="Not found")
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['id'], "EDIT_REFERENCE", f"Edited general setting ({setting_key}) to {item.new_value}")
+        return {"message": "Edited successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.delete("/references/general-settings/{setting_key}")
+async def delete_general_setting(setting_key: str, user: dict = Depends(require_permission("delete_reference"))):
+    try:
+        conn = await get_logistic_connection()
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT setting_value FROM General_Settings WHERE setting_key = ?", (setting_key,))
+        row = await cursor.fetchone()
+        if not row:
+            await conn.close()
+            raise HTTPException(status_code=404, detail="Not found")
+        await cursor.execute("DELETE FROM General_Settings WHERE setting_key = ?", (setting_key,))
+        await conn.commit()
+        await conn.close()
+        await log_user_activity(user['id'], "DELETE_REFERENCE", f"Deleted general setting: {setting_key}")
+        return {"message": "Deleted successfully"}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
     
 @app.get("/references/location-mappings")
 async def get_ref_location_mappings():
