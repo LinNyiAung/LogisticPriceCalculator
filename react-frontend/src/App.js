@@ -4574,7 +4574,7 @@ const [overrideDate, setOverrideDate] = useState('');
                     </div>
 
                     <div className="bg-white rounded-lg shadow-md p-6">
-                        <h2 className="text-xl font-bold mb-4 text-indigo-700">System Settings</h2>
+                        <h2 className="text-xl font-bold mb-4 text-indigo-700">General Settings</h2>
                         <div className="border rounded p-4 flex flex-col gap-2 bg-gray-50/50">
                             <span className="text-sm font-bold text-gray-700">Volumetric Weight Divisor</span>
                             {editingDivisor ? (

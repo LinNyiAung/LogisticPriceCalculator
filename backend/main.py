@@ -436,10 +436,10 @@ async def startup_db():
             )
         """)
 
-        # --- System Settings Table ---
+        # --- General Settings Table ---
         await cursor.execute("""
-            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='System_Settings' AND xtype='U')
-            CREATE TABLE System_Settings (
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='General_Settings' AND xtype='U')
+            CREATE TABLE General_Settings (
                 setting_key NVARCHAR(255) PRIMARY KEY,
                 setting_value NVARCHAR(255),
                 updated_at NVARCHAR(30),
@@ -447,10 +447,10 @@ async def startup_db():
             )
         """)
         
-        await cursor.execute("SELECT setting_value FROM System_Settings WHERE setting_key = 'volumetric_divisor'")
+        await cursor.execute("SELECT setting_value FROM General_Settings WHERE setting_key = 'volumetric_divisor'")
         if not await cursor.fetchone():
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            await cursor.execute("INSERT INTO System_Settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)", ('volumetric_divisor', '5000', now_str))
+            await cursor.execute("INSERT INTO General_Settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)", ('volumetric_divisor', '5000', now_str))
 
         # --- Reference Tables ---
         await cursor.execute("""
@@ -2071,7 +2071,7 @@ async def _get_daily_report_data(target_date: str):
         } for row in await cursor_log.fetchall()
     }
     
-    await cursor_log.execute("SELECT setting_value FROM System_Settings WHERE setting_key = 'volumetric_divisor'")
+    await cursor_log.execute("SELECT setting_value FROM General_Settings WHERE setting_key = 'volumetric_divisor'")
     div_row = await cursor_log.fetchone()
     volumetric_divisor = Decimal(div_row[0]) if div_row and div_row[0] else Decimal("5000.0")
     if volumetric_divisor <= Decimal("0"):
@@ -2985,7 +2985,7 @@ async def get_volumetric_divisor():
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT setting_value FROM System_Settings WHERE setting_key = 'volumetric_divisor'")
+        await cursor.execute("SELECT setting_value FROM General_Settings WHERE setting_key = 'volumetric_divisor'")
         row = await cursor.fetchone()
         await conn.close()
         return {"value": row[0] if row else "5000"}
@@ -2998,9 +2998,9 @@ async def update_volumetric_divisor(item: SettingUpdate, user: dict = Depends(re
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        await cursor.execute("UPDATE System_Settings SET setting_value = ?, updated_at = ?, updated_by = ? WHERE setting_key = 'volumetric_divisor'", (item.value, now_str, user['id']))
+        await cursor.execute("UPDATE General_Settings SET setting_value = ?, updated_at = ?, updated_by = ? WHERE setting_key = 'volumetric_divisor'", (item.value, now_str, user['id']))
         if cursor.rowcount == 0:
-            await cursor.execute("INSERT INTO System_Settings (setting_key, setting_value, updated_at, updated_by) VALUES (?, ?, ?, ?)", ('volumetric_divisor', item.value, now_str, user['id']))
+            await cursor.execute("INSERT INTO General_Settings (setting_key, setting_value, updated_at, updated_by) VALUES (?, ?, ?, ?)", ('volumetric_divisor', item.value, now_str, user['id']))
         await conn.commit()
         await conn.close()
         await log_user_activity(user['id'], "EDIT_REFERENCE", f"Updated volumetric divisor to {item.value}")
