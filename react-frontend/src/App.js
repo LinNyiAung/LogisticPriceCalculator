@@ -665,11 +665,11 @@ const PricingApp = () => {
   
   const [dailyReportFilters, setDailyReportFilters] = useState({ 
     date_filter: '', bu: '', branch: '', item_code: '', item_name: '', principal: '', brand: '', driver_name: '',
-    ctns: '', weight: '', driver_total_ctns: '', driver_total_weight: '', override_ctns: '', rate_cart_cost: '', override_amount: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
+    ctns: '', weight: '', volumetric_weight: '', driver_total_ctns: '', driver_total_weight: '', driver_total_volumetric_weight: '', override_ctns: '', rate_cart_cost: '', override_amount: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
   });
   
   const [townshipFilters, setTownshipFilters] = useState({ 
-    date_filter: '', branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', weight: '', driver_total_ctns: '', driver_total_weight: '', override_ctns: '', rate_cart_cost: '', override_amount: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
+    date_filter: '', branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', weight: '', volumetric_weight: '', driver_total_ctns: '', driver_total_weight: '', driver_total_volumetric_weight: '', override_ctns: '', rate_cart_cost: '', override_amount: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
   });
 
   const [submittedAllocationData, setSubmittedAllocationData] = useState([]);
@@ -3920,12 +3920,20 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.weight} onChange={(e) => setDailyReportFilters({...dailyReportFilters, weight: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right">
-                                                <div>Driver Total (Ctns)</div>
-                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.driver_total_ctns} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_total_ctns: e.target.value})} />
+                                                <div>Volumetric Weight</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.volumetric_weight} onChange={(e) => setDailyReportFilters({...dailyReportFilters, volumetric_weight: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right">
                                                 <div>Driver Total Weight</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.driver_total_weight} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_total_weight: e.target.value})} />
+                                            </th>
+                                            <th className="border p-2 text-right">
+                                                <div>Driver Total Volumetric Weight</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.driver_total_volumetric_weight} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_total_volumetric_weight: e.target.value})} />
+                                            </th>
+                                            <th className="border p-2 text-right">
+                                                <div>Driver Total (Ctns)</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.driver_total_ctns} onChange={(e) => setDailyReportFilters({...dailyReportFilters, driver_total_ctns: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right">
                                                 <div>Original Driver Total (Ctns)</div>
@@ -3977,8 +3985,10 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2">{row.item_name}</td>
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                     <td className="border p-2 text-right text-indigo-700 font-medium">{formatNumber(row.weight)}</td>
-                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_driver_total_ctns != null ? row.override_driver_total_ctns : row.driver_total_ctns)}</td>
+                                                    <td className="border p-2 text-right text-indigo-700 font-medium">{formatNumber(row.volumetric_weight)}</td>
                                                     <td className="border p-2 text-right text-indigo-700 font-medium">{formatNumber(row.driver_total_weight)}</td>
+                                                    <td className="border p-2 text-right text-indigo-700 font-medium">{formatNumber(row.driver_total_volumetric_weight)}</td>
+                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_driver_total_ctns != null ? row.override_driver_total_ctns : row.driver_total_ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
                                                     <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.override_ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_rate_cart_cost != null ? row.override_rate_cart_cost : row.rate_cart_cost)}</td>
@@ -4045,12 +4055,20 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.weight} onChange={(e) => setTownshipFilters({...townshipFilters, weight: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right">
-                                                <div>Driver Total (Ctns)</div>
-                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.driver_total_ctns} onChange={(e) => setTownshipFilters({...townshipFilters, driver_total_ctns: e.target.value})} />
+                                                <div>Customer Total Volumetric Weight</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.volumetric_weight} onChange={(e) => setTownshipFilters({...townshipFilters, volumetric_weight: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right">
                                                 <div>Driver Total Weight</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.driver_total_weight} onChange={(e) => setTownshipFilters({...townshipFilters, driver_total_weight: e.target.value})} />
+                                            </th>
+                                            <th className="border p-2 text-right">
+                                                <div>Driver Total Volumetric Weight</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.driver_total_volumetric_weight} onChange={(e) => setTownshipFilters({...townshipFilters, driver_total_volumetric_weight: e.target.value})} />
+                                            </th>
+                                            <th className="border p-2 text-right">
+                                                <div>Driver Total (Ctns)</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.driver_total_ctns} onChange={(e) => setTownshipFilters({...townshipFilters, driver_total_ctns: e.target.value})} />
                                             </th>
                                             <th className="border p-2 text-right">
                                                 <div>Original Driver Total (Ctns)</div>
@@ -4108,8 +4126,10 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2">{row.contact_person}</td>
                                                     <td className="border p-2 text-right">{formatNumber(row.ctns)}</td>
                                                     <td className="border p-2 text-right text-indigo-700 font-medium">{formatNumber(row.weight)}</td>
-                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_driver_total_ctns != null ? row.override_driver_total_ctns : row.driver_total_ctns)}</td>
+                                                    <td className="border p-2 text-right text-indigo-700 font-medium">{formatNumber(row.volumetric_weight)}</td>
                                                     <td className="border p-2 text-right text-indigo-700 font-medium">{formatNumber(row.driver_total_weight)}</td>
+                                                    <td className="border p-2 text-right text-indigo-700 font-medium">{formatNumber(row.driver_total_volumetric_weight)}</td>
+                                                    <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_driver_total_ctns != null ? row.override_driver_total_ctns : row.driver_total_ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.driver_total_ctns)}</td>
                                                     <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.override_ctns)}</td>
                                                     <td className="border p-2 text-right text-gray-500">{formatNumber(row.override_rate_cart_cost != null ? row.override_rate_cart_cost : row.rate_cart_cost)}</td>
