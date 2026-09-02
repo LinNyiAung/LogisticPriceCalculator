@@ -21,6 +21,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 import asyncio
+from fastapi.concurrency import run_in_threadpool
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Request 
 from dotenv import load_dotenv
@@ -3704,6 +3705,14 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
         await cursor.execute("SELECT log_pric, code, name FROM SD_Code")
         sd_code_excel_map = {str(row[0]).strip().lower(): {"code": row[1], "name": row[2]} for row in await cursor.fetchall() if row[0]}
 
+        # --- POSM Calculation sheet (optional) ---
+        await cursor.execute("""
+            SELECT department, item_name, uom, quantity, unit_cost, total_cost,
+                   b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal
+            FROM Calculation_POSM_Products WHERE calc_id = ?
+        """, (record_id,))
+        posm_rows = await cursor.fetchall()
+
         await conn.close()
 
         channel_name = record.get('channel', '')
@@ -3720,225 +3729,218 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
                 return ""
             return LOCATION_CODE_MAP.get(str(loc_name).strip().upper(), loc_name)
 
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Cost Details"
+        def build_excel():
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Cost Details"
 
-        headers = [
-            "No", "Claim Date", "Delivery Date", "SIN No", "Area", "Code", "Name", "Principal", "Brand", "Item Code", "Item", "Ctns", 
-            "Price", "Total Amount", "Weight", "UOM", "Gate", "Channel", "Month", "Year", "Description for Account", 
-            "Description with cnts and price", "Branch"
-        ]
-        
-        if not is_sd_channel:
-            headers.extend(["B-Dept", "B-Principal"])
-        if not is_branch_channel:
-            headers.extend(["S-Dept", "S-Principal"])
-            
-        headers.extend(["BU", "Calculation ID"])
-        
-        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
-        header_font = Font(bold=True, color='FFFFFF')
-        border_style = Side(border_style="thin", color="000000")
-        border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
-
-        for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col_num)
-            cell.value = header
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal='center')
-            cell.border = border
-
-        now = datetime.datetime.now()
-        claim_month = now.strftime("%B") 
-        claim_year = now.year
-
-        claimed_at_val = record.get('claimed_at')
-        if record.get('status') == 'claimed' and claimed_at_val:
-            if isinstance(claimed_at_val, datetime.datetime):
-                claim_date_str = claimed_at_val.strftime("%d/%m/%Y")
-            else:
-                try: claim_date_str = datetime.datetime.strptime(str(claimed_at_val)[:19], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y")
-                except ValueError: claim_date_str = str(claimed_at_val)
-        else:
-            claim_date_str = ""
-        
-        cost_details_delivery_date = ""
-        cost_details_sin_no = ""
-
-        for idx, item in enumerate(products, 1):
-            row_num = idx + 1
-            doc_date_val = item.get('doc_date')
-            if isinstance(doc_date_val, datetime.datetime): doc_date_str = doc_date_val.strftime("%d/%m/%Y")
-            elif isinstance(doc_date_val, str) and len(doc_date_val) >= 10:
-                try: doc_date_str = datetime.datetime.strptime(doc_date_val[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
-                except ValueError: doc_date_str = doc_date_val
-            else: doc_date_str = str(doc_date_val) if doc_date_val else ""
-
-            b_code_val = item.get('b_code', '')
-            b_name_val = item.get('b_name', '')
-            b_desc = item.get('b_desc', '')
-            
-            display_code = b_code_val
-            display_name = b_name_val
-            base_desc = b_desc.strip() if b_desc else ""
-
-            principal_val = str(item.get('principal', '')).strip().lower()
-            if is_sd_channel:
-                sd_info = sd_code_excel_map.get(principal_val, {})
-                display_code = sd_info.get('code', display_code)
-                display_name = sd_info.get('name', display_name)
-                base_desc = sd_info.get('name', base_desc)
-
-            from_loc_code = _to_loc_code(record['from_loc'])
-            to_loc_code = _to_loc_code(record['to_loc'])
-            desc_for_account = f"{base_desc}-{from_loc_code} to {to_loc_code}"
-
-            ctns_val = Decimal(str(item.get('ctns', 0)))
-            total_cost_val = Decimal(str(item.get('total_cost', 0)))
-            ctns_formatted = int(ctns_val) if float(ctns_val).is_integer() else ctns_val
-            price_per_ctn = total_cost_val / ctns_val if ctns_val > Decimal("0") else Decimal("0.0")
-            price_formatted = int(price_per_ctn) if float(price_per_ctn).is_integer() else round(price_per_ctn, 2)
-
-            concat_desc = f"{desc_for_account} - {ctns_formatted} ctns @{price_formatted} kyats"
-
-            raw_sin_no = str(item.get('sin_no', ''))
-            clean_sin_no = raw_sin_no.replace('PDG - ', '').replace('PDG-', '').replace('PG - ', '').replace('PG-', '').strip()
-
-            if idx == 1:
-                cost_details_delivery_date = doc_date_str
-                cost_details_sin_no = clean_sin_no
-
-            b_dept_val = item.get('b_dept', '')
-            b_principal_val = item.get('b_principal', '')
-            s_dept_val = item.get('s_dept', '')
-            s_principal_val = item.get('s_principal', '')
-
-            row_vals = [
-                idx, claim_date_str, doc_date_str, clean_sin_no, record['to_loc'],
-                display_code, display_name, item.get('principal', ''), item.get('brand', ''),
-                item.get('code', ''), item.get('name', ''), ctns_formatted,
-                float(price_per_ctn), float(total_cost_val), float(item.get('weight', 0)),
-                "Kg", record['gate_name'], record.get('channel', ''), claim_month, claim_year,
-                desc_for_account, concat_desc, record['to_loc']
-            ]
-
-            if not is_sd_channel:
-                row_vals.extend([b_dept_val, b_principal_val])
-            if not is_branch_channel:
-                row_vals.extend([s_dept_val, s_principal_val])
-
-            row_vals.extend([item.get('bu', ''), record['id']])
-
-            for col_num, val in enumerate(row_vals, 1):
-                cell = ws.cell(row=row_num, column=col_num, value=val)
-                cell.border = border
-                if isinstance(val, (int, float, Decimal)) and col_num in (13, 14, 15):
-                    cell.number_format = '#,##0.00'
-        
-        for col in ws.columns:    
-            max_length = 0
-            col_letter = col[0].column_letter
-            for cell in col:
-                try:
-                    if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
-                except: pass
-            ws.column_dimensions[col_letter].width = max_length + 2
-
-        # --- POSM Calculation sheet (optional) ---
-        conn2 = await get_logistic_connection()
-        cursor2 = await conn2.cursor()
-        await cursor2.execute("""
-            SELECT department, item_name, uom, quantity, unit_cost, total_cost,
-                   b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal
-            FROM Calculation_POSM_Products WHERE calc_id = ?
-        """, (record_id,))
-        posm_rows = await cursor2.fetchall()
-        await conn2.close()
-
-        if posm_rows:
-            ws2 = wb.create_sheet("POSM Details")
-            posm_headers = [
-                "No", "Claim Date", "Delivery Date", "SIN No", "Area", "Name", "Department", "Principal", "Brand",
-                "Item", "Quantity", "Unit Cost", "Total cost", "Uom", "Gate", "Channel", "Month", "Year",
-                "Description for Account", "Description with pcs and price", "Branch"
+            headers = [
+                "No", "Claim Date", "Delivery Date", "SIN No", "Area", "Code", "Name", "Principal", "Brand", "Item Code", "Item", "Ctns", 
+                "Price", "Total Amount", "Weight", "UOM", "Gate", "Channel", "Month", "Year", "Description for Account", 
+                "Description with cnts and price", "Branch"
             ]
             
             if not is_sd_channel:
-                posm_headers.extend(["B-Dept", "B-Principal"])
+                headers.extend(["B-Dept", "B-Principal"])
             if not is_branch_channel:
-                posm_headers.extend(["S-Dept", "S-Principal"])
+                headers.extend(["S-Dept", "S-Principal"])
                 
-            posm_headers.append("Calculation ID")
+            headers.extend(["BU", "Calculation ID"])
+            
+            header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+            header_font = Font(bold=True, color='FFFFFF')
+            border_style = Side(border_style="thin", color="000000")
+            border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
 
-            for col_num, header in enumerate(posm_headers, 1):
-                cell = ws2.cell(row=1, column=col_num, value=header)
+            for col_num, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col_num)
+                cell.value = header
                 cell.fill = header_fill
                 cell.font = header_font
                 cell.alignment = Alignment(horizontal='center')
                 cell.border = border
 
-            from_loc_code = _to_loc_code(record['from_loc'])
-            to_loc_code = _to_loc_code(record['to_loc'])
+            now = datetime.datetime.now()
+            claim_month = now.strftime("%B") 
+            claim_year = now.year
 
-            for idx, r in enumerate(posm_rows, 1):
+            claimed_at_val = record.get('claimed_at')
+            if record.get('status') == 'claimed' and claimed_at_val:
+                if isinstance(claimed_at_val, datetime.datetime):
+                    claim_date_str = claimed_at_val.strftime("%d/%m/%Y")
+                else:
+                    try: claim_date_str = datetime.datetime.strptime(str(claimed_at_val)[:19], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y")
+                    except ValueError: claim_date_str = str(claimed_at_val)
+            else:
+                claim_date_str = ""
+            
+            cost_details_delivery_date = ""
+            cost_details_sin_no = ""
+
+            for idx, item in enumerate(products, 1):
                 row_num = idx + 1
-                department, item_name, uom, quantity, unit_cost, total_cost, b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal = r
+                doc_date_val = item.get('doc_date')
+                if isinstance(doc_date_val, datetime.datetime): doc_date_str = doc_date_val.strftime("%d/%m/%Y")
+                elif isinstance(doc_date_val, str) and len(doc_date_val) >= 10:
+                    try: doc_date_str = datetime.datetime.strptime(doc_date_val[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+                    except ValueError: doc_date_str = doc_date_val
+                else: doc_date_str = str(doc_date_val) if doc_date_val else ""
 
-                qty_val = Decimal(str(quantity or 0))
-                qty_formatted = int(qty_val) if float(qty_val).is_integer() else qty_val
-                unit_cost_val = Decimal(str(unit_cost or 0))
-                unit_cost_formatted = int(unit_cost_val) if float(unit_cost_val).is_integer() else round(unit_cost_val, 2)
+                b_code_val = item.get('b_code', '')
+                b_name_val = item.get('b_name', '')
+                b_desc = item.get('b_desc', '')
+                
+                display_code = b_code_val
+                display_name = b_name_val
+                base_desc = b_desc.strip() if b_desc else ""
 
-                display_name = b_name or "Transport Charges-POSM"
-                b_desc_clean = b_desc.strip() if b_desc else "POSM-Transport Charges"
-
+                principal_val = str(item.get('principal', '')).strip().lower()
                 if is_sd_channel:
-                    sd_info = sd_code_excel_map.get("posm", {})
+                    sd_info = sd_code_excel_map.get(principal_val, {})
+                    display_code = sd_info.get('code', display_code)
                     display_name = sd_info.get('name', display_name)
-                    b_desc_clean = sd_info.get('name', b_desc_clean)
+                    base_desc = sd_info.get('name', base_desc)
 
-                posm_desc_account = f"{b_desc_clean}-{from_loc_code} to {to_loc_code}"
-                posm_desc_with_price = f"{posm_desc_account} - {qty_formatted} pcs @{unit_cost_formatted} kyats"
+                from_loc_code = _to_loc_code(record['from_loc'])
+                to_loc_code = _to_loc_code(record['to_loc'])
+                desc_for_account = f"{base_desc}-{from_loc_code} to {to_loc_code}"
 
-                b_dept_val = b_dept or "Logistics"
-                b_principal_val = b_principal or "POSM"
-                s_dept_val = s_dept or "Logistics"
-                s_principal_val = s_principal or "POSM"
+                ctns_val = Decimal(str(item.get('ctns', 0)))
+                total_cost_val = Decimal(str(item.get('total_cost', 0)))
+                ctns_formatted = int(ctns_val) if float(ctns_val).is_integer() else ctns_val
+                price_per_ctn = total_cost_val / ctns_val if ctns_val > Decimal("0") else Decimal("0.0")
+                price_formatted = int(price_per_ctn) if float(price_per_ctn).is_integer() else round(price_per_ctn, 2)
+
+                concat_desc = f"{desc_for_account} - {ctns_formatted} ctns @{price_formatted} kyats"
+
+                raw_sin_no = str(item.get('sin_no', ''))
+                clean_sin_no = raw_sin_no.replace('PDG - ', '').replace('PDG-', '').replace('PG - ', '').replace('PG-', '').strip()
+
+                if idx == 1:
+                    cost_details_delivery_date = doc_date_str
+                    cost_details_sin_no = clean_sin_no
+
+                b_dept_val = item.get('b_dept', '')
+                b_principal_val = item.get('b_principal', '')
+                s_dept_val = item.get('s_dept', '')
+                s_principal_val = item.get('s_principal', '')
 
                 row_vals = [
-                    idx, claim_date_str, cost_details_delivery_date, cost_details_sin_no, record['to_loc'],
-                    display_name, department or "", b_principal or "POSM", b_principal or "POSM", item_name or "", float(qty_val),
-                    float(unit_cost_val), float(total_cost or 0), uom or "", record['gate_name'],
-                    record.get('channel', ''), claim_month, claim_year, posm_desc_account, posm_desc_with_price,
-                    record['to_loc']
+                    idx, claim_date_str, doc_date_str, clean_sin_no, record['to_loc'],
+                    display_code, display_name, item.get('principal', ''), item.get('brand', ''),
+                    item.get('code', ''), item.get('name', ''), ctns_formatted,
+                    float(price_per_ctn), float(total_cost_val), float(item.get('weight', 0)),
+                    "Kg", record['gate_name'], record.get('channel', ''), claim_month, claim_year,
+                    desc_for_account, concat_desc, record['to_loc']
                 ]
-                
+
                 if not is_sd_channel:
                     row_vals.extend([b_dept_val, b_principal_val])
                 if not is_branch_channel:
                     row_vals.extend([s_dept_val, s_principal_val])
-                
-                row_vals.append(record_id)
+
+                row_vals.extend([item.get('bu', ''), record['id']])
 
                 for col_num, val in enumerate(row_vals, 1):
-                    cell = ws2.cell(row=row_num, column=col_num, value=val)
+                    cell = ws.cell(row=row_num, column=col_num, value=val)
                     cell.border = border
-                    if isinstance(val, (int, float, Decimal)) and col_num in (11, 12, 13):
+                    if isinstance(val, (int, float, Decimal)) and col_num in (13, 14, 15):
                         cell.number_format = '#,##0.00'
-            for col in ws2.columns:    
+            
+            for col in ws.columns:    
                 max_length = 0
                 col_letter = col[0].column_letter
                 for cell in col:
                     try:
                         if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
                     except: pass
-                ws2.column_dimensions[col_letter].width = max_length + 2
+                ws.column_dimensions[col_letter].width = max_length + 2
 
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
+            if posm_rows:
+                ws2 = wb.create_sheet("POSM Details")
+                posm_headers = [
+                    "No", "Claim Date", "Delivery Date", "SIN No", "Area", "Name", "Department", "Principal", "Brand",
+                    "Item", "Quantity", "Unit Cost", "Total cost", "Uom", "Gate", "Channel", "Month", "Year",
+                    "Description for Account", "Description with pcs and price", "Branch"
+                ]
+                
+                if not is_sd_channel:
+                    posm_headers.extend(["B-Dept", "B-Principal"])
+                if not is_branch_channel:
+                    posm_headers.extend(["S-Dept", "S-Principal"])
+                    
+                posm_headers.append("Calculation ID")
+
+                for col_num, header in enumerate(posm_headers, 1):
+                    cell = ws2.cell(row=1, column=col_num, value=header)
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = Alignment(horizontal='center')
+                    cell.border = border
+
+                from_loc_code = _to_loc_code(record['from_loc'])
+                to_loc_code = _to_loc_code(record['to_loc'])
+
+                for idx, r in enumerate(posm_rows, 1):
+                    row_num = idx + 1
+                    department, item_name, uom, quantity, unit_cost, total_cost, b_code, b_name, b_dept, b_principal, b_desc, s_dept, s_principal = r
+
+                    qty_val = Decimal(str(quantity or 0))
+                    qty_formatted = int(qty_val) if float(qty_val).is_integer() else qty_val
+                    unit_cost_val = Decimal(str(unit_cost or 0))
+                    unit_cost_formatted = int(unit_cost_val) if float(unit_cost_val).is_integer() else round(unit_cost_val, 2)
+
+                    display_name = b_name or "Transport Charges-POSM"
+                    b_desc_clean = b_desc.strip() if b_desc else "POSM-Transport Charges"
+
+                    if is_sd_channel:
+                        sd_info = sd_code_excel_map.get("posm", {})
+                        display_name = sd_info.get('name', display_name)
+                        b_desc_clean = sd_info.get('name', b_desc_clean)
+
+                    posm_desc_account = f"{b_desc_clean}-{from_loc_code} to {to_loc_code}"
+                    posm_desc_with_price = f"{posm_desc_account} - {qty_formatted} pcs @{unit_cost_formatted} kyats"
+
+                    b_dept_val = b_dept or "Logistics"
+                    b_principal_val = b_principal or "POSM"
+                    s_dept_val = s_dept or "Logistics"
+                    s_principal_val = s_principal or "POSM"
+
+                    row_vals = [
+                        idx, claim_date_str, cost_details_delivery_date, cost_details_sin_no, record['to_loc'],
+                        display_name, department or "", b_principal or "POSM", b_principal or "POSM", item_name or "", float(qty_val),
+                        float(unit_cost_val), float(total_cost or 0), uom or "", record['gate_name'],
+                        record.get('channel', ''), claim_month, claim_year, posm_desc_account, posm_desc_with_price,
+                        record['to_loc']
+                    ]
+                    
+                    if not is_sd_channel:
+                        row_vals.extend([b_dept_val, b_principal_val])
+                    if not is_branch_channel:
+                        row_vals.extend([s_dept_val, s_principal_val])
+                    
+                    row_vals.append(record_id)
+
+                    for col_num, val in enumerate(row_vals, 1):
+                        cell = ws2.cell(row=row_num, column=col_num, value=val)
+                        cell.border = border
+                        if isinstance(val, (int, float, Decimal)) and col_num in (11, 12, 13):
+                            cell.number_format = '#,##0.00'
+                for col in ws2.columns:    
+                    max_length = 0
+                    col_letter = col[0].column_letter
+                    for cell in col:
+                        try:
+                            if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
+                        except: pass
+                    ws2.column_dimensions[col_letter].width = max_length + 2
+
+            out = io.BytesIO()
+            wb.save(out)
+            out.seek(0)
+            return out
+
+        output = await run_in_threadpool(build_excel)
         filename = f"Calculation_{record_id}_{record['gate_name']}.xlsx"
         return StreamingResponse(
             output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -3965,38 +3967,42 @@ async def export_item_pricing_excel(gate_id: int):
         rows = await cursor.fetchall()
         await conn.close()
         
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Item Pricing"
-        ws['A1'] = f"Gate: {gate_name} ({from_loc} -> {to_loc})"
-        ws['A1'].font = Font(bold=True, size=14)
-        
-        headers = ['BU', 'Item Code', 'Item Name', 'Principal', 'Brand', 'Transportation Cost']
-        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
-        header_font = Font(bold=True, color='FFFFFF')
-        
-        for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=3, column=col_num)
-            cell.value = header
-            cell.fill = header_fill
-            cell.font = header_font
-        
-        for row_num, row_data in enumerate(rows, 4):
-            for col_num, value in enumerate(row_data, 1):
-                ws.cell(row=row_num, column=col_num, value=value)
-        
-        for col in ws.columns:
-            max_length = 0
-            col_letter = col[0].column_letter
-            for cell in col:
-                try:
-                    if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
-                except: pass
-            ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
-        
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
+        def build_excel():
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Item Pricing"
+            ws['A1'] = f"Gate: {gate_name} ({from_loc} -> {to_loc})"
+            ws['A1'].font = Font(bold=True, size=14)
+            
+            headers = ['BU', 'Item Code', 'Item Name', 'Principal', 'Brand', 'Transportation Cost']
+            header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+            header_font = Font(bold=True, color='FFFFFF')
+            
+            for col_num, header in enumerate(headers, 1):
+                cell = ws.cell(row=3, column=col_num)
+                cell.value = header
+                cell.fill = header_fill
+                cell.font = header_font
+            
+            for row_num, row_data in enumerate(rows, 4):
+                for col_num, value in enumerate(row_data, 1):
+                    ws.cell(row=row_num, column=col_num, value=value)
+            
+            for col in ws.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    try:
+                        if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
+                    except: pass
+                ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+            
+            out = io.BytesIO()
+            wb.save(out)
+            out.seek(0)
+            return out
+
+        output = await run_in_threadpool(build_excel)
         filename = f"item_pricing_{gate_name.replace(' ', '_')}.xlsx"
         return StreamingResponse(
             output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -4478,32 +4484,36 @@ async def export_gate_cost_report(user: dict = Depends(get_current_user)):
         rows = await cursor.fetchall()
         await conn.close()
 
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Gate Cost Changes"
-        headers = ['Date', 'Gate Name', 'From', 'To', 'Changed By', 'Old Cost', 'New Cost']
-        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
-        header_font = Font(bold=True, color='FFFFFF')
-        for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col_num)
-            cell.value = header
-            cell.fill = header_fill
-            cell.font = header_font
-        for row_num, row_data in enumerate(rows, 2):
-            for col_num, value in enumerate(row_data, 1):
-                ws.cell(row=row_num, column=col_num, value=value)
-        for col in ws.columns:
-            max_length = 0
-            col_letter = col[0].column_letter
-            for cell in col:
-                try:
-                    if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
-                except: pass
-            ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+        def build_excel():
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Gate Cost Changes"
+            headers = ['Date', 'Gate Name', 'From', 'To', 'Changed By', 'Old Cost', 'New Cost']
+            header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+            header_font = Font(bold=True, color='FFFFFF')
+            for col_num, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col_num)
+                cell.value = header
+                cell.fill = header_fill
+                cell.font = header_font
+            for row_num, row_data in enumerate(rows, 2):
+                for col_num, value in enumerate(row_data, 1):
+                    ws.cell(row=row_num, column=col_num, value=value)
+            for col in ws.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    try:
+                        if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
+                    except: pass
+                ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
 
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
+            out = io.BytesIO()
+            wb.save(out)
+            out.seek(0)
+            return out
+
+        output = await run_in_threadpool(build_excel)
         return StreamingResponse(
             output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": "attachment; filename=gate_cost_changes.xlsx"}
@@ -4531,32 +4541,36 @@ async def export_item_cost_report(user: dict = Depends(get_current_user)):
         rows = await cursor.fetchall()
         await conn.close()
 
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Item Transport Cost Changes"
-        headers = ['Date', 'Item Code', 'Item Name', 'Principal', 'Brand', 'Gate', 'From', 'To', 'Changed By', 'Old Cost', 'New Cost']
-        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
-        header_font = Font(bold=True, color='FFFFFF')
-        for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col_num)
-            cell.value = header
-            cell.fill = header_fill
-            cell.font = header_font
-        for row_num, row_data in enumerate(rows, 2):
-            for col_num, value in enumerate(row_data, 1):
-                ws.cell(row=row_num, column=col_num, value=value)
-        for col in ws.columns:
-            max_length = 0
-            col_letter = col[0].column_letter
-            for cell in col:
-                try:
-                    if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
-                except: pass
-            ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+        def build_excel():
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Item Transport Cost Changes"
+            headers = ['Date', 'Item Code', 'Item Name', 'Principal', 'Brand', 'Gate', 'From', 'To', 'Changed By', 'Old Cost', 'New Cost']
+            header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+            header_font = Font(bold=True, color='FFFFFF')
+            for col_num, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col_num)
+                cell.value = header
+                cell.fill = header_fill
+                cell.font = header_font
+            for row_num, row_data in enumerate(rows, 2):
+                for col_num, value in enumerate(row_data, 1):
+                    ws.cell(row=row_num, column=col_num, value=value)
+            for col in ws.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    try:
+                        if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
+                    except: pass
+                ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
 
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
+            out = io.BytesIO()
+            wb.save(out)
+            out.seek(0)
+            return out
+
+        output = await run_in_threadpool(build_excel)
         return StreamingResponse(
             output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": "attachment; filename=item_transport_cost_changes.xlsx"}
@@ -5869,7 +5883,8 @@ async def export_principal_brand_allocation(
         ]
 
         currency_start = len(fields)
-        output = _build_dashboard_excel(
+        output = await run_in_threadpool(
+            _build_dashboard_excel,
             "Rate Cart Allocation", headers, rows,
             currency_cols={currency_start, currency_start + 1, currency_start + 2}
         )
@@ -5908,7 +5923,8 @@ async def export_third_party_allocation(
         ]
 
         currency_start = len(fields)
-        output = _build_dashboard_excel(
+        output = await run_in_threadpool(
+            _build_dashboard_excel,
             "Third Party Allocation", headers, rows,
             currency_cols={currency_start, currency_start + 1, currency_start + 2}
         )
@@ -5944,7 +5960,11 @@ async def export_cost_comparison(
             for r in data
         ]
 
-        output = _build_dashboard_excel("Cost Comparison", headers, rows, currency_cols={7, 8, 9})
+        output = await run_in_threadpool(
+            _build_dashboard_excel, 
+            "Cost Comparison", headers, rows, 
+            currency_cols={7, 8, 9}
+        )
         date_str = f"{start_date or 'all'}_to_{end_date or 'all'}"
         filename = f"cost_comparison_{date_str}.xlsx"
 
@@ -6010,87 +6030,91 @@ async def export_daily_rate_cut_report(
                     filtered_data.append(row)
             report_data = filtered_data
 
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Item Allocation" if report_type == 'item' else "Township Allocation"
-        
-        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
-        header_font = Font(bold=True, color='FFFFFF')
-        border_style = Side(border_style="thin", color="000000")
-        border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
-
-        if report_type == 'item':
-            headers = [
-                "BU", "Date", "Branch", "Driver Name", "Principal", "Brand", "Item Code", "Item Name", 
-                "Cartons", "Weight", "Volumetric Weight", "Driver Total (Ctns)", "Driver Total Weight", "Driver Total Volumetric Weight", "Original Driver Total (Ctns)", "Override Ctns", "Total Rate Cart Cost", "Original Rate Cart Cost", "Override Amount", "Cost per Carton",
-                "Allocated Cost", "Sales Amount"
-            ]
-        else:
-            headers = [
-                "Branch", "Date", "Driver Name", "Township", "Customer Code", "Contact Person", 
-                "Customer Total (Ctns)", "Customer Total Weight", "Customer Total Volumetric Weight", "Driver Total (Ctns)", "Driver Total Weight", "Driver Total Volumetric Weight", "Original Driver Total (Ctns)", "Override Ctns", "Total Rate Cart Cost", "Original Rate Cart Cost", "Override Amount", "Total Drop Points",
-                "Cost per Drop Point", "Cost per Carton", "Allocated Cost", "Sales Amount"
-            ]
-
-        for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col_num, value=header)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal='center')
-            cell.border = border
-
-        for idx, row in enumerate(report_data, 2):
-            driver_total = float(row.get("override_driver_total_ctns")) if row.get("override_driver_total_ctns") is not None else float(row.get("driver_total_ctns", 0))
-            branch_cost = float(row.get("override_rate_cart_cost")) if row.get("override_rate_cart_cost") is not None else float(row.get("rate_cart_cost", 0))
+        def build_excel():
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Item Allocation" if report_type == 'item' else "Township Allocation"
             
-            original_driver_total = float(row.get("driver_total_ctns", 0))
-            original_branch_cost = float(row.get("rate_cart_cost", 0))
-            
+            header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+            header_font = Font(bold=True, color='FFFFFF')
+            border_style = Side(border_style="thin", color="000000")
+            border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
+
             if report_type == 'item':
-                row_data = [
-                    row.get("bu", "-"), row.get("target_date", ""), row.get("branch", ""), row.get("driver_name", ""),
-                    row.get("principal", ""), row.get("brand", ""), row.get("item_code", ""),
-                    row.get("item_name", ""), float(row.get("ctns", 0)), float(row.get("weight", 0)), float(row.get("volumetric_weight", 0)),
-                    driver_total, float(row.get("driver_total_weight", 0)), float(row.get("driver_total_volumetric_weight", 0)), original_driver_total,
-                    float(row.get("override_ctns")) if row.get("override_ctns") is not None else None,
-                    branch_cost, original_branch_cost,
-                    float(row.get("override_amount")) if row.get("override_amount") is not None else None, 
-                    float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
-                    float(row.get("sales_amount", 0))
+                headers = [
+                    "BU", "Date", "Branch", "Driver Name", "Principal", "Brand", "Item Code", "Item Name", 
+                    "Cartons", "Weight", "Volumetric Weight", "Driver Total (Ctns)", "Driver Total Weight", "Driver Total Volumetric Weight", "Original Driver Total (Ctns)", "Override Ctns", "Total Rate Cart Cost", "Original Rate Cart Cost", "Override Amount", "Cost per Carton",
+                    "Allocated Cost", "Sales Amount"
                 ]
             else:
-                row_data = [
-                    row.get("branch", ""), row.get("target_date", ""), row.get("driver_name", ""), row.get("township", ""),
-                    row.get("customer_code", ""), row.get("contact_person", ""), float(row.get("ctns", 0)), float(row.get("weight", 0)), float(row.get("volumetric_weight", 0)),
-                    driver_total, float(row.get("driver_total_weight", 0)), float(row.get("driver_total_volumetric_weight", 0)), original_driver_total,
-                    float(row.get("override_ctns")) if row.get("override_ctns") is not None else None, 
-                    branch_cost, original_branch_cost,
-                    float(row.get("override_amount")) if row.get("override_amount") is not None else None, 
-                    float(row.get("total_drop_points", 0)),
-                    float(row.get("cost_per_drop_point", 0)), float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
-                    float(row.get("sales_amount", 0))
+                headers = [
+                    "Branch", "Date", "Driver Name", "Township", "Customer Code", "Contact Person", 
+                    "Customer Total (Ctns)", "Customer Total Weight", "Customer Total Volumetric Weight", "Driver Total (Ctns)", "Driver Total Weight", "Driver Total Volumetric Weight", "Original Driver Total (Ctns)", "Override Ctns", "Total Rate Cart Cost", "Original Rate Cart Cost", "Override Amount", "Total Drop Points",
+                    "Cost per Drop Point", "Cost per Carton", "Allocated Cost", "Sales Amount"
                 ]
-            
-            for col_num, val in enumerate(row_data, 1):
-                cell = ws.cell(row=idx, column=col_num, value=val)
+
+            for col_num, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col_num, value=header)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center')
                 cell.border = border
-                if isinstance(val, (int, float, Decimal)):
-                    cell.number_format = '#,##0.00'
 
-        for col in ws.columns:
-            max_length = 0
-            col_letter = col[0].column_letter
-            for cell in col:
-                try:
-                    if len(str(cell.value)) > max_length: 
-                        max_length = len(str(cell.value))
-                except: 
-                    pass
-            ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+            for idx, row in enumerate(report_data, 2):
+                driver_total = float(row.get("override_driver_total_ctns")) if row.get("override_driver_total_ctns") is not None else float(row.get("driver_total_ctns", 0))
+                branch_cost = float(row.get("override_rate_cart_cost")) if row.get("override_rate_cart_cost") is not None else float(row.get("rate_cart_cost", 0))
+                
+                original_driver_total = float(row.get("driver_total_ctns", 0))
+                original_branch_cost = float(row.get("rate_cart_cost", 0))
+                
+                if report_type == 'item':
+                    row_data = [
+                        row.get("bu", "-"), row.get("target_date", ""), row.get("branch", ""), row.get("driver_name", ""),
+                        row.get("principal", ""), row.get("brand", ""), row.get("item_code", ""),
+                        row.get("item_name", ""), float(row.get("ctns", 0)), float(row.get("weight", 0)), float(row.get("volumetric_weight", 0)),
+                        driver_total, float(row.get("driver_total_weight", 0)), float(row.get("driver_total_volumetric_weight", 0)), original_driver_total,
+                        float(row.get("override_ctns")) if row.get("override_ctns") is not None else None,
+                        branch_cost, original_branch_cost,
+                        float(row.get("override_amount")) if row.get("override_amount") is not None else None, 
+                        float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
+                        float(row.get("sales_amount", 0))
+                    ]
+                else:
+                    row_data = [
+                        row.get("branch", ""), row.get("target_date", ""), row.get("driver_name", ""), row.get("township", ""),
+                        row.get("customer_code", ""), row.get("contact_person", ""), float(row.get("ctns", 0)), float(row.get("weight", 0)), float(row.get("volumetric_weight", 0)),
+                        driver_total, float(row.get("driver_total_weight", 0)), float(row.get("driver_total_volumetric_weight", 0)), original_driver_total,
+                        float(row.get("override_ctns")) if row.get("override_ctns") is not None else None, 
+                        branch_cost, original_branch_cost,
+                        float(row.get("override_amount")) if row.get("override_amount") is not None else None, 
+                        float(row.get("total_drop_points", 0)),
+                        float(row.get("cost_per_drop_point", 0)), float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
+                        float(row.get("sales_amount", 0))
+                    ]
+                
+                for col_num, val in enumerate(row_data, 1):
+                    cell = ws.cell(row=idx, column=col_num, value=val)
+                    cell.border = border
+                    if isinstance(val, (int, float, Decimal)):
+                        cell.number_format = '#,##0.00'
 
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
+            for col in ws.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    try:
+                        if len(str(cell.value)) > max_length: 
+                            max_length = len(str(cell.value))
+                    except: 
+                        pass
+                ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+
+            out = io.BytesIO()
+            wb.save(out)
+            out.seek(0)
+            return out
+
+        output = await run_in_threadpool(build_excel)
         filename = f"{report_type}_allocation_{date_str}.xlsx"
         
         return StreamingResponse(
@@ -6139,64 +6163,68 @@ async def export_submitted_allocation_report(
                     filtered_data.append(row)
             allocation_data = filtered_data
 
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Submitted Allocations"
-        
-        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
-        header_font = Font(bold=True, color='FFFFFF')
-        border_style = Side(border_style="thin", color="000000")
-        border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
-
-        headers = [
-            "Calc ID", "Date", "Doc Date", "SIN No", "Gate Name", "From Loc", "To Loc", "Channel",
-            "BU", "Item Code", "Item Name", "Principal", "Brand", "B-Code", "B-Name", "B-Desc", "S-Dept", 
-            "S-Principal", "Cartons", "Weight", "Unit Cost", "Total Cost", "Calculation Type"
-        ]
-
-        for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col_num, value=header)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal='center')
-            cell.border = border
-
-        for idx, row in enumerate(allocation_data, 2):
-            raw_date = row.get("submitted_at", "")
-            formatted_date = raw_date[:10] if raw_date else ""
-
-            row_data = [
-                row.get("calc_id", ""), formatted_date, row.get("doc_date", ""),
-                row.get("sin_no", ""), row.get("gate_name", ""), row.get("from_loc", ""),
-                row.get("to_loc", ""), row.get("channel", ""), row.get("bu", ""),
-                row.get("item_code", ""), row.get("item_name", ""), row.get("principal", ""),
-                row.get("brand", ""), row.get("b_code", ""), row.get("b_name", ""),
-                row.get("b_desc", ""), row.get("s_dept", ""), row.get("s_principal", ""),
-                float(row.get("ctns", 0)), float(row.get("weight", 0)), float(row.get("unit_cost", 0)),
-                float(row.get("total_cost", 0)), row.get("calculation_type", "")
-            ]
+        def build_excel():
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Submitted Allocations"
             
-            for col_num, val in enumerate(row_data, 1):
-                cell = ws.cell(row=idx, column=col_num, value=val)
+            header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+            header_font = Font(bold=True, color='FFFFFF')
+            border_style = Side(border_style="thin", color="000000")
+            border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
+
+            headers = [
+                "Calc ID", "Date", "Doc Date", "SIN No", "Gate Name", "From Loc", "To Loc", "Channel",
+                "BU", "Item Code", "Item Name", "Principal", "Brand", "B-Code", "B-Name", "B-Desc", "S-Dept", 
+                "S-Principal", "Cartons", "Weight", "Unit Cost", "Total Cost", "Calculation Type"
+            ]
+
+            for col_num, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col_num, value=header)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center')
                 cell.border = border
-                if isinstance(val, (int, float, Decimal)):
-                    cell.number_format = '#,##0.00'
 
-        for col in ws.columns:
-            max_length = 0
-            col_letter = col[0].column_letter
-            for cell in col:
-                try:
-                    if len(str(cell.value)) > max_length: 
-                        max_length = len(str(cell.value))
-                except: 
-                    pass
-            ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+            for idx, row in enumerate(allocation_data, 2):
+                raw_date = row.get("submitted_at", "")
+                formatted_date = raw_date[:10] if raw_date else ""
 
+                row_data = [
+                    row.get("calc_id", ""), formatted_date, row.get("doc_date", ""),
+                    row.get("sin_no", ""), row.get("gate_name", ""), row.get("from_loc", ""),
+                    row.get("to_loc", ""), row.get("channel", ""), row.get("bu", ""),
+                    row.get("item_code", ""), row.get("item_name", ""), row.get("principal", ""),
+                    row.get("brand", ""), row.get("b_code", ""), row.get("b_name", ""),
+                    row.get("b_desc", ""), row.get("s_dept", ""), row.get("s_principal", ""),
+                    float(row.get("ctns", 0)), float(row.get("weight", 0)), float(row.get("unit_cost", 0)),
+                    float(row.get("total_cost", 0)), row.get("calculation_type", "")
+                ]
+                
+                for col_num, val in enumerate(row_data, 1):
+                    cell = ws.cell(row=idx, column=col_num, value=val)
+                    cell.border = border
+                    if isinstance(val, (int, float, Decimal)):
+                        cell.number_format = '#,##0.00'
+
+            for col in ws.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    try:
+                        if len(str(cell.value)) > max_length: 
+                            max_length = len(str(cell.value))
+                    except: 
+                        pass
+                ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+
+            out = io.BytesIO()
+            wb.save(out)
+            out.seek(0)
+            return out
+
+        output = await run_in_threadpool(build_excel)
         date_str = f"{start_date}_to_{end_date}" if start_date and end_date else "all_time"
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
         filename = f"submitted_allocation_report_{date_str}.xlsx"
         
         return StreamingResponse(
