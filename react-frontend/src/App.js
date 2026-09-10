@@ -665,11 +665,11 @@ const PricingApp = () => {
   
   const [dailyReportFilters, setDailyReportFilters] = useState({ 
     date_filter: '', bu: '', branch: '', item_code: '', item_name: '', principal: '', brand: '', driver_name: '',
-    ctns: '', weight: '', volumetric_weight: '', driver_total_ctns: '', driver_total_weight: '', driver_total_volumetric_weight: '', override_ctns: '', rate_cart_cost: '', override_amount: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
+    ctns: '', weight: '', volumetric_weight: '', driver_total_ctns: '', driver_total_weight: '', driver_total_volumetric_weight: '', override_ctns: '', rate_cart_cost: '', override_amount: '', cost_per_carton: '', allocated_cost: '', cost_per_kg: '', allocated_cost_weight: '', sales_amount: ''
   });
   
   const [townshipFilters, setTownshipFilters] = useState({ 
-    date_filter: '', branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', weight: '', volumetric_weight: '', driver_total_ctns: '', driver_total_weight: '', driver_total_volumetric_weight: '', override_ctns: '', rate_cart_cost: '', override_amount: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', sales_amount: ''
+    date_filter: '', branch: '', driver_name: '', township: '', customer_code: '', contact_person: '', ctns: '', weight: '', volumetric_weight: '', driver_total_ctns: '', driver_total_weight: '', driver_total_volumetric_weight: '', override_ctns: '', rate_cart_cost: '', override_amount: '', total_drop_points: '', cost_per_drop_point: '', cost_per_carton: '', allocated_cost: '', cost_per_kg: '', allocated_cost_weight: '', sales_amount: ''
   });
 
   const [submittedAllocationData, setSubmittedAllocationData] = useState([]);
@@ -3650,9 +3650,11 @@ const [overrideDate, setOverrideDate] = useState('');
         const matchAdditionalAmount = String(row.override_amount || '').toLowerCase().includes(dailyReportFilters.override_amount.toLowerCase());
         const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(dailyReportFilters.cost_per_carton.toLowerCase());
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(dailyReportFilters.allocated_cost.toLowerCase());
+        const matchCostPerKg = String(row.cost_per_kg || '').toLowerCase().includes((dailyReportFilters.cost_per_kg || '').toLowerCase());
+        const matchAllocatedCostWeight = String(row.allocated_cost_weight || '').toLowerCase().includes((dailyReportFilters.allocated_cost_weight || '').toLowerCase());
         const matchSalesAmount = String(row.sales_amount || '').toLowerCase().includes(dailyReportFilters.sales_amount.toLowerCase());
 
-        return matchDate && matchBu && matchBranch && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchDriverName && matchCtns && matchDriverTotal && matchAdditionalCtns && matchBranchCost && matchAdditionalAmount && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
+        return matchDate && matchBu && matchBranch && matchItemCode && matchItemName && matchPrincipal && matchBrand && matchDriverName && matchCtns && matchDriverTotal && matchAdditionalCtns && matchBranchCost && matchAdditionalAmount && matchCostPerCarton && matchAllocatedCost && matchCostPerKg && matchAllocatedCostWeight && matchSalesAmount;
       });
 
       const filteredTownshipReportData = dailyTownshipReportData.filter(row => {
@@ -3677,9 +3679,11 @@ const [overrideDate, setOverrideDate] = useState('');
         const matchCostPerDropPoint = String(row.cost_per_drop_point || '').toLowerCase().includes(townshipFilters.cost_per_drop_point.toLowerCase());
         const matchCostPerCarton = String(row.cost_per_carton || '').toLowerCase().includes(townshipFilters.cost_per_carton.toLowerCase());
         const matchAllocatedCost = String(row.allocated_cost || '').toLowerCase().includes(townshipFilters.allocated_cost.toLowerCase());
+        const matchCostPerKg = String(row.cost_per_kg || '').toLowerCase().includes((townshipFilters.cost_per_kg || '').toLowerCase());
+        const matchAllocatedCostWeight = String(row.allocated_cost_weight || '').toLowerCase().includes((townshipFilters.allocated_cost_weight || '').toLowerCase());
         const matchSalesAmount = String(row.sales_amount || '').toLowerCase().includes(townshipFilters.sales_amount.toLowerCase());
         
-        return matchDate && matchBranch && matchDriver && matchTownship && matchCustomer && matchContactPerson && matchCtns && matchDriverTotal && matchAdditionalCtns && matchBranchCost && matchAdditionalAmount && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost && matchSalesAmount;
+        return matchDate && matchBranch && matchDriver && matchTownship && matchCustomer && matchContactPerson && matchCtns && matchDriverTotal && matchAdditionalCtns && matchBranchCost && matchAdditionalAmount && matchTotalDropPoints && matchCostPerDropPoint && matchCostPerCarton && matchAllocatedCost && matchCostPerKg && matchAllocatedCostWeight && matchSalesAmount;
       });
 
       const filteredAllocation = submittedAllocationData.filter(row => {
@@ -4014,6 +4018,14 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <div>Allocated Cost</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.allocated_cost} onChange={(e) => setDailyReportFilters({...dailyReportFilters, allocated_cost: e.target.value})} />
                                             </th>
+                                            <th className="border p-2 text-right text-purple-700">
+                                                <div>Cost per Kg</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.cost_per_kg || ''} onChange={(e) => setDailyReportFilters({...dailyReportFilters, cost_per_kg: e.target.value})} />
+                                            </th>
+                                            <th className="border p-2 text-right text-blue-700">
+                                                <div>Allocated Cost (Weight)</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.allocated_cost_weight || ''} onChange={(e) => setDailyReportFilters({...dailyReportFilters, allocated_cost_weight: e.target.value})} />
+                                            </th>
                                             <th className="border p-2 text-right text-green-700">
                                                 <div>Sales Amount</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={dailyReportFilters.sales_amount} onChange={(e) => setDailyReportFilters({...dailyReportFilters, sales_amount: e.target.value})} />
@@ -4022,7 +4034,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                     </thead>
                                     <tbody>
                                         {displayedDailyItem.length === 0 ? (
-                                            <tr><td colSpan="17" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date/range or matching filters.</td></tr>
+                                            <tr><td colSpan="19" className="text-center p-6 text-gray-500 italic">No allocation data found for the selected date/range or matching filters.</td></tr>
                                         ) : (
                                             displayedDailyItem.map((row, idx) => (
                                                 <tr key={idx} className="hover:bg-gray-50 text-sm">
@@ -4047,6 +4059,8 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2 text-right font-bold text-indigo-600">{formatNumber(row.override_amount)}</td>
                                                     <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
                                                     <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
+                                                    <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_kg)}</td>
+                                                    <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost_weight)}</td>
                                                     <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.sales_amount)}</td>
                                                 </tr>
                                             ))
@@ -4157,6 +4171,14 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 <div>Allocated Cost</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.allocated_cost} onChange={(e) => setTownshipFilters({...townshipFilters, allocated_cost: e.target.value})} />
                                             </th>
+                                            <th className="border p-2 text-right text-purple-700">
+                                                <div>Cost per Kg</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.cost_per_kg || ''} onChange={(e) => setTownshipFilters({...townshipFilters, cost_per_kg: e.target.value})} />
+                                            </th>
+                                            <th className="border p-2 text-right text-blue-700">
+                                                <div>Allocated Cost (Weight)</div>
+                                                <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.allocated_cost_weight || ''} onChange={(e) => setTownshipFilters({...townshipFilters, allocated_cost_weight: e.target.value})} />
+                                            </th>
                                             <th className="border p-2 text-right text-green-700">
                                                 <div>Sales Amount</div>
                                                 <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={townshipFilters.sales_amount} onChange={(e) => setTownshipFilters({...townshipFilters, sales_amount: e.target.value})} />
@@ -4165,7 +4187,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                     </thead>
                                     <tbody>
                                         {displayedDailyTownship.length === 0 ? (
-                                            <tr><td colSpan="17" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
+                                            <tr><td colSpan="19" className="text-center p-6 text-gray-500 italic">No allocation data found matching filters.</td></tr>
                                         ) : (
                                             displayedDailyTownship.map((row, idx) => (
                                                 <tr key={idx} className="hover:bg-gray-50 text-sm">
@@ -4190,6 +4212,8 @@ const [overrideDate, setOverrideDate] = useState('');
                                                     <td className="border p-2 text-right font-bold text-orange-600">{formatNumber(row.cost_per_drop_point)}</td>
                                                     <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_carton)}</td>
                                                     <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost)}</td>
+                                                    <td className="border p-2 text-right font-bold text-purple-600">{formatNumber(row.cost_per_kg)}</td>
+                                                    <td className="border p-2 text-right font-bold text-blue-600">{formatNumber(row.allocated_cost_weight)}</td>
                                                     <td className="border p-2 text-right font-bold text-green-600">{formatNumber(row.sales_amount)}</td>
                                                 </tr>
                                             ))

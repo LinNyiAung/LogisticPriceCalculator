@@ -323,6 +323,11 @@ async def startup_db():
                 ALTER TABLE Daily_Item_Report ADD volumetric_weight DECIMAL(18,6);
                 ALTER TABLE Daily_Item_Report ADD driver_total_volumetric_weight DECIMAL(18,6);
             END
+            IF COL_LENGTH('Daily_Item_Report', 'cost_per_kg') IS NULL
+            BEGIN
+                ALTER TABLE Daily_Item_Report ADD cost_per_kg DECIMAL(18,6);
+                ALTER TABLE Daily_Item_Report ADD allocated_cost_weight DECIMAL(18,6);
+            END
         """)
 
         # Add new override and weight columns to Daily_Township_Report if they don't exist
@@ -342,6 +347,11 @@ async def startup_db():
                 ALTER TABLE Daily_Township_Report ADD volumetric_weight DECIMAL(18,6);
                 ALTER TABLE Daily_Township_Report ADD driver_total_volumetric_weight DECIMAL(18,6);
             END
+            IF COL_LENGTH('Daily_Township_Report', 'cost_per_kg') IS NULL
+            BEGIN
+                ALTER TABLE Daily_Township_Report ADD cost_per_kg DECIMAL(18,6);
+                ALTER TABLE Daily_Township_Report ADD allocated_cost_weight DECIMAL(18,6);
+            END
         """)
 
         # Daily_Item_Report table
@@ -360,6 +370,8 @@ async def startup_db():
                 ctns              DECIMAL(18,6),
                 allocated_cost    DECIMAL(18,6),
                 cost_per_carton   DECIMAL(18,6),
+                cost_per_kg           DECIMAL(18,6),
+                allocated_cost_weight DECIMAL(18,6),
                 driver_total_ctns DECIMAL(18,6),
                 rate_cart_cost    DECIMAL(18,6),
                 sales_amount      DECIMAL(18,6),
@@ -386,6 +398,8 @@ async def startup_db():
                 rate_cart_cost      DECIMAL(18,6),
                 cost_per_carton     DECIMAL(18,6),
                 allocated_cost      DECIMAL(18,6),
+                cost_per_kg           DECIMAL(18,6),
+                allocated_cost_weight DECIMAL(18,6),
                 total_drop_points   DECIMAL(18,6),
                 cost_per_drop_point DECIMAL(18,6),
                 sales_amount        DECIMAL(18,6),
@@ -2200,6 +2214,14 @@ async def _get_daily_report_data(target_date: str):
         cost_per_ctn = (effective_rate_cart_cost / effective_driver_total_ctns) if effective_driver_total_ctns > Decimal("0.0") else Decimal("0.0")
         allocated_cost = g["ctns"] * cost_per_ctn
 
+        # --- NEW: Cost Per One Kg, using the bigger of driver total weight / volumetric weight ---
+        d_weight_basis = d_weight_total if d_weight_total >= d_volumetric_weight_total else d_volumetric_weight_total
+        cost_per_kg = (effective_rate_cart_cost / d_weight_basis) if d_weight_basis > Decimal("0.0") else Decimal("0.0")
+
+        # --- NEW: Allocated Cost (Weight), using the bigger of this row's weight / volumetric weight ---
+        g_weight_basis = g["weight"] if g["weight"] >= g["volumetric_weight"] else g["volumetric_weight"]
+        allocated_cost_weight = g_weight_basis * cost_per_kg
+
         d_total_customers = Decimal(str(len(driver_customers.get((b, d), set()))))
         cost_per_drop_point = (effective_rate_cart_cost / d_total_customers) if d_total_customers > Decimal("0.0") else Decimal("0.0")
 
@@ -2210,6 +2232,7 @@ async def _get_daily_report_data(target_date: str):
                 "bu": g["bu"], "branch": b, "driver_name": d, "item_code": g["item_code"],
                 "item_name": g["item_name"], "principal": g["principal"], "brand": g["brand"],
                 "ctns": Decimal("0.0"), "weight": Decimal("0.0"), "volumetric_weight": Decimal("0.0"), "allocated_cost": Decimal("0.0"), "cost_per_carton": cost_per_ctn,
+                "cost_per_kg": cost_per_kg, "allocated_cost_weight": Decimal("0.0"),
                 "driver_total_ctns": d_total, "driver_total_weight": d_weight_total, "driver_total_volumetric_weight": d_volumetric_weight_total, "rate_cart_cost": b_cost, 
                 "override_driver_total_ctns": store_override_ctns, "override_rate_cart_cost": store_override_cost, 
                 "override_amount": driver_extra, "sales_amount": Decimal("0.0")
@@ -2218,6 +2241,7 @@ async def _get_daily_report_data(target_date: str):
         item_report_dict[i_key]["weight"] += g["weight"]
         item_report_dict[i_key]["volumetric_weight"] += g["volumetric_weight"]
         item_report_dict[i_key]["allocated_cost"] += allocated_cost
+        item_report_dict[i_key]["allocated_cost_weight"] += allocated_cost_weight
         item_report_dict[i_key]["sales_amount"] += g["sales_amount"]
 
         t_key = (g["branch"], g["township"], g["customer_code"], g["driver_name"])
@@ -2230,6 +2254,7 @@ async def _get_daily_report_data(target_date: str):
                 "override_driver_total_ctns": store_override_ctns, "override_rate_cart_cost": store_override_cost,
                 "override_amount": driver_extra,
                 "cost_per_carton": cost_per_ctn, "allocated_cost": Decimal("0.0"),
+                "cost_per_kg": cost_per_kg, "allocated_cost_weight": Decimal("0.0"),
                 "total_drop_points": d_total_customers, "cost_per_drop_point": cost_per_drop_point,
                 "sales_amount": Decimal("0.0")
             }
@@ -2237,6 +2262,7 @@ async def _get_daily_report_data(target_date: str):
         township_report_dict[t_key]["weight"] += g["weight"]
         township_report_dict[t_key]["volumetric_weight"] += g["volumetric_weight"]
         township_report_dict[t_key]["allocated_cost"] += allocated_cost
+        township_report_dict[t_key]["allocated_cost_weight"] += allocated_cost_weight
         township_report_dict[t_key]["sales_amount"] += g["sales_amount"]
 
     item_report_list = list(item_report_dict.values())
@@ -2280,12 +2306,13 @@ async def generate_and_save_daily_report(target_date: str, user_id: int = 30):
             await cursor.execute("""
                 INSERT INTO Daily_Item_Report
                 (target_date, bu, branch, driver_name, item_code, item_name, principal, brand,
-                 ctns, weight, volumetric_weight, allocated_cost, cost_per_carton, driver_total_ctns, driver_total_weight, driver_total_volumetric_weight, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, sales_amount, created_at, created_by, edited_at, edited_by)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 ctns, weight, volumetric_weight, allocated_cost, cost_per_carton, cost_per_kg, allocated_cost_weight, driver_total_ctns, driver_total_weight, driver_total_volumetric_weight, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, sales_amount, created_at, created_by, edited_at, edited_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 target_date, it.get("bu",""), it.get("branch",""), it.get("driver_name",""),
                 it.get("item_code",""), it.get("item_name",""), it.get("principal",""), it.get("brand",""),
                 it.get("ctns", Decimal("0.0")), it.get("weight", Decimal("0.0")), it.get("volumetric_weight", Decimal("0.0")), it.get("allocated_cost", Decimal("0.0")), it.get("cost_per_carton", Decimal("0.0")),
+                it.get("cost_per_kg", Decimal("0.0")), it.get("allocated_cost_weight", Decimal("0.0")),
                 it.get("driver_total_ctns", Decimal("0.0")), it.get("driver_total_weight", Decimal("0.0")), it.get("driver_total_volumetric_weight", Decimal("0.0")), it.get("rate_cart_cost", Decimal("0.0")), 
                 it.get("override_driver_total_ctns"), it.get("override_rate_cart_cost"), 
                 it.get("sales_amount", Decimal("0.0")), orig_created_at, orig_created_by, edited_at, edited_by
@@ -2297,14 +2324,16 @@ async def generate_and_save_daily_report(target_date: str, user_id: int = 30):
                 INSERT INTO Daily_Township_Report
                 (target_date, branch, driver_name, township, customer_code, contact_person,
                  ctns, weight, volumetric_weight, driver_total_ctns, driver_total_weight, driver_total_volumetric_weight, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, cost_per_carton, allocated_cost,
+                 cost_per_kg, allocated_cost_weight,
                  total_drop_points, cost_per_drop_point, sales_amount, created_at, created_by, edited_at, edited_by)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 target_date, tw.get("branch",""), tw.get("driver_name",""), tw.get("township",""),
                 tw.get("customer_code",""), tw.get("contact_person",""),
                 tw.get("ctns", Decimal("0.0")), tw.get("weight", Decimal("0.0")), tw.get("volumetric_weight", Decimal("0.0")), tw.get("driver_total_ctns", Decimal("0.0")), tw.get("driver_total_weight", Decimal("0.0")), tw.get("driver_total_volumetric_weight", Decimal("0.0")), tw.get("rate_cart_cost", Decimal("0.0")),
                 tw.get("override_driver_total_ctns"), tw.get("override_rate_cart_cost"),
                 tw.get("cost_per_carton", Decimal("0.0")), tw.get("allocated_cost", Decimal("0.0")),
+                tw.get("cost_per_kg", Decimal("0.0")), tw.get("allocated_cost_weight", Decimal("0.0")),
                 tw.get("total_drop_points", Decimal("0.0")), tw.get("cost_per_drop_point", Decimal("0.0")), tw.get("sales_amount", Decimal("0.0")), orig_created_at, orig_created_by, edited_at, edited_by
             ))
 
@@ -2330,15 +2359,15 @@ async def get_or_generate_daily_report(target_date: str):
     if row:
         await cursor.execute("""
             SELECT bu, branch, driver_name, item_code, item_name, principal, brand,
-                   ctns, weight, volumetric_weight, allocated_cost, cost_per_carton, driver_total_ctns, driver_total_weight, driver_total_volumetric_weight, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, sales_amount
+                   ctns, weight, volumetric_weight, allocated_cost, cost_per_carton, cost_per_kg, allocated_cost_weight, driver_total_ctns, driver_total_weight, driver_total_volumetric_weight, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, sales_amount
             FROM Daily_Item_Report WHERE target_date = ?
         """, (target_date,))
         ir_cols = ["bu","branch","driver_name","item_code","item_name","principal","brand",
-                   "ctns","weight","volumetric_weight","allocated_cost","cost_per_carton","driver_total_ctns","driver_total_weight","driver_total_volumetric_weight","rate_cart_cost", "override_driver_total_ctns", "override_rate_cart_cost", "sales_amount"]
+                   "ctns","weight","volumetric_weight","allocated_cost","cost_per_carton","cost_per_kg","allocated_cost_weight","driver_total_ctns","driver_total_weight","driver_total_volumetric_weight","rate_cart_cost", "override_driver_total_ctns", "override_rate_cart_cost", "sales_amount"]
         item_report = [dict(zip(ir_cols, r)) for r in await cursor.fetchall()]
         for it in item_report:
             it["target_date"] = target_date
-            for k in ["ctns","weight","volumetric_weight","allocated_cost","cost_per_carton","driver_total_ctns","driver_total_weight","driver_total_volumetric_weight","rate_cart_cost", "sales_amount"]:
+            for k in ["ctns","weight","volumetric_weight","allocated_cost","cost_per_carton","cost_per_kg","allocated_cost_weight","driver_total_ctns","driver_total_weight","driver_total_volumetric_weight","rate_cart_cost", "sales_amount"]:
                 it[k] = Decimal(str(it[k])) if it[k] is not None else Decimal("0.0")
             for k in ["override_driver_total_ctns", "override_rate_cart_cost"]:
                 it[k] = Decimal(str(it[k])) if it[k] is not None else None
@@ -2346,16 +2375,18 @@ async def get_or_generate_daily_report(target_date: str):
         await cursor.execute("""
             SELECT branch, driver_name, township, customer_code, contact_person,
                    ctns, weight, volumetric_weight, driver_total_ctns, driver_total_weight, driver_total_volumetric_weight, rate_cart_cost, override_driver_total_ctns, override_rate_cart_cost, cost_per_carton, allocated_cost,
+                   cost_per_kg, allocated_cost_weight,
                    total_drop_points, cost_per_drop_point, sales_amount
             FROM Daily_Township_Report WHERE target_date = ?
         """, (target_date,))
         tr_cols = ["branch","driver_name","township","customer_code","contact_person",
                    "ctns","weight","volumetric_weight","driver_total_ctns","driver_total_weight","driver_total_volumetric_weight","rate_cart_cost", "override_driver_total_ctns", "override_rate_cart_cost", "cost_per_carton","allocated_cost",
+                   "cost_per_kg","allocated_cost_weight",
                    "total_drop_points","cost_per_drop_point","sales_amount"]
         township_report = [dict(zip(tr_cols, r)) for r in await cursor.fetchall()]
         for tw in township_report:
             tw["target_date"] = target_date
-            for k in ["ctns","weight","volumetric_weight","driver_total_ctns","driver_total_weight","driver_total_volumetric_weight","rate_cart_cost", "cost_per_carton","allocated_cost","total_drop_points","cost_per_drop_point","sales_amount"]:
+            for k in ["ctns","weight","volumetric_weight","driver_total_ctns","driver_total_weight","driver_total_volumetric_weight","rate_cart_cost", "cost_per_carton","allocated_cost","cost_per_kg","allocated_cost_weight","total_drop_points","cost_per_drop_point","sales_amount"]:
                 tw[k] = Decimal(str(tw[k])) if tw[k] is not None else Decimal("0.0")
             for k in ["override_driver_total_ctns", "override_rate_cart_cost"]:
                 tw[k] = Decimal(str(tw[k])) if tw[k] is not None else None
@@ -2397,6 +2428,7 @@ def _aggregate_reports(daily_datas: List[dict]):
                     "item_code": item.get("item_code", ""), "item_name": item.get("item_name", ""), 
                     "principal": item.get("principal", ""), "brand": item.get("brand", ""),
                     "ctns": Decimal("0.0"), "allocated_cost": Decimal("0.0"), "driver_total_ctns": Decimal("0.0"), 
+                    "weight": Decimal("0.0"), "volumetric_weight": Decimal("0.0"), "allocated_cost_weight": Decimal("0.0"),
                     "override_driver_total_ctns": Decimal(str(item.get("override_driver_total_ctns"))) if item.get("override_driver_total_ctns") is not None else None, 
                     "rate_cart_cost": Decimal(str(item.get("rate_cart_cost", Decimal("0.0")))), 
                     "override_rate_cart_cost": Decimal(str(item.get("override_rate_cart_cost"))) if item.get("override_rate_cart_cost") is not None else None, 
@@ -2414,6 +2446,9 @@ def _aggregate_reports(daily_datas: List[dict]):
             item_report_dict[i_key]["allocated_cost"] += Decimal(str(item.get("allocated_cost", Decimal("0.0"))))
             item_report_dict[i_key]["sales_amount"] += Decimal(str(item.get("sales_amount", Decimal("0.0"))))
             item_report_dict[i_key]["driver_total_ctns"] += Decimal(str(item.get("driver_total_ctns", Decimal("0.0"))))
+            item_report_dict[i_key]["weight"] += Decimal(str(item.get("weight", Decimal("0.0"))))
+            item_report_dict[i_key]["volumetric_weight"] += Decimal(str(item.get("volumetric_weight", Decimal("0.0"))))
+            item_report_dict[i_key]["allocated_cost_weight"] += Decimal(str(item.get("allocated_cost_weight", Decimal("0.0"))))
 
         for tw in data.get("township_report", []):
             t_date = tw.get("target_date", "")
@@ -2424,6 +2459,7 @@ def _aggregate_reports(daily_datas: List[dict]):
                     "branch": tw.get("branch", ""), "driver_name": tw.get("driver_name", ""), 
                     "township": tw.get("township", ""), "customer_code": tw.get("customer_code", ""), 
                     "contact_person": tw.get("contact_person", ""), "ctns": Decimal("0.0"), "allocated_cost": Decimal("0.0"), 
+                    "weight": Decimal("0.0"), "volumetric_weight": Decimal("0.0"), "allocated_cost_weight": Decimal("0.0"),
                     "driver_total_ctns": Decimal("0.0"), 
                     "override_driver_total_ctns": Decimal(str(tw.get("override_driver_total_ctns"))) if tw.get("override_driver_total_ctns") is not None else None, 
                     "rate_cart_cost": Decimal(str(tw.get("rate_cart_cost", Decimal("0.0")))), 
@@ -2443,16 +2479,23 @@ def _aggregate_reports(daily_datas: List[dict]):
             township_report_dict[t_key]["sales_amount"] += Decimal(str(tw.get("sales_amount", Decimal("0.0"))))
             township_report_dict[t_key]["driver_total_ctns"] += Decimal(str(tw.get("driver_total_ctns", Decimal("0.0"))))
             township_report_dict[t_key]["total_drop_points"] += Decimal(str(tw.get("total_drop_points", Decimal("0.0"))))
+            township_report_dict[t_key]["weight"] += Decimal(str(tw.get("weight", Decimal("0.0"))))
+            township_report_dict[t_key]["volumetric_weight"] += Decimal(str(tw.get("volumetric_weight", Decimal("0.0"))))
+            township_report_dict[t_key]["allocated_cost_weight"] += Decimal(str(tw.get("allocated_cost_weight", Decimal("0.0"))))
 
     item_report_list = list(item_report_dict.values())
     for item in item_report_list:
         item["cost_per_carton"] = item["allocated_cost"] / item["ctns"] if item["ctns"] > Decimal("0.0") else Decimal("0.0")
+        i_weight_basis = item["weight"] if item["weight"] >= item["volumetric_weight"] else item["volumetric_weight"]
+        item["cost_per_kg"] = item["allocated_cost_weight"] / i_weight_basis if i_weight_basis > Decimal("0.0") else Decimal("0.0")
     item_report_list.sort(key=lambda x: (x.get("target_date", ""), x["branch"], x["driver_name"], x["item_code"]))
 
     township_report_list = list(township_report_dict.values())
     for tw in township_report_list:
         tw["cost_per_carton"] = tw["allocated_cost"] / tw["ctns"] if tw["ctns"] > Decimal("0.0") else Decimal("0.0")
         tw["cost_per_drop_point"] = tw["rate_cart_cost"] / tw["total_drop_points"] if tw["total_drop_points"] > Decimal("0.0") else Decimal("0.0")
+        tw_weight_basis = tw["weight"] if tw["weight"] >= tw["volumetric_weight"] else tw["volumetric_weight"]
+        tw["cost_per_kg"] = tw["allocated_cost_weight"] / tw_weight_basis if tw_weight_basis > Decimal("0.0") else Decimal("0.0")
     township_report_list.sort(key=lambda x: (x.get("target_date", ""), x["branch"], x["driver_name"], x["township"], x["customer_code"]))
 
     return {
@@ -6140,13 +6183,13 @@ async def export_daily_rate_cut_report(
                 headers = [
                     "BU", "Date", "Branch", "Driver Name", "Principal", "Brand", "Item Code", "Item Name", 
                     "Cartons", "Weight", "Volumetric Weight", "Driver Total (Ctns)", "Driver Total Weight", "Driver Total Volumetric Weight", "Original Driver Total (Ctns)", "Override Ctns", "Total Rate Cart Cost", "Original Rate Cart Cost", "Override Amount", "Cost per Carton",
-                    "Allocated Cost", "Sales Amount"
+                    "Allocated Cost", "Cost per Kg", "Allocated Cost (Weight)", "Sales Amount"
                 ]
             else:
                 headers = [
                     "Branch", "Date", "Driver Name", "Township", "Customer Code", "Contact Person", 
                     "Customer Total (Ctns)", "Customer Total Weight", "Customer Total Volumetric Weight", "Driver Total (Ctns)", "Driver Total Weight", "Driver Total Volumetric Weight", "Original Driver Total (Ctns)", "Override Ctns", "Total Rate Cart Cost", "Original Rate Cart Cost", "Override Amount", "Total Drop Points",
-                    "Cost per Drop Point", "Cost per Carton", "Allocated Cost", "Sales Amount"
+                    "Cost per Drop Point", "Cost per Carton", "Allocated Cost", "Cost per Kg", "Allocated Cost (Weight)", "Sales Amount"
                 ]
 
             for col_num, header in enumerate(headers, 1):
@@ -6173,6 +6216,7 @@ async def export_daily_rate_cut_report(
                         branch_cost, original_branch_cost,
                         float(row.get("override_amount")) if row.get("override_amount") is not None else None, 
                         float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
+                        float(row.get("cost_per_kg", 0)), float(row.get("allocated_cost_weight", 0)),
                         float(row.get("sales_amount", 0))
                     ]
                 else:
@@ -6185,6 +6229,7 @@ async def export_daily_rate_cut_report(
                         float(row.get("override_amount")) if row.get("override_amount") is not None else None, 
                         float(row.get("total_drop_points", 0)),
                         float(row.get("cost_per_drop_point", 0)), float(row.get("cost_per_carton", 0)), float(row.get("allocated_cost", 0)),
+                        float(row.get("cost_per_kg", 0)), float(row.get("allocated_cost_weight", 0)),
                         float(row.get("sales_amount", 0))
                     ]
                 
