@@ -2205,8 +2205,9 @@ async def _get_daily_report_data(target_date: str):
         math_extra_amount = driver_extra if driver_extra is not None else Decimal("0.0")
         math_extra_ctns = driver_extra_ctns if driver_extra_ctns is not None else Decimal("0.0")
         
-        effective_rate_cart_cost = b_cost + math_extra_amount
-        effective_driver_total_ctns = d_total + math_extra_ctns
+        # Prevent negative values for totals by ensuring minimum is 0.0
+        effective_rate_cart_cost = max(Decimal("0.0"), b_cost + math_extra_amount)
+        effective_driver_total_ctns = max(Decimal("0.0"), d_total + math_extra_ctns)
         
         store_override_cost = effective_rate_cart_cost if driver_extra is not None else None
         store_override_ctns = effective_driver_total_ctns if driver_extra_ctns is not None else None

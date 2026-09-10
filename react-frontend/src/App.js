@@ -717,6 +717,25 @@ const [overrideDate, setOverrideDate] = useState('');
   const handleOverrideSubmit = async (e) => {
       e.preventDefault();
       if (!overrideDate || !overrideDriver || ((overrideAmount === '' || overrideAmount === null) && (overrideCtns === '' || overrideCtns === null))) return;
+
+      // Prevent negative overrides from exceeding the original totals
+      const driverData = dailyReportData.find(r => r.driver_name === overrideDriver) || dailyTownshipReportData.find(r => r.driver_name === overrideDriver);
+      if (driverData) {
+          const originalBranchCost = parseFloat(driverData.rate_cart_cost || 0);
+          const originalDriverCtns = parseFloat(driverData.driver_total_ctns || 0);
+          const inputOverrideAmount = overrideAmount !== '' && overrideAmount !== null ? parseFloat(overrideAmount) : 0;
+          const inputOverrideCtns = overrideCtns !== '' && overrideCtns !== null ? parseFloat(overrideCtns) : 0;
+
+          if (originalBranchCost + inputOverrideAmount < 0) {
+              showNotification(`Negative Override Amount cannot exceed the Original Rate Cart Cost (${originalBranchCost}).`, 'error');
+              return;
+          }
+          if (originalDriverCtns + inputOverrideCtns < 0) {
+              showNotification(`Negative Override Ctns cannot exceed the Original Driver Total Ctns (${originalDriverCtns}).`, 'error');
+              return;
+          }
+      }
+
       setIsSubmittingOverride(true);
       try {
           const res = await authFetch(`${API_URL}/account/daily-override`, {
