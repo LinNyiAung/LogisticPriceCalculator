@@ -1924,6 +1924,20 @@ async def _perform_calculation_logic(gate_name, doc_nums, from_loc=None, to_loc=
 
     if add_charges != Decimal("0") and calculated_products:
         total_ctns = sum(p.get('ctns', Decimal("0")) for p in calculated_products)
+        
+        # --- PREVENT NEGATIVE COSTS ---
+        if add_charges < Decimal("0"):
+            # 1. Prevent the minus value from exceeding the total cost of all items
+            if abs(add_charges) > total_cost:
+                raise Exception(f"Negative additional charges ({add_charges}) cannot exceed the total calculated cost ({total_cost:,.2f}).")
+            
+            # 2. Prevent proportional distribution from pushing any individual item's cost (Rate / ctn) below zero
+            for p in calculated_products:
+                proportion = p.get('ctns', Decimal("0")) / total_ctns if total_ctns > 0 else Decimal("0")
+                if p.get('total_cost', Decimal("0")) + (add_charges * proportion) < Decimal("0"):
+                    raise Exception("Negative additional charges are too large and would cause some items' individual costs to fall below zero.")
+        # ------------------------------
+
         for p in calculated_products:
             proportion = p.get('ctns', Decimal("0")) / total_ctns if total_ctns > 0 else Decimal("0")
             extra_cost = add_charges * proportion
