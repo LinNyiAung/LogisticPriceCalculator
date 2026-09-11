@@ -598,6 +598,14 @@ async def startup_db():
             )
         """)
 
+        # Add description to SD_Code table if it doesn't exist
+        await cursor.execute("""
+            IF COL_LENGTH('SD_Code', 'description') IS NULL
+            BEGIN
+                ALTER TABLE SD_Code ADD description NVARCHAR(500);
+            END
+        """)
+
         # Gate Change Log Table
         await cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Gate_Change_Log' AND xtype='U')
@@ -851,7 +859,7 @@ async def get_logistic_connection():
     conn_str = (
         'DRIVER={ODBC Driver 17 for SQL Server};'
         'SERVER=phm\\reportingsvr;'
-        'DATABASE=LogCalculator;'
+        'DATABASE=LogCalculator'
         f'UID={db_user};'
         f'PWD={db_password};'
     )
@@ -918,6 +926,7 @@ class SDCodeData(BaseModel):
     channel: Optional[str] = ""
     code: Optional[str] = ""
     name: Optional[str] = ""
+    description: Optional[str] = ""
     dept: Optional[str] = ""
     principal: Optional[str] = ""
     log_pric: str
@@ -3340,10 +3349,10 @@ async def get_sd_codes(user: dict = Depends(get_current_user)):
     try:
         conn = await get_logistic_connection()
         cursor = await conn.cursor()
-        await cursor.execute("SELECT channel, code, name, dept, principal, log_pric FROM SD_Code")
+        await cursor.execute("SELECT channel, code, name, dept, principal, log_pric, description FROM SD_Code")
         rows = await cursor.fetchall()
         await conn.close()
-        return [{"channel": r[0], "code": r[1], "name": r[2], "dept": r[3], "principal": r[4], "log_pric": r[5]} for r in rows]
+        return [{"channel": r[0], "code": r[1], "name": r[2], "dept": r[3], "principal": r[4], "log_pric": r[5], "description": r[6]} for r in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading SD codes: {str(e)}")
 
@@ -3362,11 +3371,11 @@ async def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user))
             now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             username = user['id']
 
-            await cursor.execute("SELECT log_pric, channel, code, name, dept, principal FROM SD_Code WHERE log_pric = ?", (data.original_log_pric,))
+            await cursor.execute("SELECT log_pric, channel, code, name, dept, principal, description FROM SD_Code WHERE log_pric = ?", (data.original_log_pric,))
             existing = await cursor.fetchone()
             if existing:
                 changes = []
-                fields = [('log_pric', data.log_pric), ('channel', data.channel), ('code', data.code), ('name', data.name), ('dept', data.dept), ('principal', data.principal)]
+                fields = [('log_pric', data.log_pric), ('channel', data.channel), ('code', data.code), ('name', data.name), ('dept', data.dept), ('principal', data.principal), ('description', data.description)]
                 for idx, (field_name, new_val) in enumerate(fields):
                     old_str = str(existing[idx]).strip() if existing[idx] else ""
                     new_str = str(new_val).strip() if new_val else ""
@@ -3381,9 +3390,9 @@ async def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user))
 
             await cursor.execute("""
                 UPDATE SD_Code 
-                SET channel = ?, code = ?, name = ?, dept = ?, principal = ?, log_pric = ?, edited_at = ?, edited_by = ?
+                SET channel = ?, code = ?, name = ?, description = ?, dept = ?, principal = ?, log_pric = ?, edited_at = ?, edited_by = ?
                 WHERE log_pric = ?
-            """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric, now_str, username, data.original_log_pric))
+            """, (data.channel, data.code, data.name, data.description, data.dept, data.principal, data.log_pric, now_str, username, data.original_log_pric))
             await log_user_activity(user['id'], "UPDATE_SD_CODE", f"Updated SD Code: {data.log_pric}")
         else:
             if "add_sd_code" not in perms:
@@ -3394,9 +3403,9 @@ async def save_sd_code(data: SDCodeData, user: dict = Depends(get_current_user))
             username = user['id']
 
             await cursor.execute("""
-                INSERT INTO SD_Code (channel, code, name, dept, principal, log_pric, created_at, created_by) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (data.channel, data.code, data.name, data.dept, data.principal, data.log_pric, now_str, username))
+                INSERT INTO SD_Code (channel, code, name, description, dept, principal, log_pric, created_at, created_by) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (data.channel, data.code, data.name, data.description, data.dept, data.principal, data.log_pric, now_str, username))
             await log_user_activity(user['id'], "ADD_SD_CODE", f"Added SD Code: {data.log_pric}")
 
         await conn.commit()
@@ -3449,8 +3458,8 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
         doc_nums_json = json.dumps(data.doc_nums)
         created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        await cursor.execute("SELECT log_pric, code, name FROM SD_Code")
-        sd_code_db_map = {str(row[0]).strip().lower(): {"code": row[1], "name": row[2]} for row in await cursor.fetchall() if row[0]}
+        await cursor.execute("SELECT log_pric, code, name, description FROM SD_Code")
+        sd_code_db_map = {str(row[0]).strip().lower(): {"code": row[1], "name": row[2], "description": row[3]} for row in await cursor.fetchall() if row[0]}
         
         channel_name = data.channel or ""
         is_sd_channel = channel_name in ["SD", "Telecom SD"]
@@ -3478,7 +3487,8 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
                     sd_info = sd_code_db_map.get(principal_val, {})
                     b_code_val = sd_info.get("code", b_code_val)
                     b_name_val = sd_info.get("name", b_name_val)
-                    b_desc_val = sd_info.get("name", b_desc_val)
+                    sd_desc = sd_info.get("description")
+                    b_desc_val = sd_desc if sd_desc else sd_info.get("name", b_desc_val)
                     b_dept_val = None
                     b_principal_val = None
                 elif is_branch_channel:
@@ -3523,7 +3533,8 @@ async def save_calculation(data: CalculationSaveRequest, user: dict = Depends(ge
                     sd_info = sd_code_db_map.get("posm", {})
                     b_code_val = sd_info.get("code", b_code_val)
                     b_name_val = sd_info.get("name", b_name_val)
-                    b_desc_val = sd_info.get("name", b_desc_val)
+                    sd_desc = sd_info.get("description")
+                    b_desc_val = sd_desc if sd_desc else sd_info.get("name", b_desc_val)
                     b_dept_val = None
                     b_principal_val = None
                 elif is_branch_channel:
@@ -3855,8 +3866,8 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
         await cursor.execute("SELECT to_location, branch_code FROM Location_Mapping")
         loc_mapping_rows = await cursor.fetchall()
 
-        await cursor.execute("SELECT log_pric, code, name FROM SD_Code")
-        sd_code_excel_map = {str(row[0]).strip().lower(): {"code": row[1], "name": row[2]} for row in await cursor.fetchall() if row[0]}
+        await cursor.execute("SELECT log_pric, code, name, description FROM SD_Code")
+        sd_code_excel_map = {str(row[0]).strip().lower(): {"code": row[1], "name": row[2], "description": row[3]} for row in await cursor.fetchall() if row[0]}
 
         # --- POSM Calculation sheet (optional) ---
         await cursor.execute("""
@@ -3952,7 +3963,8 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
                     sd_info = sd_code_excel_map.get(principal_val, {})
                     display_code = sd_info.get('code', display_code)
                     display_name = sd_info.get('name', display_name)
-                    base_desc = sd_info.get('name', base_desc)
+                    sd_desc = sd_info.get('description')
+                    base_desc = sd_desc if sd_desc else sd_info.get('name', base_desc)
 
                 from_loc_code = _to_loc_code(record['from_loc'])
                 to_loc_code = _to_loc_code(record['to_loc'])
@@ -4049,7 +4061,8 @@ async def download_history_excel(record_id: int, user: dict = Depends(require_pe
                     if is_sd_channel:
                         sd_info = sd_code_excel_map.get("posm", {})
                         display_name = sd_info.get('name', display_name)
-                        b_desc_clean = sd_info.get('name', b_desc_clean)
+                        sd_desc = sd_info.get('description')
+                        b_desc_clean = sd_desc if sd_desc else sd_info.get('name', b_desc_clean)
 
                     posm_desc_account = f"{b_desc_clean}-{from_loc_code} to {to_loc_code}"
                     posm_desc_with_price = f"{posm_desc_account} - {qty_formatted} pcs @{unit_cost_formatted} kyats"

@@ -214,7 +214,7 @@ const PricingApp = () => {
   const [branchCodes, setBranchCodes] = useState([]);
   const [sdCodes, setSDCodes] = useState([]);
   const [branchCodeFilters, setBranchCodeFilters] = useState({ log_pric: '', code: '', name: '', dept: '', principal: '', description: '' });
-  const [sdCodeFilters, setSDCodeFilters] = useState({ channel: '', code: '', name: '', dept: '', principal: '', log_pric: '' });
+  const [sdCodeFilters, setSDCodeFilters] = useState({ channel: '', code: '', name: '', description: '', dept: '', principal: '', log_pric: '' });
   const [showBranchCodeModal, setShowBranchCodeModal] = useState(false);
   const [showSDCodeModal, setShowSDCodeModal] = useState(false);
   const [editingBranchCode, setEditingBranchCode] = useState(null);
@@ -296,7 +296,7 @@ const PricingApp = () => {
   };
 
   const SDCodeModal = ({ codeObj, onSave, onClose, isSaving }) => {
-    const [formData, setFormData] = useState(codeObj || { channel: '', code: '', name: '', dept: '', principal: '', log_pric: '' });
+    const [formData, setFormData] = useState(codeObj || { channel: '', code: '', name: '', description: '', dept: '', principal: '', log_pric: '' });
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
     const [isValidating, setIsValidating] = useState(false);
@@ -355,6 +355,7 @@ const PricingApp = () => {
             <div><label className="block text-sm font-semibold mb-1">Channel</label><input disabled={isSaving} type="text" value={formData.channel} onChange={(e) => setFormData({...formData, channel: e.target.value})} className="w-full p-2 border rounded" /></div>
             <div><label className="block text-sm font-semibold mb-1">Code</label><input disabled={isSaving} type="text" value={formData.code} onChange={(e) => setFormData({...formData, code: e.target.value})} className="w-full p-2 border rounded" /></div>
             <div><label className="block text-sm font-semibold mb-1">Name</label><input disabled={isSaving} type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full p-2 border rounded" /></div>
+            <div><label className="block text-sm font-semibold mb-1">Description</label><input disabled={isSaving} type="text" value={formData.description || ''} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full p-2 border rounded" /></div>
             <div><label className="block text-sm font-semibold mb-1">Dept</label><input disabled={isSaving} type="text" value={formData.dept} onChange={(e) => setFormData({...formData, dept: e.target.value})} className="w-full p-2 border rounded" /></div>
             <div><label className="block text-sm font-semibold mb-1">Principal</label><input disabled={isSaving} type="text" value={formData.principal} onChange={(e) => setFormData({...formData, principal: e.target.value})} className="w-full p-2 border rounded" /></div>
           </div>
@@ -4902,6 +4903,7 @@ const [overrideDate, setOverrideDate] = useState('');
               return (s.channel || '').toLowerCase().includes(sdCodeFilters.channel.toLowerCase()) &&
                      (s.code || '').toLowerCase().includes(sdCodeFilters.code.toLowerCase()) &&
                      (s.name || '').toLowerCase().includes(sdCodeFilters.name.toLowerCase()) &&
+                     (s.description || '').toLowerCase().includes((sdCodeFilters.description || '').toLowerCase()) &&
                      (s.dept || '').toLowerCase().includes(sdCodeFilters.dept.toLowerCase()) &&
                      (s.principal || '').toLowerCase().includes(sdCodeFilters.principal.toLowerCase()) &&
                      (s.log_pric || '').toLowerCase().includes(sdCodeFilters.log_pric.toLowerCase());
@@ -5140,6 +5142,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                             <th className="border p-2 text-left"><div>Channel</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.channel} onChange={e => setSDCodeFilters({...sdCodeFilters, channel: e.target.value})} /></th>
                                             <th className="border p-2 text-left"><div>Code</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.code} onChange={e => setSDCodeFilters({...sdCodeFilters, code: e.target.value})} /></th>
                                             <th className="border p-2 text-left"><div>Name</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.name} onChange={e => setSDCodeFilters({...sdCodeFilters, name: e.target.value})} /></th>
+                                            <th className="border p-2 text-left"><div>Description</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.description || ''} onChange={e => setSDCodeFilters({...sdCodeFilters, description: e.target.value})} /></th>
                                             <th className="border p-2 text-left"><div>Dept</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.dept} onChange={e => setSDCodeFilters({...sdCodeFilters, dept: e.target.value})} /></th>
                                             <th className="border p-2 text-left"><div>Principal</div><input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal" value={sdCodeFilters.principal} onChange={e => setSDCodeFilters({...sdCodeFilters, principal: e.target.value})} /></th>
                                             <th className="border p-2 text-center align-top">Actions</th>
@@ -5148,7 +5151,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                     <tbody>
                                         {tabData.filteredSDs.map((s, i) => (
                                             <tr key={i} className="hover:bg-gray-50">
-                                                <td className="border p-2 font-bold">{s.log_pric}</td><td className="border p-2">{s.channel}</td><td className="border p-2">{s.code}</td><td className="border p-2">{s.name}</td><td className="border p-2">{s.dept}</td><td className="border p-2">{s.principal}</td>
+                                                <td className="border p-2 font-bold">{s.log_pric}</td><td className="border p-2">{s.channel}</td><td className="border p-2">{s.code}</td><td className="border p-2">{s.name}</td><td className="border p-2 text-gray-500">{s.description || '-'}</td><td className="border p-2">{s.dept}</td><td className="border p-2">{s.principal}</td>
                                                 <td className="border p-2 text-center">
                                                     <div className="flex justify-center gap-2">
                                                         <button onClick={() => fetchSDCodeLogs(s)} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Change Logs"><Clock size={16} /></button>
@@ -5158,7 +5161,7 @@ const [overrideDate, setOverrideDate] = useState('');
                                                 </td>
                                             </tr>
                                         ))}
-                                        {tabData.filteredSDs.length === 0 && (<tr><td colSpan="7" className="text-center p-4 text-gray-500 italic">No records found.</td></tr>)}
+                                        {tabData.filteredSDs.length === 0 && (<tr><td colSpan="8" className="text-center p-4 text-gray-500 italic">No records found.</td></tr>)}
                                     </tbody>
                                 </table>
                             </div>
