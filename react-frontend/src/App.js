@@ -4306,11 +4306,11 @@ const [overrideDate, setOverrideDate] = useState('');
                                                   <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={allocationFilters.ctns} onChange={(e) => setAllocationFilters({...allocationFilters, ctns: e.target.value})} />
                                               </th>
                                               <th className="border p-2 text-right text-purple-700">
-                                                  <div>Unit Cost</div>
+                                                  <div>Cost per Carton</div>
                                                   <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={allocationFilters.unit_cost} onChange={(e) => setAllocationFilters({...allocationFilters, unit_cost: e.target.value})} />
                                               </th>
                                               <th className="border p-2 text-right text-blue-700">
-                                                  <div>Total Cost</div>
+                                                  <div>Allocated Cost</div>
                                                   <input type="text" placeholder="Filter..." className="w-full mt-1 p-1 border rounded text-xs font-normal text-left" value={allocationFilters.total_cost} onChange={(e) => setAllocationFilters({...allocationFilters, total_cost: e.target.value})} />
                                               </th>
                                           </tr>

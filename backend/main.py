@@ -6345,7 +6345,7 @@ async def export_submitted_allocation_report(
             headers = [
                 "Calc ID", "Date", "Doc Date", "SIN No", "Gate Name", "From Loc", "To Loc", "Channel",
                 "BU", "Item Code", "Item Name", "Principal", "Brand", "B-Code", "B-Name", "B-Desc", "S-Dept", 
-                "S-Principal", "Cartons", "Weight", "Unit Cost", "Total Cost", "Calculation Type"
+                "S-Principal", "Cartons", "Weight", "Cost per Carton", "Allocated Cost", "Calculation Type"
             ]
 
             for col_num, header in enumerate(headers, 1):
