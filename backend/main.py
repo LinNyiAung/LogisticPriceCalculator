@@ -2148,10 +2148,11 @@ async def _get_daily_report_data(target_date: str):
         SELECT v.Branch, v.ItemCode, MAX(v.ItemName), MAX(v.Principal), MAX(v.Brand), v.[Driver Name], SUM(v.ctnQty), v.CustomerCode, MAX(v.ContactPerson), v.Township, SUM(v.SalesAmount), MAX(v.BU), MAX(i.BWeight1), MAX(i.BVolume)
         FROM VersaFleetDetail_TC v
         LEFT JOIN ItemMaster i ON v.ItemCode = i.ItemCode
-        WHERE CONVERT(DATE, v.[Task Date]) = ? 
+        WHERE CONVERT(DATE, v.[Task Date]) = ?
           AND v.[Task Status] = 'successful'
-          AND v.ItemCode IS NOT NULL 
+          AND v.ItemCode IS NOT NULL
           AND LTRIM(RTRIM(v.ItemCode)) <> ''
+          AND (v.Principal IS NULL OR v.Principal NOT LIKE '%refund%')
         GROUP BY v.Branch, v.[Driver Name], v.ItemCode, v.CustomerCode, v.Township
     """
     await cursor_dwbi.execute(query, (target_date,))
