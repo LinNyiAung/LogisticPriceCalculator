@@ -859,7 +859,7 @@ async def get_logistic_connection():
     conn_str = (
         'DRIVER={ODBC Driver 17 for SQL Server};'
         'SERVER=phm\\reportingsvr;'
-        'DATABASE=LogCalculator'
+        'DATABASE=LogCalculator;'
         f'UID={db_user};'
         f'PWD={db_password};'
     )
@@ -2153,6 +2153,7 @@ async def _get_daily_report_data(target_date: str):
           AND v.ItemCode IS NOT NULL
           AND LTRIM(RTRIM(v.ItemCode)) <> ''
           AND (v.Principal IS NULL OR v.Principal NOT LIKE '%refund%')
+          AND v.[Driver Name] != 'VO99079'
         GROUP BY v.Branch, v.[Driver Name], v.ItemCode, v.CustomerCode, v.Township
     """
     await cursor_dwbi.execute(query, (target_date,))
